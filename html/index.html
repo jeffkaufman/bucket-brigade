@@ -56,8 +56,9 @@ async function start() {
           playerNode.port.postMessage(JSON.parse(xhr.responseText));
         }
       }
-      xhr.open("POST", "http://localhost:8081", true);
-      xhr.send(JSON.stringify(outbuf));
+      var layer = window.location.hash.substr(1) || 1
+      xhr.open("POST", "http://localhost:8081/" + layer, true);
+      xhr.send(JSON.stringify(outbuf.flat()));
       outbuf = [];
     }
   };
