@@ -1,51 +1,114 @@
 <html>
-<h1>Echo Demo</h1>
+<h1>Audio Demo</h1>
 
-Demonstration of using AudioWorklets to read from the mic and echo it
-back.  As of 2020-05 this depends on an API that is implemented in
+Demonstration of using AudioWorklets to read from the mic and do stuff with it.
+As of 2020-05 this depends on an API that is implemented in
 Firefox 76 and the Blink-based browsers: Chrome, Edge, Brave, and
 Opera.
 
 <p>
 
-Headphones are recommended, to avoid feedback.  If it makes annoying
-noises, refresh the page to make it stop.
+Headphones are recommended, to avoid feedback.
 
 <p>
-
-When ready, press any key.  You'll need to give it permission to read
-from your microphone.
-
+  Input device:
+  <select id=inSelect disabled=true>
+    <option>Loading...</option>
+  </select>
+  <!-- It turns out that output device selection is a hacky mess, so for now we'll skip it.
+    See: https://stackoverflow.com/questions/41863094/how-to-select-destination-output-device-using-web-audio-api -->
+<p>
+  <button id=startButton disabled=true>Start</button>
+  <button id=stopButton disabled=true>Stop</button>
 <p>
 
 <i><span id=recording></span></i>
 
 <script>
-const SAMPLE_BATCH_SIZE = 100;
+const SAMPLE_BATCH_SIZE = 5;
+
+async function force_permission_prompt() {
+  // In order to enumerate devices, we must first force a permission prompt by opening a device and then closing it again.
+  // See: https://stackoverflow.com/questions/60297972/navigator-mediadevices-enumeratedevices-returns-empty-labels
+  stream = await navigator.mediaDevices.getUserMedia({audio: true});
+  stream.getTracks().forEach((track) => track.stop());
+}
+
+async function wait_for_mic_permissions() {
+  var perm_status = await navigator.permissions.query({name: "microphone"});
+  if (perm_status.state == "granted" || perm_status.state == "denied") {
+    return;
+  } else {
+    force_permission_prompt();
+    return new Promise((resolve, reject) => {
+      perm_status.onchange = (e) => {
+        if (e.target.state == "granted" || e.target.state == "denied") {
+          resolve();
+        }
+      }
+    });
+  }
+}
+
+async function enumerate_devices() {
+  navigator.mediaDevices.enumerateDevices().then((devices) => {
+    var in_list = document.getElementById('inSelect');
+
+    // Clear existing entries
+    in_list.options.length = 0;
+
+    devices.forEach((info) => {
+      var el = document.createElement("option");
+      el.value = info.deviceId;
+      if (info.kind === 'audioinput') {
+        el.text = info.label || 'Unknown Microphone';
+        in_list.appendChild(el);
+      }
+    });
+  });
+}
+
+var audioCtx;
+
+var start_button = document.getElementById('startButton');
+var stop_button = document.getElementById('stopButton');
+var in_select = document.getElementById('inSelect');
+
+async function initialize() {
+  await wait_for_mic_permissions();
+  await enumerate_devices();
+  in_select.disabled = false;
+  start_button.disabled = false;
+}
 
 async function start() {
-  document.removeEventListener("keydown", start);
+  start_button.disabled = true;
+  stop_button.disabled = false;
+  in_select.disabled = true;
 
-  var audioCtx = new (window.AudioContext || window.webkitAudioContext)({
-  });
   var micStream = await navigator.mediaDevices.getUserMedia({
     audio: {
       echoCancellation: false,
       noiseSuppression: false,
       autoGainControl: false,
+      deviceId: { exact: in_select.options[in_select.selectedIndex].value },
     },
   });
+
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)({});
+
   var micNode = new MediaStreamAudioSourceNode(audioCtx, { mediaStream: micStream });
-  var now = Date.now();
+
+  var now = Date.now();  // cachebuster
   await audioCtx.audioWorklet.addModule('audio-worklet-in-to-out.js?' + now);
   var playerNode = new AudioWorkletNode(audioCtx, 'player');
   var ctr = 0;
   var outbuf = [];
   playerNode.port.onmessage = (event) => {
     ctr++;
-    //if (ctr % 100 == 0) {
-    //  console.log("In main thread onmessage: received ", event.data);
-    //}
+    if (ctr % 100 == 0) {
+      //console.log("In main thread onmessage: received ", ctr, event.data);
+    }
 
     outbuf.push(event.data);
     if (outbuf.length == SAMPLE_BATCH_SIZE) {
@@ -64,11 +127,19 @@ async function start() {
   };
   micNode.connect(playerNode)
   playerNode.connect(audioCtx.destination);
-  recording.textContent = "recording";
 }
 
-// We can only start recording on user action, so ask them to press a
-// key to start.
-document.addEventListener("keydown", start);
+async function stop() {
+  await audioCtx.close();
+
+  start_button.disabled = false;
+  stop_button.disabled = true;
+  in_select.disabled = false;
+}
+
+document.getElementById('startButton').addEventListener("click", start);
+document.getElementById('stopButton').addEventListener("click", stop);
+
+initialize();
 </script>
 </html>
