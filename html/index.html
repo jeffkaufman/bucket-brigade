@@ -25,7 +25,7 @@ Headphones are recommended, to avoid feedback.
 <i><span id=recording></span></i>
 
 <script>
-const SAMPLE_BATCH_SIZE = 5;
+const SAMPLE_BATCH_SIZE = 100;
 
 async function force_permission_prompt() {
   // In order to enumerate devices, we must first force a permission prompt by opening a device and then closing it again.
@@ -103,26 +103,48 @@ async function start() {
   await audioCtx.audioWorklet.addModule('audio-worklet-in-to-out.js?' + now);
   var playerNode = new AudioWorkletNode(audioCtx, 'player');
   var ctr = 0;
-  var outbuf = [];
+  var mic_buf = [];
   playerNode.port.onmessage = (event) => {
     ctr++;
     if (ctr % 100 == 0) {
       //console.log("In main thread onmessage: received ", ctr, event.data);
     }
 
-    outbuf.push(event.data);
-    if (outbuf.length == SAMPLE_BATCH_SIZE) {
+    var mic_samples = event.data[0];
+    var write_clock = event.data[1];
+    var read_clock = event.data[2];
+
+    mic_buf.push(mic_samples);
+    if (mic_buf.length == SAMPLE_BATCH_SIZE) {
       var xhr = new XMLHttpRequest();
       xhr.onreadystatechange = () => {
         if (xhr.readyState == 4 && xhr.status == 200) {
           //console.log(xhr.responseText);
-          playerNode.port.postMessage(JSON.parse(xhr.responseText));
+          var result = JSON.parse(xhr.responseText);
+          var play_samples = result[0];
+          var play_clock = result[1];
+          playerNode.port.postMessage([play_samples, play_clock]);
+        } else if (xhr.readyState == 4 && xhr.status != 200) {
+          console.log("xhr bad result");
+          stop();
+          return;
         }
       }
-      var layer = window.location.hash.substr(1) || 1
-      xhr.open("POST", "http://localhost:8081/" + layer, true);
-      xhr.send(JSON.stringify(outbuf.flat()));
-      outbuf = [];
+      // DEBUG: Default to 2 so that we get something instead of silence.
+      var layer = window.location.hash.substr(1) || 2
+      try {
+        xhr.open("POST", "http://localhost:8081/" + layer, true);
+        xhr.send(JSON.stringify([
+          mic_buf.flat(),
+          (write_clock === null ? write_clock :
+            write_clock - mic_buf.length + mic_samples.length),
+          read_clock]));
+        mic_buf = [];
+      } catch(e) {
+        console.log(e);
+        stop();
+        return;
+      }
     }
   };
   micNode.connect(playerNode)

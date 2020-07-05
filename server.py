@@ -5,34 +5,49 @@ from http.server import BaseHTTPRequestHandler
 import json
 from collections import deque
 
-N_LAYERS = 5
+global_clock = 0
 
 # TODO: Write pointer trails read pointer to offset round-trip latency
 queue = [0] * (10 * 44100)
-rdptr = [0] * N_LAYERS
-wrptr = [0] * N_LAYERS
 
 class OurHandler(BaseHTTPRequestHandler):
     def do_POST(self):
+        global global_clock
         content_length = int(self.headers["Content-Length"])
-        in_data = json.loads(self.rfile.read(content_length))
-        layer = int(self.path[1:])
+        in_data, client_write_clock, client_read_clock = json.loads(self.rfile.read(content_length))
 
-        for i in range(len(in_data)):
-            queue[wrptr[layer]] = in_data[i]
-            wrptr[layer] = (wrptr[layer] + 1) % len(queue)
+        client_offset = int(self.path[1:])
+        is_primary = client_offset == 0
+
+        if client_read_clock is None and not is_primary:
+            client_read_clock = global_clock - client_offset
+
+        if is_primary:
+            for i in range(len(in_data)):
+                queue[global_clock % len(queue)] = in_data[i]
+                global_clock += 1
+        else:
+            # Note: If we get a write that is "too far" in the past, we need to throw it away.
+            if client_write_clock is None:
+                # Client warming up
+                pass
+            elif client_write_clock < global_clock - len(queue):
+                # Someone is having a bad day. TODO: Tell them?
+                pass
+            else:
+                for i in range(len(in_data)):
+                    queue[(client_write_clock + i) % len(queue)] += in_data[i]
 
         self.send_response(200)
         self.send_header("Access-Control-Allow-Origin", "*")
         self.end_headers()
 
         data = [0] * len(in_data)
-        if (layer != 1):
+        if (client_offset != 0):
             for i in range(len(in_data)):
-                data[i] = queue[rdptr[layer]]
-                rdptr[layer] = (rdptr[layer] + 1) % len(queue)
+                data[i] = queue[(client_read_clock + i) % len(queue)]
 
-        self.wfile.write(json.dumps(data).encode("UTF-8"))
+        self.wfile.write(json.dumps([data, client_read_clock]).encode("UTF-8"))
 
 server = http.server.HTTPServer(('', 8081), OurHandler)
 server.serve_forever()
