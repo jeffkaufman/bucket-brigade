@@ -1,0 +1,73 @@
+<html>
+<h1>Echo Demo</h1>
+
+Demonstration of using AudioWorklets to read from the mic and echo it
+back.  As of 2020-05 this depends on an API that is implemented in
+Firefox 76 and the Blink-based browsers: Chrome, Edge, Brave, and
+Opera.
+
+<p>
+
+Headphones are recommended, to avoid feedback.  If it makes annoying
+noises, refresh the page to make it stop.
+
+<p>
+
+When ready, press any key.  You'll need to give it permission to read
+from your microphone.
+
+<p>
+
+<i><span id=recording></span></i>
+
+<script>
+const SAMPLE_BATCH_SIZE = 100;
+
+async function start() {
+  document.removeEventListener("keydown", start);
+
+  var audioCtx = new (window.AudioContext || window.webkitAudioContext)({
+  });
+  var micStream = await navigator.mediaDevices.getUserMedia({
+    audio: {
+      echoCancellation: false,
+      noiseSuppression: false,
+      autoGainControl: false,
+    },
+  });
+  var micNode = new MediaStreamAudioSourceNode(audioCtx, { mediaStream: micStream });
+  var now = Date.now();
+  await audioCtx.audioWorklet.addModule('audio-worklet-in-to-out.js?' + now);
+  var playerNode = new AudioWorkletNode(audioCtx, 'player');
+  var ctr = 0;
+  var outbuf = [];
+  playerNode.port.onmessage = (event) => {
+    ctr++;
+    //if (ctr % 100 == 0) {
+    //  console.log("In main thread onmessage: received ", event.data);
+    //}
+
+    outbuf.push(event.data);
+    if (outbuf.length == SAMPLE_BATCH_SIZE) {
+      var xhr = new XMLHttpRequest();
+      xhr.onreadystatechange = () => {
+        if (xhr.readyState == 4 && xhr.status == 200) {
+          //console.log(xhr.responseText);
+          playerNode.port.postMessage(JSON.parse(xhr.responseText));
+        }
+      }
+      xhr.open("POST", "http://localhost:8081", true);
+      xhr.send(JSON.stringify(outbuf));
+      outbuf = [];
+    }
+  };
+  micNode.connect(playerNode)
+  playerNode.connect(audioCtx.destination);
+  recording.textContent = "recording";
+}
+
+// We can only start recording on user action, so ask them to press a
+// key to start.
+document.addEventListener("keydown", start);
+</script>
+</html>
