@@ -133,7 +133,7 @@ async function start() {
       // DEBUG: Default to 2 so that we get something instead of silence.
       var layer = window.location.hash.substr(1) || 2
       try {
-        xhr.open("POST", "http://localhost:8081/" + layer, true);
+        xhr.open("POST", "/api/" + layer, true);
         xhr.send(JSON.stringify([
           mic_buf.flat(),
           (write_clock === null ? write_clock :
