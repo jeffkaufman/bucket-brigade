@@ -37,7 +37,10 @@ class Player extends AudioWorkletProcessor {
       write_clock = this.local_clock - this.play_buffer.length * FRAME_SIZE;
       read_clock = this.local_clock;
     }
+    // Before we fully start up, write_clock will be negative. The current server
+    //   implementation should tolerate this, but it's quirky.
     this.port.postMessage([Array.from(inputs[0][0]), write_clock, read_clock]);
+
     // Buffer a bit before we get started.
     if (this.play_buffer.length < FRAME_SIZE * this.min_buffer_size && !this.started) {
       return true;
