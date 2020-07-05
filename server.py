@@ -40,14 +40,17 @@ class OurHandler(BaseHTTPRequestHandler):
 
         self.send_response(200)
         self.send_header("Access-Control-Allow-Origin", "*")
-        self.end_headers()
 
         data = [0] * len(in_data)
-        if (client_offset != 0):
+        if not is_primary:
             for i in range(len(in_data)):
                 data[i] = queue[(client_read_clock + i) % len(queue)]
 
-        self.wfile.write(json.dumps([data, client_read_clock]).encode("UTF-8"))
+        body_data = json.dumps([data, client_read_clock]).encode("UTF-8")
+        self.send_header("Content-Length", len(body_data))
+        self.end_headers()
+
+        self.wfile.write(body_data)
 
 server = http.server.HTTPServer(('', 8081), OurHandler)
 server.serve_forever()
