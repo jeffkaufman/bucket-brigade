@@ -25,7 +25,8 @@ Headphones are recommended, to avoid feedback.
 <i><span id=recording></span></i>
 
 <script>
-const SAMPLE_BATCH_SIZE = 5;
+const FRAME_SIZE = 128;  // by Web Audio API spec
+const SAMPLE_BATCH_SIZE = 10;
 
 async function force_permission_prompt() {
   // In order to enumerate devices, we must first force a permission prompt by opening a device and then closing it again.
@@ -103,29 +104,40 @@ async function start() {
   await audioCtx.audioWorklet.addModule('audio-worklet-in-to-out.js?' + now);
   var playerNode = new AudioWorkletNode(audioCtx, 'player');
   var ctr = 0;
-  var outbuf = [];
+
+  var outbuf = new Float32Array(FRAME_SIZE * SAMPLE_BATCH_SIZE);
+  var outbuf_wrptr = 0;
+
   playerNode.port.onmessage = (event) => {
     ctr++;
     if (ctr % 100 == 0) {
       //console.log("In main thread onmessage: received ", ctr, event.data);
     }
 
-    outbuf.push(event.data);
-    if (outbuf.length == SAMPLE_BATCH_SIZE) {
+    outbuf.set(event.data, outbuf_wrptr);
+    outbuf_wrptr += event.data.length;
+
+    if (outbuf_wrptr == outbuf.length) {
       var xhr = new XMLHttpRequest();
       xhr.onreadystatechange = () => {
         if (xhr.readyState == 4 && xhr.status == 200) {
           //console.log(xhr.responseText);
-          playerNode.port.postMessage(JSON.parse(xhr.responseText));
+          result = new Float32Array(xhr.response);
+          playerNode.port.postMessage(result, [result.buffer]);
         }
       }
-      var layer = window.location.hash.substr(1) || 1
+      var layer = window.location.hash.substr(1) || 1;
       xhr.open("POST", "http://localhost:8081/" + layer, true);
-      xhr.send(JSON.stringify(outbuf.flat()));
-      outbuf = [];
+      xhr.setRequestHeader('Content-Type', 'application/octet-stream');
+      xhr.responseType = "arraybuffer";
+      xhr.send(outbuf);
+
+      // TODO: I'm not sure if we could reuse the buffer, or if we could race with the outgoing XHR.
+      outbuf = new Float32Array(FRAME_SIZE * SAMPLE_BATCH_SIZE);
+      outbuf_wrptr = 0;
     }
   };
-  micNode.connect(playerNode)
+  micNode.connect(playerNode);
   playerNode.connect(audioCtx.destination);
 }
 
