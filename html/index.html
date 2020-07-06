@@ -165,6 +165,8 @@ async function start() {
 
   var ctr = 0;
   var mic_buf = [];
+  var xhrs_inflight = 0;
+
   playerNode.port.onmessage = (event) => {
     if (!running) {
       lib.log(LOG_WARNING, "Got message when done running");
@@ -176,9 +178,19 @@ async function start() {
     var write_clock = event.data[1];
     var read_clock = event.data[2];
 
+    function samples_to_worklet(samples, clock) {
+      var message = {
+        type: "samples_in",
+        samples: samples,
+        clock: clock
+      };
+
+      lib.log(LOG_SPAM, "Posting to worklet:", message);
+      playerNode.port.postMessage(message);
+    }
+
     mic_buf.push(mic_samples);
     if (mic_buf.length == SAMPLE_BATCH_SIZE) {
-      lib.log(LOG_SPAM, "completed a batch, sending to server")
       var xhr = new XMLHttpRequest();
       xhr.onreadystatechange = () => {
         if (!running) {
@@ -188,22 +200,10 @@ async function start() {
 
         if (xhr.readyState == 4 && xhr.status == 200) {
           var result = JSON.parse(xhr.responseText);
-          lib.log(LOG_SPAM, "Got XHR response:", result);
-
-          var play_samples = result[0];
-          var play_clock = result[1];
-
-          var message = {
-            type: "samples_in",
-            samples: play_samples,
-            clock: play_clock
-          };
-
-          lib.log(LOG_SPAM, "Posting to worker:", message);
-          playerNode.port.postMessage(message);
-          lib.log(LOG_SPAM, "postMessage complete");
+          lib.log(LOG_SPAM, "Got XHR response:", result, " -- still in flight:", --xhrs_inflight);
+          samples_to_worklet(result[0], result[1]);
         } else if (xhr.readyState == 4 && xhr.status != 200) {
-          lib.log(LOG_ERROR, "xhr bad result", xhr);
+          lib.log(LOG_ERROR, "XHR failed, stopping:", xhr);
           stop();
           return;
         }
@@ -220,10 +220,23 @@ async function start() {
         params.set('read_clock', read_clock);
         target_url.search = params.toString();
 
-        lib.log(LOG_SPAM, "XHR send...");
+        // Arbitrary cap; browser cap is 8(?) after which they queue
+        if (xhrs_inflight >= 4) {
+          lib.log(LOG_WARNING, "NOT SENDING XHR due to limit -- already in flight:", xhrs_inflight);
+          // Discard outgoing data
+          mic_buf = [];
+          // Incoming data should take care of itself -- our outgoing
+          //   request clocks are tied to the isochronous audioworklet
+          //   process() cycle.
+          // This doesn't quite line up with the way we handle underflow
+          //   in process() -- it expects the data will show up late and
+          //   it discards data to compensate.
+          return
+        }
+        lib.log(LOG_SPAM, "Sending XHR -- already in flight:", xhrs_inflight++);
         xhr.open("POST", target_url, true);
         xhr.send(JSON.stringify(mic_buf.flat()));
-        lib.log(LOG_SPAM, "... XHR done.");
+        lib.log(LOG_SPAM, "... XHR sent.");
         mic_buf = [];
       } catch(e) {
         lib.log(LOG_ERROR, "Failed to make XHR:", e);
