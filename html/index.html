@@ -21,14 +21,42 @@ Headphones are recommended, to avoid feedback.
   Server path:
   <input type=text id=serverPath value="/api/">
 <p>
+  Audio offset (samples @ 44,100):
+  <input type=text id=audioOffset value="0">
+<p>
+  Log level:
+  <select id=logLevel></select>
+<p>
   <button id=startButton disabled=true>Start</button>
   <button id=stopButton disabled=true>Stop</button>
 <p>
 
 <i><span id=recording></span></i>
 
-<script>
+<script type="module">
+import * as lib from './lib.js';
+import {LOG_VERYSPAM, LOG_SPAM, LOG_DEBUG, LOG_INFO, LOG_WARNING, LOG_ERROR} from './lib.js';
+import {LOG_LEVELS} from './lib.js';
+
+const session_id = Math.floor(Math.random() * 2**32).toString(16);
+lib.set_logging_session_id(session_id);
+lib.set_logging_context_id("main");
+
+var log_level_select = document.getElementById('logLevel');
+
+LOG_LEVELS.forEach((level) => {
+  var el = document.createElement("option");
+  el.value = level[0];
+  el.text = level[1];
+  if (lib.log_level == level[0]) {
+    el.selected = true;
+  }
+  log_level_select.appendChild(el);
+});
+
 const SAMPLE_BATCH_SIZE = 100;
+
+lib.log(LOG_INFO, "Starting up");
 
 async function force_permission_prompt() {
   // In order to enumerate devices, we must first force a permission prompt by opening a device and then closing it again.
@@ -77,6 +105,7 @@ var start_button = document.getElementById('startButton');
 var stop_button = document.getElementById('stopButton');
 var in_select = document.getElementById('inSelect');
 var server_path_text = document.getElementById('serverPath');
+var audio_offset_text = document.getElementById('audioOffset');
 
 var running = false;
 
@@ -85,6 +114,7 @@ function set_controls(is_running) {
   stop_button.disabled = !is_running;
   in_select.disabled = is_running;
   server_path_text.disabled = is_running;
+  audio_offset_text.disabled = is_running;
 }
 
 async function initialize() {
@@ -98,6 +128,8 @@ async function initialize() {
     server_path_text.value = "http://localhost:8081/"
   }
 }
+
+var playerNode;
 
 async function start() {
   running = true;
@@ -119,19 +151,21 @@ async function start() {
 
   var now = Date.now();  // cachebuster
   await audioCtx.audioWorklet.addModule('audio-worklet-in-to-out.js?' + now);
-  var playerNode = new AudioWorkletNode(audioCtx, 'player');
+  playerNode = new AudioWorkletNode(audioCtx, 'player');
+  playerNode.port.postMessage({
+    type: "log_params",
+    session_id: session_id,
+    log_level: lib.log_level
+  });
+
   var ctr = 0;
   var mic_buf = [];
   playerNode.port.onmessage = (event) => {
     if (!running) {
-      console.log("Got message when done running");
+      lib.log(LOG_WARNING, "Got message when done running");
       return;
     }
-
-    ctr++;
-    if (ctr % 100 == 0) {
-      //console.log("In main thread onmessage: received ", ctr, event.data);
-    }
+    lib.log(LOG_VERYSPAM, "onmessage received ", event.data);
 
     var mic_samples = event.data[0];
     var write_clock = event.data[1];
@@ -139,36 +173,55 @@ async function start() {
 
     mic_buf.push(mic_samples);
     if (mic_buf.length == SAMPLE_BATCH_SIZE) {
+      lib.log(LOG_SPAM, "completed a batch, sending to server")
       var xhr = new XMLHttpRequest();
       xhr.onreadystatechange = () => {
         if (!running) {
+          lib.log(LOG_WARNING, "Got XHR onreadystatechange when done running");
           return;
         }
 
         if (xhr.readyState == 4 && xhr.status == 200) {
-          //console.log(xhr.responseText);
           var result = JSON.parse(xhr.responseText);
+          lib.log(LOG_SPAM, "Got XHR response:", result);
+
           var play_samples = result[0];
           var play_clock = result[1];
-          playerNode.port.postMessage([play_samples, play_clock]);
+
+          var message = {
+            type: "samples_in",
+            samples: play_samples,
+            clock: play_clock
+          };
+
+          lib.log(LOG_SPAM, "Posting to worker:", message);
+          playerNode.port.postMessage(message);
+          lib.log(LOG_SPAM, "postMessage complete");
         } else if (xhr.readyState == 4 && xhr.status != 200) {
-          console.log("xhr bad result");
+          lib.log(LOG_ERROR, "xhr bad result", xhr);
           stop();
           return;
         }
       }
-      // DEBUG: Default to 2 so that we get something instead of silence.
-      var layer = window.location.hash.substr(1) || 2
+
+      var audio_offset = parseInt(audio_offset_text.value);
       try {
-        xhr.open("POST", server_path + layer, true);
-        xhr.send(JSON.stringify([
-          mic_buf.flat(),
-          (write_clock === null ? write_clock :
-            write_clock - mic_buf.length + mic_samples.length),
-          read_clock]));
+        var target_url = new URL(server_path + audio_offset, document.location);
+
+        var _write_clock = write_clock === null ? write_clock : write_clock - mic_buf.length + mic_samples.length;
+
+        var params = new URLSearchParams();
+        params.set('write_clock', _write_clock);
+        params.set('read_clock', read_clock);
+        target_url.search = params.toString();
+
+        lib.log(LOG_SPAM, "XHR send...");
+        xhr.open("POST", target_url, true);
+        xhr.send(JSON.stringify(mic_buf.flat()));
+        lib.log(LOG_SPAM, "... XHR done.");
         mic_buf = [];
       } catch(e) {
-        console.log(e);
+        lib.log(LOG_ERROR, "Failed to make XHR:", e);
         stop();
         return;
       }
@@ -180,14 +233,24 @@ async function start() {
 
 async function stop() {
   running = false;
-  console.log("Closing audio context...");
+  lib.log(LOG_INFO, "Closing audio context...");
   await audioCtx.close();
-  console.log("Closed audio context.");
+  lib.log(LOG_INFO, "Closed audio context.");
   set_controls(running);
 }
 
 start_button.addEventListener("click", start);
 stop_button.addEventListener("click", stop);
+
+log_level_select.addEventListener("change", () => {
+  lib.set_log_level(parseInt(log_level_select.value));
+  if (playerNode) {
+    playerNode.port.postMessage({
+      type: "log_params",
+      log_level: lib.log_level
+    });
+  }
+});
 
 initialize();
 </script>

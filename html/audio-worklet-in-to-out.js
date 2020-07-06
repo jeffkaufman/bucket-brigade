@@ -1,7 +1,15 @@
+
+import * as lib from './lib.js';
+import {LOG_SPAM, LOG_DEBUG, LOG_INFO, LOG_WARNING, LOG_ERROR} from './lib.js';
+
+lib.set_logging_context_id("audioworklet");
+lib.log(LOG_INFO, "Audio worklet module loading");
+
 const FRAME_SIZE = 128;  // by Web Audio API spec
 
 class Player extends AudioWorkletProcessor {
   constructor () {
+    lib.log(LOG_INFO, "Audio worklet object constructing");
     super();
     this.local_clock = null;
     this.play_buffer = [];
@@ -10,25 +18,42 @@ class Player extends AudioWorkletProcessor {
     this.underflow_count = 0;
     this.started = false;
     this.debug_ctr = 0;
-    this.port.onmessage = (event) => {
-      var play_samples = event.data[0];
-      var play_clock = event.data[1];
-
-      if (this.local_clock === null) {
-        this.local_clock = play_clock;
-      }
-
-      if (this.debug_ctr % 10 == 0) {
-        console.log("audio buffer length (samples): ", this.play_buffer.length, ", new input (samples): ", play_samples.length);
-      }
-      this.debug_ctr++;
-      if (this.play_buffer.length >= FRAME_SIZE * this.max_buffer_size) {
-        console.log("OVERFLOW");
-        return;
-      }
-      this.play_buffer = this.play_buffer.concat(play_samples);
-    }
+    this.port.onmessage = this.handle_message.bind(this);
   }
+
+  handle_message(event) {
+    var msg = event.data;
+    if (msg.type == "log_params") {
+      if (msg.log_level) {
+        lib.set_log_level(msg.log_level);
+      }
+      if (msg.session_id) {
+        lib.set_logging_session_id(msg.session_id);
+        lib.log(LOG_INFO, "Audio worklet logging ready");
+      }
+      return;
+    } else if (msg.type != "samples_in") {
+      // XXX flip out
+      return;
+    }
+    var play_samples = msg.samples;
+    var play_clock = msg.clock;
+
+    if (this.local_clock === null) {
+      this.local_clock = play_clock;
+    }
+
+    if (this.debug_ctr % 10 == 0) {
+      lib.log(LOG_DEBUG, "audio buffer length (samples): ", this.play_buffer.length, ", new input (samples): ", play_samples.length);
+    }
+    this.debug_ctr++;
+    if (this.play_buffer.length >= FRAME_SIZE * this.max_buffer_size) {
+      lib.log(LOG_WARNING, "OVERFLOW");
+      return;
+    }
+    this.play_buffer = this.play_buffer.concat(play_samples);
+  }
+
   process (inputs, outputs, parameters) {
     var write_clock = null;
     var read_clock = null;
@@ -47,12 +72,12 @@ class Player extends AudioWorkletProcessor {
     }
     this.started = true;
     while (this.play_buffer.length >= FRAME_SIZE && this.underflow_count) {
-      console.log("dropping frame to compensate for underflow");
+      lib.log(LOG_WARNING, "dropping frame to compensate for underflow");
       this.play_buffer = this.play_buffer.slice(FRAME_SIZE);
       this.underflow_count--;
     }
     if (this.play_buffer.length < FRAME_SIZE) {
-      console.log("UNDERFLOW");
+      lib.log(LOG_WARNING, "UNDERFLOW");
       this.underflow_count++;
       this.started = false;  // fill buffer back up to minimum
       return true;

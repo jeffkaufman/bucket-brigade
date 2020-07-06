@@ -3,7 +3,7 @@
 import http.server
 from http.server import BaseHTTPRequestHandler
 import json
-from collections import deque
+import urllib.parse
 
 global_clock = 0
 
@@ -14,9 +14,22 @@ class OurHandler(BaseHTTPRequestHandler):
     def do_POST(self):
         global global_clock
         content_length = int(self.headers["Content-Length"])
-        in_data, client_write_clock, client_read_clock = json.loads(self.rfile.read(content_length))
+        parsed_url = urllib.parse.urlparse(self.path)
+        query_params = urllib.parse.parse_qs(parsed_url.query, strict_parsing=True)
 
-        client_offset = int(self.path[1:])
+        if query_params["write_clock"][0] == "null":
+            client_write_clock = None
+        else:
+            client_write_clock = int(query_params["write_clock"][0])
+
+        if query_params["read_clock"][0] == "null":
+            client_read_clock = None
+        else:
+            client_read_clock = int(query_params["read_clock"][0])
+
+        in_data = json.loads(self.rfile.read(content_length))
+
+        client_offset = int(parsed_url.path[1:])
         is_primary = client_offset == 0
 
         if client_read_clock is None and not is_primary:
