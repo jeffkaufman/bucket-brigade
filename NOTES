@@ -1,0 +1,36 @@
+To do / to fix:
+* Obviously using JSON is creating bandwidth problems; need to switch to binary encoding.
+  * We could reduce it further using Float16/Float8/Int12/???
+  * Or more properly we could use a codec.
+* Using a single request to send-and-then-receive data adds variable latency to the received data, since it has to wait in line behind the sent data (and there's no easy way to know how long it waited.)
+* If we do receive data out-of-order, we don't currently attempt to reorder it in the receive buffer, which we should.
+
+Time constants:
+* Audioworklet "time quantum": 128 samples @ 44,100Hz ~= 3ms
+* Our send buffer: SAMPLE_BATCH_SIZE * 128 samples ~= 290ms
+
+Sources of latency to account for:
+* Sending:
+  * "Outside world latency":
+    * Head-to-mic acoustic latency: <= 3ms (about 1ms/ft)
+    * [Optional] bluetooth latency: 100-200 ms
+    * System/JS audio processing latency: dozens of ms?
+    * Buffer latency into audioworklet: ~3ms
+  * Client side latency:
+    * Buffer latency (our code): ~290ms
+  * Network/backend latency:
+    * XHR TCP connection establishment: ~1.5x RTT (unless conn is reused)
+    * [Optional] wait for single-threaded HTTP server to be free
+    * Upload time: Send buffer size / upload bandwidth
+* Receiving:
+  * [Time from XHR start until receiving begins]
+    * This is time we have to compensate for when deciding which audio to ask for, but not inherently latency in getting it
+  * Network/backend latency:
+    * Download time
+  * Client side latency:
+    * Buffer latency (our code)
+  * "Outside world latency":
+    * System/JS audio processing latency
+    * Optional bluetooth latency
+    * Speaker-to-head acoustic latency
+
