@@ -58,11 +58,15 @@ const SAMPLE_BATCH_SIZE = 100;
 
 lib.log(LOG_INFO, "Starting up");
 
+function close_stream(stream) {
+  stream.getTracks().forEach((track) => track.stop());
+}
+
 async function force_permission_prompt() {
   // In order to enumerate devices, we must first force a permission prompt by opening a device and then closing it again.
   // See: https://stackoverflow.com/questions/60297972/navigator-mediadevices-enumeratedevices-returns-empty-labels
-  stream = await navigator.mediaDevices.getUserMedia({audio: true});
-  stream.getTracks().forEach((track) => track.stop());
+  stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  close_stream(stream);
 }
 
 async function wait_for_mic_permissions() {
@@ -130,12 +134,13 @@ async function initialize() {
 }
 
 var playerNode;
+var micStream;
 
 async function start() {
   running = true;
   set_controls(running);
 
-  var micStream = await navigator.mediaDevices.getUserMedia({
+  micStream = await navigator.mediaDevices.getUserMedia({
     audio: {
       echoCancellation: false,
       noiseSuppression: false,
@@ -233,9 +238,18 @@ async function start() {
 
 async function stop() {
   running = false;
-  lib.log(LOG_INFO, "Closing audio context...");
-  await audioCtx.close();
-  lib.log(LOG_INFO, "Closed audio context.");
+
+  lib.log(LOG_INFO, "Closing audio context and mic stream...");
+  if (audioCtx) {
+    await audioCtx.close();
+    audioCtx = undefined;
+  }
+  if (micStream) {
+    close_stream(micStream);
+    micStream = undefined;
+  }
+  lib.log(LOG_INFO, "...closed.");
+
   set_controls(running);
 }
 
