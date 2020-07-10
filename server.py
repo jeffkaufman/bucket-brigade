@@ -51,15 +51,18 @@ class OurHandler(BaseHTTPRequestHandler):
                 for i in range(len(in_data)):
                     queue[(client_write_clock + i) % len(queue)] += in_data[i]
 
-        self.send_response(200)
-        self.send_header("Access-Control-Allow-Origin", "*")
-
         data = [0] * len(in_data)
         if not is_primary:
             for i in range(len(in_data)):
                 data[i] = queue[(client_read_clock + i) % len(queue)]
 
-        body_data = json.dumps([data, client_read_clock]).encode("UTF-8")
+        self.send_response(200)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Expose-Headers", "X-Audio-Metadata")
+        self.send_header("X-Audio-Metadata", json.dumps({
+            client_read_clock: client_read_clock
+        })
+        body_data = json.dumps(data).encode("UTF-8")
         self.send_header("Content-Length", len(body_data))
         self.end_headers()
 
