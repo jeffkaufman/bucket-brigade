@@ -237,7 +237,9 @@ async function start() {
         }
         var outdata = new Float32Array(mic_buf.length * mic_samples.length);
         for (var i = 0; i < mic_buf.length; i++) {
-          outdata.set(mic_buf[i], i * mic_buf[i].length);
+          for (var j = 0; j < mic_buf[i].length; j++) {
+            outdata[i * mic_buf[0].length + j] = mic_buf[i][j];
+          }
         }
         lib.log(LOG_SPAM, "Sending XHR -- already in flight:", xhrs_inflight++, "; data size:", outdata.length);
         xhr.open("POST", target_url, true);

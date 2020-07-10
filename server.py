@@ -34,9 +34,9 @@ class OurHandler(BaseHTTPRequestHandler):
         else:
             client_read_clock = int(query_params["read_clock"][0])
 
-        in_data = self.rfile.read(content_length)
-        n_samples = len(in_data) // 4
-        in_data = struct.unpack(str(n_samples) + "f", in_data)
+        in_data_raw = self.rfile.read(content_length)
+        n_samples = len(in_data_raw) // 4
+        in_data = struct.unpack(str(n_samples) + "f", in_data_raw)
 
         client_offset = int(parsed_url.path[1:])
         is_primary = client_offset == 0

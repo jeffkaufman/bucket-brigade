@@ -67,11 +67,11 @@ class Player extends AudioWorkletProcessor {
     //   implementation should tolerate this, but it's quirky.
     this.port.postMessage([inputs[0][0], write_clock, read_clock], [inputs[0][0].buffer]);
 
-    for (var chan = 0; chan < outputs[0].length; chan++) {
-      for (var i = 0; i < outputs[0][chan].length; i++) {
+    for (var i = 0; i < outputs[0][0].length; i++) {
+      for (var chan = 0; chan < outputs[0].length; chan++) {
         outputs[0][chan][i] = this.play_buffer[this.rd_ptr];
-        this.rd_ptr = (this.rd_ptr + 1) % this.play_buffer.length;
       }
+      this.rd_ptr = (this.rd_ptr + 1) % this.play_buffer.length;
     }
     return true;
   }
