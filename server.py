@@ -4,6 +4,7 @@ import http.server
 from http.server import BaseHTTPRequestHandler
 import json
 import urllib.parse
+import struct
 
 global_clock = 0
 
@@ -11,6 +12,12 @@ global_clock = 0
 queue = [0] * (10 * 44100)
 
 class OurHandler(BaseHTTPRequestHandler):
+    def do_OPTIONS(self):
+        self.send_response(200)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.end_headers()
+
     def do_POST(self):
         global global_clock
         content_length = int(self.headers["Content-Length"])
@@ -27,7 +34,9 @@ class OurHandler(BaseHTTPRequestHandler):
         else:
             client_read_clock = int(query_params["read_clock"][0])
 
-        in_data = json.loads(self.rfile.read(content_length))
+        in_data = self.rfile.read(content_length)
+        n_samples = len(in_data) // 4
+        in_data = struct.unpack(str(n_samples) + "f", in_data)
 
         client_offset = int(parsed_url.path[1:])
         is_primary = client_offset == 0
@@ -36,7 +45,7 @@ class OurHandler(BaseHTTPRequestHandler):
             client_read_clock = global_clock - client_offset
 
         if is_primary:
-            for i in range(len(in_data)):
+            for i in range(n_samples):
                 queue[global_clock % len(queue)] = in_data[i]
                 global_clock += 1
         else:
@@ -48,25 +57,26 @@ class OurHandler(BaseHTTPRequestHandler):
                 # Someone is having a bad day. TODO: Tell them?
                 pass
             else:
-                for i in range(len(in_data)):
+                for i in range(n_samples):
                     queue[(client_write_clock + i) % len(queue)] += in_data[i]
 
-        data = [0] * len(in_data)
+        data = [0] * n_samples
         if not is_primary:
-            for i in range(len(in_data)):
+            for i in range(n_samples):
                 data[i] = queue[(client_read_clock + i) % len(queue)]
+        data = struct.pack(str(n_samples) + "f", *data)
 
         self.send_response(200)
         self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
         self.send_header("Access-Control-Expose-Headers", "X-Audio-Metadata")
         self.send_header("X-Audio-Metadata", json.dumps({
-            client_read_clock: client_read_clock
-        })
-        body_data = json.dumps(data).encode("UTF-8")
-        self.send_header("Content-Length", len(body_data))
+            "client_read_clock": client_read_clock
+        }))
+        self.send_header("Content-Length", len(data))
         self.end_headers()
 
-        self.wfile.write(body_data)
+        self.wfile.write(data)
 
 server = http.server.HTTPServer(('', 8081), OurHandler)
 server.serve_forever()

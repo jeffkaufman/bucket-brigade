@@ -44,14 +44,14 @@ class Player extends AudioWorkletProcessor {
     }
 
     if (this.debug_ctr % 10 == 0) {
-      lib.log(LOG_DEBUG, "audio buffer length (samples): ", this.play_buffer.length, ", new input (samples): ", play_samples.length);
+      lib.log(LOG_DEBUG, "audio buffer length (frames): ", this.play_buffer.length, ", new input (samples): ", play_samples.length);
     }
     this.debug_ctr++;
-    if (this.play_buffer.length >= FRAME_SIZE * this.max_buffer_size) {
+    if (this.play_buffer.length >= this.max_buffer_size) {
       lib.log(LOG_WARNING, "OVERFLOW");
       return;
     }
-    this.play_buffer = this.play_buffer.concat(play_samples);
+    this.play_buffer.push(play_samples);
   }
 
   process (inputs, outputs, parameters) {
@@ -64,16 +64,16 @@ class Player extends AudioWorkletProcessor {
     }
     // Before we fully start up, write_clock will be negative. The current server
     //   implementation should tolerate this, but it's quirky.
-    this.port.postMessage([Array.from(inputs[0][0]), write_clock, read_clock]);
+    this.port.postMessage([inputs[0][0], write_clock, read_clock], [inputs[0][0].buffer]);
 
     // Buffer a bit before we get started.
-    if (this.play_buffer.length < FRAME_SIZE * this.min_buffer_size && !this.started) {
+    if (this.play_buffer.length < this.min_buffer_size && !this.started) {
       return true;
     }
     this.started = true;
-    while (this.play_buffer.length >= FRAME_SIZE && this.underflow_count) {
+    while (this.play_buffer.length && this.underflow_count) {
       lib.log(LOG_WARNING, "dropping frame to compensate for underflow");
-      this.play_buffer = this.play_buffer.slice(FRAME_SIZE);
+      this.play_buffer.shift();
       this.underflow_count--;
     }
     if (this.play_buffer.length < FRAME_SIZE) {
@@ -82,12 +82,9 @@ class Player extends AudioWorkletProcessor {
       this.started = false;  // fill buffer back up to minimum
       return true;
     }
-    var samples = this.play_buffer.slice(0, FRAME_SIZE);
-    this.play_buffer = this.play_buffer.slice(FRAME_SIZE);
+    var samples = this.play_buffer.shift();
     for (var chan = 0; chan < outputs[0].length; chan++) {
-      for (var i = 0; i < samples.length; i++) {
-        outputs[0][chan][i] = samples[i];
-      }
+      outputs[0][chan].set(samples)
     }
     return true;
   }

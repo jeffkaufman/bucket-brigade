@@ -199,11 +199,11 @@ async function start() {
         }
 
         if (xhr.readyState == 4 && xhr.status == 200) {
-          var metadata = xhr.getResponseHeader("X-Audio-Metadata");
+          var metadata = JSON.parse(xhr.getResponseHeader("X-Audio-Metadata"));
           lib.log(LOG_DEBUG, "metadata:", metadata);
-          var result = JSON.parse(xhr.responseText);
+          var result = new Float32Array(xhr.response);
           lib.log(LOG_SPAM, "Got XHR response:", result, " -- still in flight:", --xhrs_inflight);
-          samples_to_worklet(result[0], result[1]);
+          samples_to_worklet(result, metadata["client_read_clock"]);
         } else if (xhr.readyState == 4 && xhr.status != 200) {
           lib.log(LOG_ERROR, "XHR failed, stopping:", xhr);
           stop();
@@ -235,9 +235,14 @@ async function start() {
           //   it discards data to compensate.
           return
         }
-        var outdata = JSON.stringify(mic_buf.flat());
+        var outdata = new Float32Array(mic_buf.length * mic_samples.length);
+        for (var i = 0; i < mic_buf.length; i++) {
+          outdata.set(mic_buf[i], i * mic_buf[i].length);
+        }
         lib.log(LOG_SPAM, "Sending XHR -- already in flight:", xhrs_inflight++, "; data size:", outdata.length);
         xhr.open("POST", target_url, true);
+        xhr.setRequestHeader("Content-Type", "application/octet-stream");
+        xhr.responseType = "arraybuffer";
         xhr.send(outdata);
         lib.log(LOG_SPAM, "... XHR sent.");
         mic_buf = [];
