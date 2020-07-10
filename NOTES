@@ -4,6 +4,8 @@ To do / to fix:
   * Or more properly we could use a codec.
 * Using a single request to send-and-then-receive data adds variable latency to the received data, since it has to wait in line behind the sent data (and there's no easy way to know how long it waited.)
 * If we do receive data out-of-order, we don't currently attempt to reorder it in the receive buffer, which we should.
+* Rather than have a special "leader" client, we should have the "silent leader" be the server -- it simply needs to advance the global clock and zero the buffer. This requires it either have a periodic timer, or simulate it at the start of every request by checking how much time has elapsed.
+* Subtle issue: The relative precision of unsynchronized computer clocks is no better than 1ppm (generally 2-10x worse, IIRC.)
 
 Time constants:
 * Audioworklet "time quantum": 128 samples @ 44,100Hz ~= 3ms
