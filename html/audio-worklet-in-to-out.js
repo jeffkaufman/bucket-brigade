@@ -12,7 +12,7 @@ class Player extends AudioWorkletProcessor {
     lib.log(LOG_INFO, "Audio worklet object constructing");
     super();
     this.local_clock = null;
-    this.play_buffer = new Float32Array(100 * 44100);
+    this.play_buffer = new Float32Array(5 * 44100);
     this.rd_ptr = 0;
     this.wr_ptr = 44100;  // start effective buffer size at 1s
     this.started = false;
@@ -43,7 +43,7 @@ class Player extends AudioWorkletProcessor {
     }
 
     if (this.debug_ctr % 10 == 0) {
-      lib.log(LOG_DEBUG, "audio buffer length (frames): ", this.play_buffer.length, ", new input (samples): ", play_samples.length);
+      lib.log(LOG_DEBUG, "new input (samples): ", play_samples.length, "; current play buffer:", this.play_buffer, "pointers:", this.rd_ptr, this.wr_ptr);
     }
     this.debug_ctr++;
 
