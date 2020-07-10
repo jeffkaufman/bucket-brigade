@@ -12,10 +12,9 @@ class Player extends AudioWorkletProcessor {
     lib.log(LOG_INFO, "Audio worklet object constructing");
     super();
     this.local_clock = null;
-    this.play_buffer = [];
-    this.min_buffer_size = 150;  // in frames of 128 samples / about 3ms
-    this.max_buffer_size = 250;
-    this.underflow_count = 0;
+    this.play_buffer = new Float32Array(100 * 44100);
+    this.rd_ptr = 0;
+    this.wr_ptr = 44100;  // start effective buffer size at 1s
     this.started = false;
     this.debug_ctr = 0;
     this.port.onmessage = this.handle_message.bind(this);
@@ -47,11 +46,13 @@ class Player extends AudioWorkletProcessor {
       lib.log(LOG_DEBUG, "audio buffer length (frames): ", this.play_buffer.length, ", new input (samples): ", play_samples.length);
     }
     this.debug_ctr++;
-    if (this.play_buffer.length >= this.max_buffer_size) {
-      lib.log(LOG_WARNING, "OVERFLOW");
-      return;
+
+    // TODO: Deal with overflow.
+    // TODO: Deal with out-of-order messages.
+    for (var i = 0; i < play_samples.length; i++) {
+      this.play_buffer[this.wr_ptr] = play_samples[i];
+      this.wr_ptr = (this.wr_ptr + 1) % this.play_buffer.length;
     }
-    this.play_buffer.push(play_samples);
   }
 
   process (inputs, outputs, parameters) {
@@ -59,35 +60,21 @@ class Player extends AudioWorkletProcessor {
     var read_clock = null;
     if (this.local_clock !== null) {
       this.local_clock += FRAME_SIZE;
-      write_clock = this.local_clock - this.play_buffer.length * FRAME_SIZE;
+      write_clock = this.local_clock - ((this.wr_ptr - this.rd_ptr) % this.play_buffer.length);
       read_clock = this.local_clock;
     }
     // Before we fully start up, write_clock will be negative. The current server
     //   implementation should tolerate this, but it's quirky.
     this.port.postMessage([inputs[0][0], write_clock, read_clock], [inputs[0][0].buffer]);
 
-    // Buffer a bit before we get started.
-    if (this.play_buffer.length < this.min_buffer_size && !this.started) {
-      return true;
-    }
-    this.started = true;
-    while (this.play_buffer.length && this.underflow_count) {
-      lib.log(LOG_WARNING, "dropping frame to compensate for underflow");
-      this.play_buffer.shift();
-      this.underflow_count--;
-    }
-    if (this.play_buffer.length < FRAME_SIZE) {
-      lib.log(LOG_WARNING, "UNDERFLOW");
-      this.underflow_count++;
-      this.started = false;  // fill buffer back up to minimum
-      return true;
-    }
-    var samples = this.play_buffer.shift();
     for (var chan = 0; chan < outputs[0].length; chan++) {
-      outputs[0][chan].set(samples)
+      for (var i = 0; i < outputs[0][chan].length; i++) {
+        outputs[0][chan][i] = this.play_buffer[this.rd_ptr];
+        this.rd_ptr = (this.rd_ptr + 1) % this.play_buffer.length;
+      }
     }
     return true;
   }
 }
 
-registerProcessor('player', Player)
+registerProcessor('player', Player);
