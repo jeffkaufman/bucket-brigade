@@ -166,7 +166,7 @@ async function start() {
     },
   });
 
-  audioCtx = new (window.AudioContext || window.webkitAudioContext)({});
+  audioCtx = new AudioContext({ sampleRate: 44100 });
   debug_check_sample_rate(audioCtx.sampleRate);
 
   var micNode = new MediaStreamAudioSourceNode(audioCtx, { mediaStream: micStream });
