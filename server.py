@@ -5,8 +5,9 @@ from http.server import BaseHTTPRequestHandler
 import json
 import urllib.parse
 import struct
+import time
 
-global_clock = 0
+last_request_clock = None
 
 # TODO: Write pointer trails read pointer to offset round-trip latency
 queue = [0] * (10 * 44100)
@@ -19,7 +20,23 @@ class OurHandler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_POST(self):
-        global global_clock
+        global last_request_clock
+
+        # Note: This will eventually create a precision problem for the JS
+        #   clients, which are using floats. Specifically, it will fail on
+        #   February 17, 5206.
+        server_clock = int(time.time() * 44100)
+
+        # Audio from clients is summed, so we need to clear the circular
+        #   buffer ahead of them.
+        if last_request_clock is not None:
+            # For a client at offset 0, make sure we clear ahead (not behind)
+            #   them. (XXX: Is this correct?)
+            for i in range(last_request_clock, server_clock):
+                queue[i % len(queue)] = 0
+
+        last_request_clock = server_clock
+
         content_length = int(self.headers["Content-Length"])
         parsed_url = urllib.parse.urlparse(self.path)
         query_params = urllib.parse.parse_qs(parsed_url.query, strict_parsing=True)
@@ -39,31 +56,24 @@ class OurHandler(BaseHTTPRequestHandler):
         in_data = struct.unpack(str(n_samples) + "f", in_data_raw)
 
         client_offset = int(parsed_url.path[1:])
-        is_primary = client_offset == 0
 
-        if client_read_clock is None and not is_primary:
-            client_read_clock = global_clock - client_offset
+        if client_read_clock is None:
+            client_read_clock = server_clock - client_offset - n_samples
 
-        if is_primary:
-            for i in range(n_samples):
-                queue[global_clock % len(queue)] = in_data[i]
-                global_clock += 1
+        # Note: If we get a write that is "too far" in the past, we need to throw it away.
+        if client_write_clock is None:
+            # Client warming up
+            pass
+        elif client_write_clock < server_clock - len(queue):
+            # Someone is having a bad day. TODO: Tell them?
+            pass
         else:
-            # Note: If we get a write that is "too far" in the past, we need to throw it away.
-            if client_write_clock is None:
-                # Client warming up
-                pass
-            elif client_write_clock < global_clock - len(queue):
-                # Someone is having a bad day. TODO: Tell them?
-                pass
-            else:
-                for i in range(n_samples):
-                    queue[(client_write_clock + i) % len(queue)] += in_data[i]
+            for i in range(n_samples):
+                queue[(client_write_clock + i) % len(queue)] += in_data[i]
 
         data = [0] * n_samples
-        if not is_primary:
-            for i in range(n_samples):
-                data[i] = queue[(client_read_clock + i) % len(queue)]
+        for i in range(n_samples):
+            data[i] = queue[(client_read_clock + i) % len(queue)]
         data = struct.pack(str(n_samples) + "f", *data)
 
         self.send_response(200)
