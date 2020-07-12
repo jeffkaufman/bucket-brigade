@@ -21,7 +21,11 @@ Headphones are recommended, to avoid feedback.
   Server path:
   <input type=text id=serverPath value="/api/">
 <p>
-  Audio offset (samples @ 44,100):
+<p>
+  Sample rate:
+  <input type=text id=sampleRate value="Loading..." disabled>
+<p>
+  Audio offset (samples):
   <input type=text id=audioOffset value="0">
 <p>
   Log level:
@@ -110,7 +114,7 @@ var stop_button = document.getElementById('stopButton');
 var in_select = document.getElementById('inSelect');
 var server_path_text = document.getElementById('serverPath');
 var audio_offset_text = document.getElementById('audioOffset');
-
+var sample_rate_text = document.getElementById('sampleRate');
 var running = false;
 
 function set_controls(is_running) {
@@ -133,6 +137,19 @@ async function initialize() {
   }
 }
 
+function debug_check_sample_rate(rate) {
+  if (sample_rate_text.value == "Loading...") {
+    lib.log(LOG_DEBUG, "First setting sample rate:", rate);
+    sample_rate_text.value = rate;
+  } else if (sample_rate_text.value == rate.toString()) {
+    lib.log(LOG_DEBUG, "Sample rate is still", rate);
+  } else {
+    lib.log(LOG_ERROR, "SAMPLE RATE CHANGED from", sample_rate_text.value, "to", rate);
+    sample_rate_text.value = "ERROR: SAMPLE RATE CHANGED from " + sample_rate_text.value + " to " + rate + "!!";
+    stop();
+  }
+}
+
 var playerNode;
 var micStream;
 
@@ -150,6 +167,7 @@ async function start() {
   });
 
   audioCtx = new (window.AudioContext || window.webkitAudioContext)({});
+  debug_check_sample_rate(audioCtx.sampleRate);
 
   var micNode = new MediaStreamAudioSourceNode(audioCtx, { mediaStream: micStream });
   var server_path = server_path_text.value;
