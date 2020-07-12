@@ -11,6 +11,7 @@ class Player extends AudioWorkletProcessor {
   constructor () {
     lib.log(LOG_INFO, "Audio worklet object constructing");
     super();
+    this.offset = undefined;
     this.early_clock = null;
     this.play_buffer = new Float32Array(5 * 44100);
     this.started = false;
@@ -29,6 +30,9 @@ class Player extends AudioWorkletProcessor {
         lib.log(LOG_INFO, "Audio worklet logging ready");
       }
       return;
+    } else if (msg.type == "audio_params") {
+      this.offset = msg.offset;
+      return;
     } else if (msg.type != "samples_in") {
       // XXX flip out
       return;
@@ -37,7 +41,8 @@ class Player extends AudioWorkletProcessor {
     var late_clock = msg.clock;
 
     if (this.early_clock === null) {
-      this.early_clock = late_clock - 44100;  // 1 second buffer
+      // Allocate half our "slack" to our client-side playback buffer.
+      this.early_clock = late_clock - this.offset / 2;
     }
 
     if (this.debug_ctr % 10 == 0) {

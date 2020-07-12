@@ -156,6 +156,7 @@ var micStream;
 async function start() {
   running = true;
   set_controls(running);
+  var audio_offset = parseInt(audio_offset_text.value);
 
   micStream = await navigator.mediaDevices.getUserMedia({
     audio: {
@@ -180,6 +181,10 @@ async function start() {
     session_id: session_id,
     log_level: lib.log_level
   });
+  playerNode.port.postMessage({
+    type: "audio_params",
+    offset: audio_offset
+  })
 
   var ctr = 0;
   var mic_buf = [];
@@ -229,7 +234,6 @@ async function start() {
         }
       }
 
-      var audio_offset = parseInt(audio_offset_text.value);
       try {
         var target_url = new URL(server_path + audio_offset, document.location);
 
