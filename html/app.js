@@ -157,16 +157,19 @@ async function get_input_node(audioCtx, deviceId) {
     source.start();
     return source;
   } else if (deviceId == "HAMILTON") {
-    // Shenanigans becuse the browser does not let us use it more than once otherwise.
     var hamilton_audio = hamilton_audio_span.firstChild;
-    var new_hamilton_audio = hamilton_audio.cloneNode();
-    hamilton_audio_span.appendChild(new_hamilton_audio);
-    hamilton_audio.remove();
-    var source = audioCtx.createMediaElementSource(new_hamilton_audio);
-    new_hamilton_audio.loop = true;
+    // Can't use createMediaElementSource because you can only
+    //   ever do that once per element, so we could never restart.
+    //   See: https://github.com/webAudio/web-audio-api/issues/1202
+    var source = audioCtx.createMediaStreamSource(hamilton_audio.captureStream());
+    // NOTE: You MUST NOT call "load" on the element after calling
+    //   captureStream, or the capture will break. This is not documented
+    //   anywhere, of course.
+    hamilton_audio.muted = true;  // Output via stream only
+    hamilton_audio.loop = true;
+    hamilton_audio.controls = false;
     lib.log(LOG_DEBUG, "Starting playback of hamilton...");
-    new_hamilton_audio.load();
-    await new_hamilton_audio.play();
+    await hamilton_audio.play();
     lib.log(LOG_DEBUG, "... started");
     return source;
   }
