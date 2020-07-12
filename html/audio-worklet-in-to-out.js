@@ -1,6 +1,15 @@
 
 import * as lib from './lib.js';
-import {LOG_SPAM, LOG_DEBUG, LOG_INFO, LOG_WARNING, LOG_ERROR} from './lib.js';
+import {LOG_VERYSPAM, LOG_SPAM, LOG_DEBUG, LOG_INFO, LOG_WARNING, LOG_ERROR} from './lib.js';
+
+// This trick allows us to load this file as a regular module, which in turn
+//   allows us to flush it from the cache when needed, as a workaround for
+//   https://bugs.chromium.org/p/chromium/issues/detail?id=880784 .
+if (typeof AudioWorkletProcessor === "undefined") {
+  lib.log(LOG_INFO, "Audio worklet module preloading");
+  // If we are loaded as a regular module, skip the entire rest of the file
+  //   (which will not be valid outside the audio worklet context).
+} else {
 
 lib.set_logging_context_id("audioworklet");
 lib.log(LOG_INFO, "Audio worklet module loading");
@@ -57,26 +66,41 @@ class Player extends AudioWorkletProcessor {
   }
 
   process (inputs, outputs, parameters) {
-    var write_clock = null;
-    var read_clock = null;
-    var magic_offset = 44100; // ???;
+    try {
+      var write_clock = null;
+      var read_clock = null;
+      var magic_offset = this.offset / 2; // ???;
 
-    if (this.early_clock !== null) {
-      this.early_clock += FRAME_SIZE;
-      write_clock = this.early_clock;
-      read_clock = this.early_clock + magic_offset;
-    }
-    // Before we fully start up, write_clock will be negative. The current server
-    //   implementation should tolerate this, but it's quirky.
-    this.port.postMessage([inputs[0][0], write_clock, read_clock], [inputs[0][0].buffer]);
-
-    for (var i = 0; i < outputs[0][0].length; i++) {
-      for (var chan = 0; chan < outputs[0].length; chan++) {
-        outputs[0][chan][i] = this.play_buffer[(this.early_clock + i) % this.play_buffer.length];
+      if (this.early_clock !== null) {
+        this.early_clock += FRAME_SIZE;
+        write_clock = this.early_clock;
+        read_clock = this.early_clock + magic_offset;
       }
+
+      lib.log(LOG_VERYSPAM, "process inputs:", inputs);
+      this.port.postMessage({
+        type: "samples_out",
+        samples: inputs[0][0],
+        write_clock: write_clock,
+        read_clock: read_clock
+      }, [inputs[0][0].buffer]);
+
+      for (var i = 0; i < outputs[0][0].length; i++) {
+        for (var chan = 0; chan < outputs[0].length; chan++) {
+          outputs[0][chan][i] = this.play_buffer[(this.early_clock + i) % this.play_buffer.length];
+        }
+      }
+      return true;
+    } catch (ex) {
+      this.port.postMessage({
+        type: "exception",
+        exception: ex
+      });
+      throw ex;
     }
-    return true;
   }
 }
 
 registerProcessor('player', Player);
+
+}
