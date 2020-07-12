@@ -11,10 +11,8 @@ class Player extends AudioWorkletProcessor {
   constructor () {
     lib.log(LOG_INFO, "Audio worklet object constructing");
     super();
-    this.local_clock = null;
+    this.early_clock = null;
     this.play_buffer = new Float32Array(5 * 44100);
-    this.rd_ptr = 0;
-    this.wr_ptr = 44100;  // start effective buffer size at 1s
     this.started = false;
     this.debug_ctr = 0;
     this.port.onmessage = this.handle_message.bind(this);
@@ -36,32 +34,32 @@ class Player extends AudioWorkletProcessor {
       return;
     }
     var play_samples = msg.samples;
-    var play_clock = msg.clock;
+    var late_clock = msg.clock;
 
-    if (this.local_clock === null) {
-      this.local_clock = play_clock;
+    if (this.early_clock === null) {
+      this.early_clock = late_clock - 44100;  // 1 second buffer
     }
 
     if (this.debug_ctr % 10 == 0) {
-      lib.log(LOG_DEBUG, "new input (samples): ", play_samples.length, "; current play buffer:", this.play_buffer, "pointers:", this.rd_ptr, this.wr_ptr);
+      lib.log(LOG_DEBUG, "new input (samples): ", play_samples.length, "; current play buffer:", this.play_buffer, "clocks:", this.early_clock, late_clock);
     }
     this.debug_ctr++;
 
     // TODO: Deal with overflow.
-    // TODO: Deal with out-of-order messages.
     for (var i = 0; i < play_samples.length; i++) {
-      this.play_buffer[this.wr_ptr] = play_samples[i];
-      this.wr_ptr = (this.wr_ptr + 1) % this.play_buffer.length;
+      this.play_buffer[(late_clock + i) % this.play_buffer.length] = play_samples[i];
     }
   }
 
   process (inputs, outputs, parameters) {
     var write_clock = null;
     var read_clock = null;
-    if (this.local_clock !== null) {
-      this.local_clock += FRAME_SIZE;
-      write_clock = this.local_clock - ((this.wr_ptr - this.rd_ptr) % this.play_buffer.length);
-      read_clock = this.local_clock;
+    var magic_offset = 44100; // ???;
+
+    if (this.early_clock !== null) {
+      this.early_clock += FRAME_SIZE;
+      write_clock = this.early_clock;
+      read_clock = this.early_clock + magic_offset;
     }
     // Before we fully start up, write_clock will be negative. The current server
     //   implementation should tolerate this, but it's quirky.
@@ -69,9 +67,8 @@ class Player extends AudioWorkletProcessor {
 
     for (var i = 0; i < outputs[0][0].length; i++) {
       for (var chan = 0; chan < outputs[0].length; chan++) {
-        outputs[0][chan][i] = this.play_buffer[this.rd_ptr];
+        outputs[0][chan][i] = this.play_buffer[(this.early_clock + i) % this.play_buffer.length];
       }
-      this.rd_ptr = (this.rd_ptr + 1) % this.play_buffer.length;
     }
     return true;
   }
