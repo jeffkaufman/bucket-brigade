@@ -27,19 +27,23 @@ class OurHandler(BaseHTTPRequestHandler):
         #   February 17, 5206.
         server_clock = int(time.time() * 44100)
 
-        # Audio from clients is summed, so we need to clear the circular
-        #   buffer ahead of them.
-        if last_request_clock is not None:
-            # For a client at offset 0, make sure we clear ahead (not behind)
-            #   them. (XXX: Is this correct?)
-            for i in range(last_request_clock, server_clock):
-                queue[i % len(queue)] = 0
-
-        last_request_clock = server_clock
-
         content_length = int(self.headers["Content-Length"])
         parsed_url = urllib.parse.urlparse(self.path)
         query_params = urllib.parse.parse_qs(parsed_url.query, strict_parsing=True)
+
+        in_data_raw = self.rfile.read(content_length)
+        n_samples = len(in_data_raw) // 4
+        in_data = struct.unpack(str(n_samples) + "f", in_data_raw)
+
+        # Audio from clients is summed, so we need to clear the circular
+        #   buffer ahead of them.
+        if last_request_clock is not None:
+            # XXX: Is adding n_samples here correct or a hack?
+            clear_samples = server_clock - last_request_clock + n_samples
+            for i in range(server_clock, server_clock + clear_samples):
+                queue[i % len(queue)] = 0
+
+        last_request_clock = server_clock
 
         if query_params["write_clock"][0] == "null":
             client_write_clock = None
@@ -51,14 +55,10 @@ class OurHandler(BaseHTTPRequestHandler):
         else:
             client_read_clock = int(query_params["read_clock"][0])
 
-        in_data_raw = self.rfile.read(content_length)
-        n_samples = len(in_data_raw) // 4
-        in_data = struct.unpack(str(n_samples) + "f", in_data_raw)
-
         client_offset = int(parsed_url.path[1:])
 
         if client_read_clock is None:
-            client_read_clock = server_clock - client_offset - n_samples
+            client_read_clock = server_clock - client_offset
 
         # Note: If we get a write that is "too far" in the past, we need to throw it away.
         if client_write_clock is None:
