@@ -9,6 +9,7 @@ To do / to fix:
 * We should probably always request a sample rate of 44100 just in case.
 * Separate init API call?
 * Use request headers instead of query params so that URL doesn't change (forcing CORS preflight to be redone).
+* Debugging idea: Make artificial clients that attempt to send and receive fixed data for debugging.
 
 Time constants:
 * Audioworklet "time quantum": 128 samples @ 44,100Hz ~= 3ms
