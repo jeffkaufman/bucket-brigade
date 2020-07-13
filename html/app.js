@@ -90,6 +90,11 @@ async function enumerate_devices() {
     in_select.appendChild(el);
 
     el = document.createElement("option");
+    el.value = "SYNTHETIC";
+    el.text = "SYNTHETIC";
+    in_select.appendChild(el);
+
+    el = document.createElement("option");
     el.text = "---";
     el.disabled = true;
     out_select.appendChild(el);
@@ -98,6 +103,11 @@ async function enumerate_devices() {
     el.value = "NOWHERE";
     el.text = "NOWHERE";
     out_select.appendChild(el);
+
+    el = document.createElement("option");
+    el.value = "SYNTHETIC";
+    el.text = "SYNTHETIC (use with synthetic source)";
+    out_select.appendChild(el);
   });
 }
 
@@ -105,6 +115,7 @@ var audioCtx;
 
 var start_button = document.getElementById('startButton');
 var stop_button = document.getElementById('stopButton');
+var loopback_mode_select = document.getElementById('loopbackMode');
 var server_path_text = document.getElementById('serverPath');
 var audio_offset_text = document.getElementById('audioOffset');
 var sample_rate_text = document.getElementById('sampleRate');
@@ -115,6 +126,7 @@ var running = false;
 function set_controls(is_running) {
   start_button.disabled = is_running;
   stop_button.disabled = !is_running;
+  loopback_mode_select.disabled = is_running;
   in_select.disabled = is_running;
   out_select.disabled = is_running;
   server_path_text.disabled = is_running;
@@ -210,8 +222,24 @@ async function start() {
   audioCtx = new AudioContext({ sampleRate: 44100 });
   debug_check_sample_rate(audioCtx.sampleRate);
 
-  var micNode = await get_input_node(audioCtx, in_select.value);
-  var spkrNode = get_output_node(audioCtx, out_select.value);
+  var loopback_mode = loopback_mode_select.value;
+
+  var synthetic_audio_source = false;
+  var input_device = in_select.value;
+  if (input_device == "SYNTHETIC") {
+    synthetic_audio_source = true;
+    input_device = "SILENCE";
+  }
+  var micNode = await get_input_node(audioCtx, input_device);
+
+  var synthetic_audio_sink = false;
+  var output_device = out_select.value;
+  if (output_device == "SYNTHETIC") {
+    synthetic_audio_sink = true;
+    output_device = "NOWHERE";
+  }
+  var spkrNode = get_output_node(audioCtx, output_device);
+
   var server_path = server_path_text.value;
 
   await audioCtx.audioWorklet.addModule('audio-worklet-in-to-out.js');
@@ -225,7 +253,10 @@ async function start() {
   });
   playerNode.port.postMessage({
     type: "audio_params",
-    offset: audio_offset
+    offset: audio_offset,
+    synthetic_source: synthetic_audio_source,
+    synthetic_sink: synthetic_audio_sink,
+    loopback_mode: loopback_mode
   })
 
   var ctr = 0;
@@ -266,6 +297,20 @@ async function start() {
 
     mic_buf.push(mic_samples);
     if (mic_buf.length == SAMPLE_BATCH_SIZE) {
+      var outdata = new Float32Array(mic_buf.length * mic_samples.length);
+      for (var i = 0; i < mic_buf.length; i++) {
+        for (var j = 0; j < mic_buf[i].length; j++) {
+          outdata[i * mic_buf[0].length + j] = mic_buf[i][j];
+        }
+      }
+      mic_buf = [];
+
+      if (loopback_mode == "main") {
+        lib.log(LOG_DEBUG, "looping back samples in main thread");
+        samples_to_worklet(outdata, read_clock);
+        return;
+      }
+
       var xhr = new XMLHttpRequest();
       xhr.onreadystatechange = () => {
         if (!running) {
@@ -294,13 +339,17 @@ async function start() {
         var params = new URLSearchParams();
         params.set('write_clock', _write_clock);
         params.set('read_clock', read_clock);
+        if (loopback_mode == "server") {
+          params.set('loopback', true);
+          lib.log(LOG_DEBUG, "looping back samples at server");
+        }
         target_url.search = params.toString();
 
         // Arbitrary cap; browser cap is 8(?) after which they queue
         if (xhrs_inflight >= 4) {
           lib.log(LOG_WARNING, "NOT SENDING XHR due to limit -- already in flight:", xhrs_inflight);
-          // Discard outgoing data
-          mic_buf = [];
+          // Discard outgoing data.
+
           // Incoming data should take care of itself -- our outgoing
           //   request clocks are tied to the isochronous audioworklet
           //   process() cycle.
@@ -309,19 +358,12 @@ async function start() {
           //   it discards data to compensate.
           return
         }
-        var outdata = new Float32Array(mic_buf.length * mic_samples.length);
-        for (var i = 0; i < mic_buf.length; i++) {
-          for (var j = 0; j < mic_buf[i].length; j++) {
-            outdata[i * mic_buf[0].length + j] = mic_buf[i][j];
-          }
-        }
         lib.log(LOG_SPAM, "Sending XHR -- already in flight:", xhrs_inflight++, "; data size:", outdata.length);
         xhr.open("POST", target_url, true);
         xhr.setRequestHeader("Content-Type", "application/octet-stream");
         xhr.responseType = "arraybuffer";
         xhr.send(outdata);
         lib.log(LOG_SPAM, "... XHR sent.");
-        mic_buf = [];
       } catch(e) {
         lib.log(LOG_ERROR, "Failed to make XHR:", e);
         stop();

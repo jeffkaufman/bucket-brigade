@@ -41,9 +41,12 @@ class Player extends AudioWorkletProcessor {
       return;
     } else if (msg.type == "audio_params") {
       this.offset = msg.offset;
+      this.synthetic_source = msg.synthetic_source;
+      this.synthetic_sink = msg.synthetic_sink;
+      this.loopback_mode = msg.loopback_mode;
       return;
     } else if (msg.type != "samples_in") {
-      // XXX flip out
+      lib.log(LOG_ERROR, "Unknown message:", msg);
       return;
     }
     var play_samples = msg.samples;
@@ -78,18 +81,69 @@ class Player extends AudioWorkletProcessor {
       }
 
       lib.log(LOG_VERYSPAM, "process inputs:", inputs);
-      this.port.postMessage({
-        type: "samples_out",
-        samples: inputs[0][0],
-        write_clock: write_clock,
-        read_clock: read_clock
-      }, [inputs[0][0].buffer]);
-
-      for (var i = 0; i < outputs[0][0].length; i++) {
-        for (var chan = 0; chan < outputs[0].length; chan++) {
-          outputs[0][chan][i] = this.play_buffer[(this.early_clock + i) % this.play_buffer.length];
+      if (this.synthetic_source) {
+        lib.log(LOG_SPAM, "synthesizing fake input");
+        if (!this.synthetic_source_counter) {
+          lib.log(LOG_INFO, "Starting up synthetic source");
+          this.synthetic_source_counter = 0;
+        }
+        // This is probably not very kosher...
+        for (var i = 0; i < inputs[0][0].length; i++) {
+          for (var chan = 0; chan < inputs[0].length; chan++) {
+            inputs[0][chan][i] = this.synthetic_source_counter++;
+          }
         }
       }
+
+      if (this.loopback_mode === "worklet") {
+        for (var chan = 0; chan < outputs[0].length; chan++) {
+          if (outputs[0].length == inputs[0].length) {
+            outputs[0][chan].set(inputs[0][chan]);
+          } else {
+            outputs[0][chan].set(inputs[0][0]);
+          }
+        }
+      } else {
+        this.port.postMessage({
+          type: "samples_out",
+          samples: inputs[0][0],
+          write_clock: write_clock,
+          read_clock: read_clock
+        }, [inputs[0][0].buffer]);
+
+        for (var i = 0; i < outputs[0][0].length; i++) {
+          for (var chan = 0; chan < outputs[0].length; chan++) {
+            outputs[0][chan][i] = this.play_buffer[(this.early_clock + i) % this.play_buffer.length];
+          }
+        }
+      }
+
+      if (this.synthetic_sink) {
+        lib.log(LOG_SPAM, "validating synthesized data in output (channel 0 only):", outputs[0][0]);
+        if (typeof this.synthetic_sink_counter === "undefined") {
+          lib.log(LOG_INFO, "Starting up synthetic sink");
+          this.synthetic_sink_counter = 0;
+          this.synthetic_sink_leading_zeroes = 0;
+        }
+        for (var i = 0; i < FRAME_SIZE; i++) {
+          if (this.synthetic_sink_counter == 0) {
+            if (outputs[0][0][i] == 0) {
+              // No problem, leading zeroes are fine.
+              this.synthetic_sink_leading_zeroes++;
+            } else {
+              lib.log(LOG_INFO, "Saw", this.synthetic_sink_leading_zeroes, "zeros in stream");
+              this.synthetic_sink_counter++;
+            }
+          } else if (outputs[0][0][i] == this.synthetic_sink_counter + 1) {
+            // No problem, incrementing numbers.
+            this.synthetic_sink_counter++;
+          } else {
+            lib.log(LOG_WARNING, "Misordered data in frame:", outputs[0][0]);
+            this.synthetic_sink_counter = outputs[0][0][i];
+          }
+        }
+      }
+
       return true;
     } catch (ex) {
       this.port.postMessage({

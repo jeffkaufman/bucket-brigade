@@ -74,7 +74,11 @@ class OurHandler(BaseHTTPRequestHandler):
         data = [0] * n_samples
         for i in range(n_samples):
             data[i] = queue[(client_read_clock + i) % len(queue)]
-        data = struct.pack(str(n_samples) + "f", *data)
+
+        if query_params["loopback"][0] == "true":
+            data = in_data_raw
+        else:
+            data = struct.pack(str(n_samples) + "f", *data)
 
         self.send_response(200)
         self.send_header("Access-Control-Allow-Origin", "*")
