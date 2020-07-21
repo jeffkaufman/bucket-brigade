@@ -11,6 +11,9 @@ To do / to fix:
 * Use request headers instead of query params so that URL doesn't change (forcing CORS preflight to be redone).
 * Debugging idea: Make artificial clients that attempt to send and receive fixed data for debugging.
 
+Debugging notes from 2020-07-20:
+* When we observe the synthetic data on the server (and look at the network logs on the client), somehow it seems like we are skipping half our data OR double-incrementing write_clock with each XHR we send. We see write_clock appearing to increment by 25600 instead of 12800 in the log, and weird things happen on the server when we validate (we seem to wrap too early by 2x.)
+
 Time constants:
 * Audioworklet "time quantum": 128 samples @ 44,100Hz ~= 3ms
 * Our send buffer: SAMPLE_BATCH_SIZE * 128 samples ~= 290ms

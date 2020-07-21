@@ -21,15 +21,40 @@ class Player extends AudioWorkletProcessor {
     lib.log(LOG_INFO, "Audio worklet object constructing");
     super();
     this.offset = undefined;
-    this.early_clock = null;
+    this.slack = 44100;  // Start with 1 second
+    this.client_slack = this.slack / 2;
+    this.server_slack = this.slack - this.client_slack;
+    this.early_clock = undefined;
     this.play_buffer = new Float32Array(15 * 44100);  // 15 seconds
+    this.play_buffer.fill(0);
     this.started = false;
     this.debug_ctr = 0;
     this.port.onmessage = this.handle_message.bind(this);
   }
 
+  real_offset(offset) {
+    var len = this.play_buffer.length;
+    var real_offset = ((offset % len) + len) % len;
+
+    if (! (real_offset >= 0 && real_offset < len)) {
+      throw "Bad offset:" + offset;
+    }
+
+    return real_offset;
+  }
+
+  wrapping_read(offset) {
+    return this.play_buffer[this.real_offset(offset)];
+  }
+
+  wrapping_write(offset, value) {
+    this.play_buffer[this.real_offset(offset)] = value;
+  }
+
   handle_message(event) {
     var msg = event.data;
+    lib.log(LOG_VERYSPAM, "handle_message in audioworklet:", msg);
+
     if (msg.type == "log_params") {
       if (msg.log_level) {
         lib.set_log_level(msg.log_level);
@@ -52,9 +77,8 @@ class Player extends AudioWorkletProcessor {
     var play_samples = msg.samples;
     var late_clock = msg.clock;
 
-    if (this.early_clock === null) {
-      // Allocate half our "slack" to our client-side playback buffer.
-      this.early_clock = late_clock - this.offset / 2;
+    if (this.early_clock === undefined) {
+      this.early_clock = late_clock - this.client_slack;
     }
 
     if (this.debug_ctr % 10 == 0) {
@@ -64,20 +88,21 @@ class Player extends AudioWorkletProcessor {
 
     // TODO: Deal with overflow.
     for (var i = 0; i < play_samples.length; i++) {
-      this.play_buffer[(late_clock + i) % this.play_buffer.length] = play_samples[i];
+      this.wrapping_write(late_clock + i, play_samples[i]);
     }
+    lib.log(LOG_VERYSPAM, "new play buffer:", this.play_buffer, "clocks:", this.early_clock, late_clock);
   }
 
   process (inputs, outputs, parameters) {
     try {
       var write_clock = null;
       var read_clock = null;
-      var magic_offset = this.offset / 2; // ???;
 
-      if (this.early_clock !== null) {
+      if (this.early_clock !== undefined) {
+        // Note: Incrementing first means that we have one frame less client-side buffer than set above. This is fine unless we accidentally set our buffer too small, in which case it contributes to glitches.
         this.early_clock += FRAME_SIZE;
         write_clock = this.early_clock;
-        read_clock = this.early_clock + magic_offset;
+        read_clock = this.early_clock + this.server_slack;
       }
 
       lib.log(LOG_VERYSPAM, "process inputs:", inputs);
@@ -90,6 +115,7 @@ class Player extends AudioWorkletProcessor {
         // This is probably not very kosher...
         for (var i = 0; i < inputs[0][0].length; i++) {
           for (var chan = 0; chan < inputs[0].length; chan++) {
+            // XXX this is lies
             inputs[0][chan][i] = this.synthetic_source_counter++;
           }
         }
@@ -111,9 +137,12 @@ class Player extends AudioWorkletProcessor {
           read_clock: read_clock
         }, [inputs[0][0].buffer]);
 
-        for (var i = 0; i < outputs[0][0].length; i++) {
-          for (var chan = 0; chan < outputs[0].length; chan++) {
-            outputs[0][chan][i] = this.play_buffer[(this.early_clock + i) % this.play_buffer.length];
+        if (this.early_clock !== undefined) {
+          lib.log(LOG_VERYSPAM, "about to output samples from", this.play_buffer, "with length", this.play_buffer.length, "early clock:", this.early_clock, "starting with:", this.wrapping_read(this.early_clock));
+          for (var i = 0; i < outputs[0][0].length; i++) {
+            for (var chan = 0; chan < outputs[0].length; chan++) {
+              outputs[0][chan][i] = this.wrapping_read(this.early_clock + i);
+            }
           }
         }
       }

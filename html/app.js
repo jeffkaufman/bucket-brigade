@@ -265,11 +265,12 @@ async function start() {
 
   playerNode.port.onmessage = (event) => {
     var msg = event.data;
+    lib.log(LOG_VERYSPAM, "onmessage in main thread received ", msg);
+
     if (!running) {
       lib.log(LOG_WARNING, "Got message when done running");
       return;
     }
-    lib.log(LOG_VERYSPAM, "onmessage received ", event.data);
 
     if (msg.type == "exception") {
       lib.log(LOG_ERROR, "Exception thrown in audioworklet:", msg.exception);
@@ -306,8 +307,12 @@ async function start() {
       mic_buf = [];
 
       if (loopback_mode == "main") {
+        if (write_clock == null) {
+          // This should in theory be arbitrary; let's set it to an implausible value. (The server initializes it to the server's clock minus our audio offset, but without other clients, the absolute value of the server's clock should not matter.)
+          write_clock = 10;
+        }
         lib.log(LOG_DEBUG, "looping back samples in main thread");
-        samples_to_worklet(outdata, read_clock);
+        samples_to_worklet(outdata, write_clock);
         return;
       }
 

@@ -8,9 +8,12 @@ import struct
 import time
 
 last_request_clock = None
+first_client_write_clock = None
+first_client_total_samples = None
+first_client_value = None
 
 # TODO: Write pointer trails read pointer to offset round-trip latency
-queue = [0] * (10 * 44100)
+queue = [0] * (30 * 44100)
 
 class OurHandler(BaseHTTPRequestHandler):
     def do_OPTIONS(self):
@@ -21,6 +24,9 @@ class OurHandler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         global last_request_clock
+        global first_client_write_clock
+        global first_client_total_samples
+        global first_client_value
 
         # Note: This will eventually create a precision problem for the JS
         #   clients, which are using floats. Specifically, it will fail on
@@ -66,8 +72,17 @@ class OurHandler(BaseHTTPRequestHandler):
             pass
         elif client_write_clock < server_clock - len(queue):
             # Someone is having a bad day. TODO: Tell them?
+            print("Client is way behind?!")
+            import code
+            code.interact(local=dict(globals(), **locals()))
             pass
         else:
+            if first_client_write_clock is None:
+                first_client_write_clock = client_write_clock
+                first_client_total_samples = 0
+                first_client_value = in_data[0]
+                print("First client value is:", first_client_value)
+            first_client_total_samples += n_samples
             for i in range(n_samples):
                 queue[(client_write_clock + i) % len(queue)] += in_data[i]
 
@@ -75,10 +90,19 @@ class OurHandler(BaseHTTPRequestHandler):
         for i in range(n_samples):
             data[i] = queue[(client_read_clock + i) % len(queue)]
 
-        if query_params["loopback"][0] == "true":
-            data = in_data_raw
-        else:
-            data = struct.pack(str(n_samples) + "f", *data)
+        # Validate the first queue worth of writes from the first client
+        if first_client_total_samples is not None and first_client_total_samples <= len(queue):
+            validation_offset = first_client_write_clock
+            for i in range(len(queue)):
+                if queue[(validation_offset + i) % len(queue)] not in (0, first_client_value + i):
+                    print("Validation failed?!")
+                    import code
+                    code.interact(local=dict(globals(), **locals()))
+
+        #if query_params["loopback"][0] == "true":
+        #    data = in_data_raw
+        #else:
+        data = struct.pack(str(n_samples) + "f", *data)
 
         self.send_response(200)
         self.send_header("Access-Control-Allow-Origin", "*")
