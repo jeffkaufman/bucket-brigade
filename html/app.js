@@ -169,7 +169,7 @@ async function get_input_node(audioCtx, deviceId) {
     source.start();
     return source;
   } else if (deviceId == "HAMILTON") {
-    var hamilton_audio = hamilton_audio_span.firstChild;
+    var hamilton_audio = hamilton_audio_span.getElementsByTagName('audio')[0];
     // Can't use createMediaElementSource because you can only
     //   ever do that once per element, so we could never restart.
     //   See: https://github.com/webAudio/web-audio-api/issues/1202

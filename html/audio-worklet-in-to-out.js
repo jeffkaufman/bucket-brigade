@@ -22,7 +22,7 @@ class Player extends AudioWorkletProcessor {
     super();
     this.offset = undefined;
     this.early_clock = null;
-    this.play_buffer = new Float32Array(5 * 44100);
+    this.play_buffer = new Float32Array(15 * 44100);  // 15 seconds
     this.started = false;
     this.debug_ctr = 0;
     this.port.onmessage = this.handle_message.bind(this);
@@ -137,6 +137,9 @@ class Player extends AudioWorkletProcessor {
           } else if (outputs[0][0][i] == this.synthetic_sink_counter + 1) {
             // No problem, incrementing numbers.
             this.synthetic_sink_counter++;
+            if (this.synthetic_sink_counter % 100000 == 0) {
+              lib.log(LOG_INFO, "Synthetic sink has seen", this.synthetic_sink_counter, "samples");
+            }
           } else {
             lib.log(LOG_WARNING, "Misordered data in frame:", outputs[0][0]);
             this.synthetic_sink_counter = outputs[0][0][i];
