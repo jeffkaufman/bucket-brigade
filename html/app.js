@@ -213,17 +213,29 @@ function get_output_node(audioCtx, deviceId) {
 
 var playerNode;
 var micStream;
+var next_read_clock;
+var mic_buf;
+var mic_buf_clock;
+var loopback_mode;
+var server_path;
+var audio_offset;
+var xhrs_inflight;
 
 async function start() {
   running = true;
   set_controls(running);
-  var audio_offset = parseInt(audio_offset_text.value);
+  audio_offset = parseInt(audio_offset_text.value);
   var sample_rate = 44100;
+
+  next_read_clock = null;
+  mic_buf = [];
+  mic_buf_clock = null;
+  xhrs_inflight = 0;
 
   audioCtx = new AudioContext({ sampleRate: sample_rate });
   debug_check_sample_rate(audioCtx.sampleRate);
 
-  var loopback_mode = loopback_mode_select.value;
+  loopback_mode = loopback_mode_select.value;
 
   var synthetic_audio_source = false;
   var input_device = in_select.value;
@@ -241,7 +253,7 @@ async function start() {
   }
   var spkrNode = get_output_node(audioCtx, output_device);
 
-  var server_path = server_path_text.value;
+  server_path = server_path_text.value;
 
   await audioCtx.audioWorklet.addModule('audio-worklet-in-to-out.js');
   playerNode = new AudioWorkletNode(audioCtx, 'player');
@@ -252,134 +264,173 @@ async function start() {
     session_id: session_id,
     log_level: lib.log_level
   });
+
+  var server_clock;
+  if (loopback_mode == "main") {
+    // I got yer server right here!
+    server_clock = Math.round(Date.now() * sample_rate / 1000.0);
+  } else {
+    // Support relative paths
+    var target_url = new URL(server_path, document.location);
+    var request_time_ms = Date.now();
+    var fetch_result = await fetch(target_url, {
+      method: "get",  // default
+      cache: "no-store",
+    });
+    var server_latency_ms = Date.now() - request_time_ms;
+    var metadata = JSON.parse(fetch_result.headers.get("X-Audio-Metadata"));
+    server_clock = Math.round(metadata["server_clock"] + server_latency_ms * sample_rate / 1000.0);
+    lib.log(LOG_INFO, "Server clock is estimated to be:", server_clock, " (", metadata["server_clock"], "+", server_latency_ms * sample_rate / 1000.0);
+  }
+  next_read_clock = server_clock - audio_offset;
+
   playerNode.port.postMessage({
     type: "audio_params",
     sample_rate: sample_rate,
-    offset: audio_offset,
     synthetic_source: synthetic_audio_source,
     synthetic_sink: synthetic_audio_sink,
     loopback_mode: loopback_mode
   })
 
-  var ctr = 0;
-  var mic_buf = [];
-  var xhrs_inflight = 0;
+  playerNode.port.onmessage = handle_message;
+  micNode.connect(playerNode);
+  playerNode.connect(spkrNode);
+}
 
-  playerNode.port.onmessage = (event) => {
-    var msg = event.data;
-    lib.log(LOG_VERYSPAM, "onmessage in main thread received ", msg);
+function samples_to_worklet(samples, clock) {
+  var message = {
+    type: "samples_in",
+    samples: samples,
+    clock: clock
+  };
 
-    if (!running) {
-      lib.log(LOG_WARNING, "Got message when done running");
-      return;
-    }
+  lib.log(LOG_SPAM, "Posting to worklet:", message);
+  playerNode.port.postMessage(message);
+}
 
-    if (msg.type == "exception") {
-      lib.log(LOG_ERROR, "Exception thrown in audioworklet:", msg.exception);
-      stop();
-      return;
-    } else if (msg.type != "samples_out") {
-      lib.log(LOG_ERROR, "Got message of unknown type:", msg);
-      stop();
-      return;
-    }
-    var mic_samples = msg.samples;
-    var write_clock = msg.write_clock;
-    var read_clock = msg.read_clock;
+function handle_message(event) {
+  var msg = event.data;
+  lib.log(LOG_VERYSPAM, "onmessage in main thread received ", msg);
 
-    function samples_to_worklet(samples, clock) {
-      var message = {
-        type: "samples_in",
-        samples: samples,
-        clock: clock
-      };
+  if (!running) {
+    lib.log(LOG_WARNING, "Got message when done running");
+    return;
+  }
 
-      lib.log(LOG_SPAM, "Posting to worklet:", message);
-      playerNode.port.postMessage(message);
-    }
+  if (msg.type == "exception") {
+    lib.log(LOG_ERROR, "Exception thrown in audioworklet:", msg.exception);
+    stop();
+    return;
+  } else if (msg.type != "samples_out") {
+    lib.log(LOG_ERROR, "Got message of unknown type:", msg);
+    stop();
+    return;
+  }
 
-    mic_buf.push(mic_samples);
-    if (mic_buf.length == SAMPLE_BATCH_SIZE) {
-      var outdata = new Float32Array(mic_buf.length * mic_samples.length);
+  var mic_samples = msg.samples;
+  if (mic_buf_clock === null) {
+    mic_buf_clock = msg.clock;
+  }
+  mic_buf.push(mic_samples);
+
+  if (mic_buf.length == SAMPLE_BATCH_SIZE) {
+    var outdata = new Float32Array(mic_buf.length * mic_samples.length);
+    if (mic_buf_clock !== null) {
       for (var i = 0; i < mic_buf.length; i++) {
         for (var j = 0; j < mic_buf[i].length; j++) {
           outdata[i * mic_buf[0].length + j] = mic_buf[i][j];
         }
       }
-      mic_buf = [];
-
-      if (loopback_mode == "main") {
-        if (write_clock == null) {
-          // This should in theory be arbitrary; let's set it to an implausible value. (The server initializes it to the server's clock minus our audio offset, but without other clients, the absolute value of the server's clock should not matter.)
-          write_clock = 10;
+    } else {
+      // Still warming up
+      for (var i = 0; i < mic_buf.length; i++) {
+        for (var j = 0; j < mic_buf[i].length; j++) {
+          if (mic_buf[i][j] !== 0) {
+            lib.log_every(12800, "nonzero_warmup", LOG_ERROR, "Nonzero mic data during warmup, huh?");
+            //throw "Nonzero mic data during warmup, huh?"
+          }
         }
-        lib.log(LOG_DEBUG, "looping back samples in main thread");
-        samples_to_worklet(outdata, write_clock);
-        return;
-      }
-
-      var xhr = new XMLHttpRequest();
-      xhr.onreadystatechange = () => {
-        if (!running) {
-          lib.log(LOG_WARNING, "Got XHR onreadystatechange when done running");
-          return;
-        }
-
-        if (xhr.readyState == 4 && xhr.status == 200) {
-          var metadata = JSON.parse(xhr.getResponseHeader("X-Audio-Metadata"));
-          lib.log(LOG_DEBUG, "metadata:", metadata);
-          var result = new Float32Array(xhr.response);
-          lib.log(LOG_SPAM, "Got XHR response:", result, " -- still in flight:", --xhrs_inflight);
-          samples_to_worklet(result, metadata["client_read_clock"]);
-        } else if (xhr.readyState == 4 && xhr.status != 200) {
-          lib.log(LOG_ERROR, "XHR failed, stopping:", xhr);
-          stop();
-          return;
-        }
-      }
-
-      try {
-        var target_url = new URL(server_path + audio_offset, document.location);
-
-        var _write_clock = write_clock === null ? write_clock : write_clock - mic_buf.length + mic_samples.length;
-
-        var params = new URLSearchParams();
-        params.set('write_clock', _write_clock);
-        params.set('read_clock', read_clock);
-        if (loopback_mode == "server") {
-          params.set('loopback', true);
-          lib.log(LOG_DEBUG, "looping back samples at server");
-        }
-        target_url.search = params.toString();
-
-        // Arbitrary cap; browser cap is 8(?) after which they queue
-        if (xhrs_inflight >= 4) {
-          lib.log(LOG_WARNING, "NOT SENDING XHR due to limit -- already in flight:", xhrs_inflight);
-          // Discard outgoing data.
-
-          // Incoming data should take care of itself -- our outgoing
-          //   request clocks are tied to the isochronous audioworklet
-          //   process() cycle.
-          // This doesn't quite line up with the way we handle underflow
-          //   in process() -- it expects the data will show up late and
-          //   it discards data to compensate.
-          return
-        }
-        lib.log(LOG_SPAM, "Sending XHR -- already in flight:", xhrs_inflight++, "; data size:", outdata.length);
-        xhr.open("POST", target_url, true);
-        xhr.setRequestHeader("Content-Type", "application/octet-stream");
-        xhr.responseType = "arraybuffer";
-        xhr.send(outdata);
-        lib.log(LOG_SPAM, "... XHR sent.");
-      } catch(e) {
-        lib.log(LOG_ERROR, "Failed to make XHR:", e);
-        stop();
-        return;
       }
     }
-  };
-  micNode.connect(playerNode);
-  playerNode.connect(spkrNode);
+    mic_buf = [];
+    mic_buf_clock = null;
+
+    if (loopback_mode == "main") {
+      lib.log(LOG_DEBUG, "looping back samples in main thread");
+      samples_to_worklet(outdata, next_read_clock);
+      next_read_clock += outdata.length;
+      return;
+    }
+
+    var xhr = new XMLHttpRequest();
+    xhr.onreadystatechange = () => {
+      if (xhr.readyState == 4 /* done*/) {
+        handle_xhr_result(xhr);
+      }
+    };
+    xhr.debug_id = Date.now();
+
+    try {
+      var target_url = new URL(server_path, document.location);
+      var params = new URLSearchParams();
+      if (mic_buf_clock !== null) {
+        params.set('write_clock', mic_buf_clock);
+      }
+      params.set('read_clock', next_read_clock);
+      // Response size always equals request size.
+      next_read_clock = next_read_clock + outdata.length;
+      if (loopback_mode == "server") {
+        params.set('loopback', true);
+        lib.log(LOG_DEBUG, "looping back samples at server");
+      }
+      target_url.search = params.toString();
+
+      // Arbitrary cap; browser cap is 8(?) after which they queue
+      if (xhrs_inflight >= 4) {
+        lib.log(LOG_WARNING, "NOT SENDING XHR w/ ID:", xhr.debug_id, " due to limit -- already in flight:", xhrs_inflight);
+        // XXX: This is a disaster probably
+        // Discard outgoing data.
+
+        // Incoming data should take care of itself -- our outgoing
+        //   request clocks are tied to the isochronous audioworklet
+        //   process() cycle.
+        // This doesn't quite line up with the way we handle underflow
+        //   in process() -- it expects the data will show up late and
+        //   it discards data to compensate.
+        return
+      }
+      lib.log(LOG_SPAM, "Sending XHR w/ ID:", xhr.debug_id, "already in flight:", xhrs_inflight++, "; data size:", outdata.length);
+      xhr.open("POST", target_url, true);
+      xhr.setRequestHeader("Content-Type", "application/octet-stream");
+      xhr.responseType = "arraybuffer";
+      xhr.send(outdata);
+      lib.log(LOG_SPAM, "... XHR sent.");
+    } catch(e) {
+      lib.log(LOG_ERROR, "Failed to make XHR:", e);
+      stop();
+      return;
+    }
+  }
+}
+
+// Only called when readystate is 4 (done)
+function handle_xhr_result(xhr) {
+  if (!running) {
+    lib.log(LOG_WARNING, "Got XHR onreadystatechange w/ID:", xhr.debug_id, "for xhr:", xhr, " when done running; still in flight:", --xhrs_inflight);
+    return;
+  }
+
+  if (xhr.status == 200) {
+    var metadata = JSON.parse(xhr.getResponseHeader("X-Audio-Metadata"));
+    lib.log(LOG_DEBUG, "metadata:", metadata);
+    var result = new Float32Array(xhr.response);
+    lib.log(LOG_SPAM, "Got XHR response w/ ID:", xhr.debug_id, "result:", result, " -- still in flight:", --xhrs_inflight);
+    samples_to_worklet(result, metadata["client_read_clock"]);
+  } else {
+    lib.log(LOG_ERROR, "XHR failed w/ ID:", xhr.debug_id, "stopping:", xhr, " -- still in flight:", --xhrs_inflight);
+    stop();
+    return;
+  }
 }
 
 async function stop() {

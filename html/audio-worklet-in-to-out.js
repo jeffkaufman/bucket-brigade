@@ -16,29 +16,92 @@ lib.log(LOG_INFO, "Audio worklet module loading");
 
 const FRAME_SIZE = 128;  // by Web Audio API spec
 
-class RingBuffer {
-  constructor(type, size) {
+class ClockedRingBuffer {
+  constructor(type, size, leadin_samples) {
+    if (leadin_samples > size) {
+      // Note that even getting close is likely to result in failure.
+      lib.log(LOG_ERROR, "leadin samples must not exceed size");
+      throw "leadin samples must not exceed size";
+    }
+    // Before the first write, all reads will be zero. After the first write,
+    // the first leadin_samples read will be zero, then real reads will start.
+    // (This allows a buffer to build up.)
+    this.leadin_samples = leadin_samples;
+    this.read_clock = null;
     this.len = size;
     this.buf = new type(size);
-    this.buf.fill(0);  // Probably a no-op
+    this.buf.fill(NaN);
+    // For debugging, mostly
+    this.buffered_data = 0;
+  }
+
+  buffered_data() {
+    return this.buffered_data;
+  }
+
+  // Note: We can get writes out of order, so having space left is
+  //   no guarantee that a given write will succeed.
+  space_left() {
+    return this.len - this.buffered_data;
   }
 
   real_offset(offset) {
     var len = this.len;
+    // Hack to handle negative numbers (just in case)
     var real_offset = ((offset % len) + len) % len;
 
     if (!(real_offset >= 0 && real_offset < len)) {
+      lib.log(LOG_ERROR, "Bad offset:", offset);
       throw "Bad offset:" + offset;
     }
     return real_offset;
   }
 
-  wrapping_read(offset) {
-    return this.buf[this.real_offset(offset)];
+  get_read_clock() {
+    return this.read_clock;
   }
 
-  wrapping_write(offset, value) {
-    this.buf[this.real_offset(offset)] = value;
+  read() {
+    lib.log_every(12800, "buf_read", LOG_DEBUG, "leadin_samples:", this.leadin_samples, "read_clock:", this.read_clock, "buffered_data:", this.buffered_data, "space_left:", this.space_left());
+    if (this.read_clock === null) {
+      return 0;
+    }
+    if (this.leadin_samples > 0) {
+      this.read_clock++;
+      this.leadin_samples--;
+      return 0;
+    }
+    var val = this.buf[this.real_offset(this.read_clock)];
+    if (isNaN(val)) {
+      // XXX: hardcoded interval matches size of our net requests
+      lib.log_every(12800, LOG_ERROR, "Buffer underflow :-( leadin_samples:", this.leadin_samples, "read_clock:", this.read_clock, "buffered_data:", this.buffered_data, "space_left:", this.space_left());
+      this.read_clock++;
+      return 0;
+    }
+    this.buf[this.real_offset(this.read_clock)] = NaN;  // Mostly for debugging
+    this.read_clock++;
+    this.buffered_data--;
+    return val;
+  }
+
+  write(value, write_clock) {
+    if (write_clock != Math.round(write_clock)) {
+      lib.log(LOG_ERROR, "write_clock not an integer?!");
+      throw "write_clock not an integer?!";
+    }
+    lib.log_every(12800, "buf_write", LOG_DEBUG, "write_clock:", write_clock, "read_clock:", this.read_clock, "buffered_data:", this.buffered_data, "space_left:", this.space_left());
+    if (this.read_clock === null) {
+      // It should be acceptable for this to end up negative
+      this.read_clock = write_clock - this.leadin_samples;
+    }
+    if (!isNaN(this.buf[this.real_offset(write_clock)])) {
+      lib.log(LOG_ERROR, "Buffer overflow :-( write_clock:", write_clock, "read_clock:", this.read_clock, "buffered_data:", this.buffered_data, "space_left:", this.space_left());
+      // XXX: Perhaps be more graceful.
+      // XXX: this should really never ever happen unless we are very close to full, but we do see it happening and I don't understand why.
+      throw("Buffer overflow");
+    }
+    this.buf[this.real_offset(write_clock)] = value;
+    this.buffered_data++;
   }
 }
 
@@ -47,9 +110,6 @@ class Player extends AudioWorkletProcessor {
     lib.log(LOG_INFO, "Audio worklet object constructing");
     super();
     this.ready = false;
-    this.early_clock = undefined;
-    this.play_buffer = new RingBuffer(Float32Array, 15 * 44100);  // 15 seconds
-    this.debug_ctr = 0;
     this.port.onmessage = this.handle_message.bind(this);
   }
 
@@ -68,14 +128,18 @@ class Player extends AudioWorkletProcessor {
       return;
     } else if (msg.type == "audio_params") {
       this.sample_rate = msg.sample_rate;
-      this.offset = msg.offset;
+      this.local_latency = 0.02;  // XXX: Latency from us-speaker-mic-us.
       this.synthetic_source = msg.synthetic_source;
       this.synthetic_sink = msg.synthetic_sink;
       this.loopback_mode = msg.loopback_mode;
 
-      this.slack = this.sample_rate * 1;  // 1 second of slack
+      this.slack = this.sample_rate * 5;  // 5 seconds of slack (XXX: arbitrary, pick a better value)
       this.client_slack = this.slack / 2;
+      // XXX unused
       this.server_slack = this.slack - this.client_slack;
+
+      // 15 seconds of total buffer, `this.slack` seconds of leadin
+      this.play_buffer = new ClockedRingBuffer(Float32Array, 15 * 44100, this.client_slack);
 
       this.ready = true;
       return;
@@ -87,19 +151,13 @@ class Player extends AudioWorkletProcessor {
       return;
     }
     var play_samples = msg.samples;
-    var late_clock = msg.clock;
 
-    if (this.early_clock === undefined) {
-      this.early_clock = late_clock - this.client_slack;
-    }
+    lib.log_every(10, "new_samples", LOG_DEBUG, "new input (samples): ", play_samples.length, "; current play buffer:", this.play_buffer);
 
-    lib.log_every(10, "new_samples", LOG_DEBUG, "new input (samples): ", play_samples.length, "; current play buffer:", this.play_buffer, "clocks:", this.early_clock, late_clock);
-
-    // TODO: Deal with overflow.
     for (var i = 0; i < play_samples.length; i++) {
-      this.play_buffer.wrapping_write(late_clock + i, play_samples[i]);
+      this.play_buffer.write(play_samples[i], msg.clock + i);
     }
-    lib.log(LOG_VERYSPAM, "new play buffer:", this.play_buffer, "clocks:", this.early_clock, late_clock);
+    lib.log(LOG_VERYSPAM, "new play buffer:", this.play_buffer);
   }
 
   // Only for debugging
@@ -150,21 +208,11 @@ class Player extends AudioWorkletProcessor {
 
   process (inputs, outputs, parameters) {
     if (!this.ready) {
-      lib.log(LOG_ERROR, "tried to process before ready");
+      lib.log_every(100, "process_before_ready", LOG_ERROR, "tried to process before ready");
       return true;
     }
 
     try {
-      var write_clock = null;
-      var read_clock = null;
-
-      if (this.early_clock !== undefined) {
-        // Note: Incrementing first means that we have one frame less client-side buffer than set above. This is fine unless we accidentally set our buffer too small, in which case it contributes to glitches.
-        this.early_clock += FRAME_SIZE;
-        write_clock = this.early_clock;
-        read_clock = this.early_clock + this.server_slack;
-      }
-
       lib.log(LOG_VERYSPAM, "process inputs:", inputs);
       if (this.synthetic_source) {
         // Ignore our input and overwrite it with sequential numbers for debugging
@@ -182,21 +230,21 @@ class Player extends AudioWorkletProcessor {
         }
       } else {
         // Normal input/output handling
+        lib.log(LOG_VERYSPAM, "about to output samples from", this.play_buffer, "with length", this.play_buffer.length);
+
+        var first_sample_clock = this.play_buffer.get_read_clock();
+        for (var i = 0; i < outputs[0][0].length; i++) {
+          var val = this.play_buffer.read();
+          for (var chan = 0; chan < outputs[0].length; chan++) {
+            outputs[0][chan][i] = val;
+          }
+        }
+
         this.port.postMessage({
           type: "samples_out",
           samples: inputs[0][0],
-          write_clock: write_clock,
-          read_clock: read_clock
+          clock: first_sample_clock
         }, [inputs[0][0].buffer]);
-
-        if (this.early_clock !== undefined) {
-          lib.log(LOG_VERYSPAM, "about to output samples from", this.play_buffer, "with length", this.play_buffer.length, "early clock:", this.early_clock, "starting with:", this.play_buffer.wrapping_read(this.early_clock));
-          for (var i = 0; i < outputs[0][0].length; i++) {
-            for (var chan = 0; chan < outputs[0].length; chan++) {
-              outputs[0][chan][i] = this.play_buffer.wrapping_read(this.early_clock + i);
-            }
-          }
-        }
         // End normal handling
       }
 

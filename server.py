@@ -22,6 +22,19 @@ class OurHandler(BaseHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
         self.end_headers()
 
+    def do_GET(self):
+        server_clock = int(time.time() * 44100)
+        self.send_response(200)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Access-Control-Expose-Headers", "X-Audio-Metadata")
+        self.send_header("X-Audio-Metadata", json.dumps({
+            "server_clock": server_clock
+        }))
+        self.send_header("Content-Length", 0)
+        self.send_header("Content-Type", "application/octet-stream")
+        self.end_headers()
+
     def do_POST(self):
         global last_request_clock
         global first_client_write_clock
@@ -49,36 +62,29 @@ class OurHandler(BaseHTTPRequestHandler):
             # XXX: Is adding n_samples here correct or a hack?
             clear_samples = server_clock - last_request_clock + n_samples
             for i in range(server_clock, server_clock + clear_samples):
-                queue[i % len(queue)] = 0
+                # XXX:
+                pass
+                #queue[i % len(queue)] = 0
 
         last_request_clock = server_clock
 
-        if query_params.get("write_clock", ["null"])[0] == "null":
-            client_write_clock = None
-        else:
-            client_write_clock = int(query_params["write_clock"][0])
-
-        if query_params.get("read_clock", ["null"])[0] == "null":
-            client_read_clock = None
-        else:
-            client_read_clock = int(query_params["read_clock"][0])
-
-        client_offset = int(parsed_url.path[1:])
-
-        if client_read_clock is None:
-            client_read_clock = server_clock - client_offset
+        client_write_clock = query_params.get("write_clock", None)
+        if client_write_clock is not None:
+            client_write_clock = int(client_write_clock[0])
+        client_read_clock = int(query_params["read_clock"][0])
 
         # Note: If we get a write that is "too far" in the past, we need to throw it away.
         if client_write_clock is None:
-            # Client warming up
             pass
         elif client_write_clock < server_clock - len(queue):
+            # XXX this may not be right
             # Someone is having a bad day. TODO: Tell them?
             print("Client is way behind?!")
             import code
             code.interact(local=dict(globals(), **locals()))
             pass
         else:
+            # XXX: debugging hackery
             if first_client_write_clock is None:
                 first_client_write_clock = client_write_clock
                 first_client_total_samples = 0
@@ -103,10 +109,10 @@ class OurHandler(BaseHTTPRequestHandler):
                     code.interact(local=dict(globals(), **locals()))
         """
 
-        #if query_params["loopback"][0] == "true":
-        #    data = in_data_raw
-        #else:
-        data = struct.pack(str(n_samples) + "f", *data)
+        if query_params["loopback"][0] == "true":
+            data = in_data_raw
+        else:
+            data = struct.pack(str(n_samples) + "f", *data)
 
         self.send_response(200)
         self.send_header("Access-Control-Allow-Origin", "*")
@@ -116,6 +122,7 @@ class OurHandler(BaseHTTPRequestHandler):
             "client_read_clock": client_read_clock
         }))
         self.send_header("Content-Length", len(data))
+        self.send_header("Content-Type", "application/octet-stream")
         self.end_headers()
 
         self.wfile.write(data)
