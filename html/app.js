@@ -33,7 +33,7 @@ function close_stream(stream) {
 async function force_permission_prompt() {
   // In order to enumerate devices, we must first force a permission prompt by opening a device and then closing it again.
   // See: https://stackoverflow.com/questions/60297972/navigator-mediadevices-enumeratedevices-returns-empty-labels
-  stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  var stream = await navigator.mediaDevices.getUserMedia({ audio: true });
   close_stream(stream);
 }
 

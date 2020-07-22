@@ -35,7 +35,9 @@ class OurHandler(BaseHTTPRequestHandler):
 
         content_length = int(self.headers["Content-Length"])
         parsed_url = urllib.parse.urlparse(self.path)
-        query_params = urllib.parse.parse_qs(parsed_url.query, strict_parsing=True)
+        query_params = {}
+        if parsed_url.query:
+            query_params = urllib.parse.parse_qs(parsed_url.query, strict_parsing=True)
 
         in_data_raw = self.rfile.read(content_length)
         n_samples = len(in_data_raw) // 4
@@ -51,12 +53,12 @@ class OurHandler(BaseHTTPRequestHandler):
 
         last_request_clock = server_clock
 
-        if query_params["write_clock"][0] == "null":
+        if query_params.get("write_clock", ["null"])[0] == "null":
             client_write_clock = None
         else:
             client_write_clock = int(query_params["write_clock"][0])
 
-        if query_params["read_clock"][0] == "null":
+        if query_params.get("read_clock", ["null"])[0] == "null":
             client_read_clock = None
         else:
             client_read_clock = int(query_params["read_clock"][0])
@@ -91,6 +93,7 @@ class OurHandler(BaseHTTPRequestHandler):
             data[i] = queue[(client_read_clock + i) % len(queue)]
 
         # Validate the first queue worth of writes from the first client
+        """
         if first_client_total_samples is not None and first_client_total_samples <= len(queue):
             validation_offset = first_client_write_clock
             for i in range(len(queue)):
@@ -98,6 +101,7 @@ class OurHandler(BaseHTTPRequestHandler):
                     print("Validation failed?!")
                     import code
                     code.interact(local=dict(globals(), **locals()))
+        """
 
         #if query_params["loopback"][0] == "true":
         #    data = in_data_raw
