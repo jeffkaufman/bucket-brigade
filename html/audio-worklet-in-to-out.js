@@ -16,39 +16,41 @@ lib.log(LOG_INFO, "Audio worklet module loading");
 
 const FRAME_SIZE = 128;  // by Web Audio API spec
 
-class Player extends AudioWorkletProcessor {
-  constructor () {
-    lib.log(LOG_INFO, "Audio worklet object constructing");
-    super();
-    this.offset = undefined;
-    this.slack = 44100;  // Start with 1 second
-    this.client_slack = this.slack / 2;
-    this.server_slack = this.slack - this.client_slack;
-    this.early_clock = undefined;
-    this.play_buffer = new Float32Array(15 * 44100);  // 15 seconds
-    this.play_buffer.fill(0);
-    this.started = false;
-    this.debug_ctr = 0;
-    this.port.onmessage = this.handle_message.bind(this);
+class RingBuffer {
+  constructor(type, size) {
+    this.len = size;
+    this.buf = new type(size);
+    this.buf.fill(0);  // Probably a no-op
   }
 
   real_offset(offset) {
-    var len = this.play_buffer.length;
+    var len = this.len;
     var real_offset = ((offset % len) + len) % len;
 
-    if (! (real_offset >= 0 && real_offset < len)) {
+    if (!(real_offset >= 0 && real_offset < len)) {
       throw "Bad offset:" + offset;
     }
-
     return real_offset;
   }
 
   wrapping_read(offset) {
-    return this.play_buffer[this.real_offset(offset)];
+    return this.buf[this.real_offset(offset)];
   }
 
   wrapping_write(offset, value) {
-    this.play_buffer[this.real_offset(offset)] = value;
+    this.buf[this.real_offset(offset)] = value;
+  }
+}
+
+class Player extends AudioWorkletProcessor {
+  constructor () {
+    lib.log(LOG_INFO, "Audio worklet object constructing");
+    super();
+    this.ready = false;
+    this.early_clock = undefined;
+    this.play_buffer = new RingBuffer(Float32Array, 15 * 44100);  // 15 seconds
+    this.debug_ctr = 0;
+    this.port.onmessage = this.handle_message.bind(this);
   }
 
   handle_message(event) {
@@ -65,10 +67,20 @@ class Player extends AudioWorkletProcessor {
       }
       return;
     } else if (msg.type == "audio_params") {
+      this.sample_rate = msg.sample_rate;
       this.offset = msg.offset;
       this.synthetic_source = msg.synthetic_source;
       this.synthetic_sink = msg.synthetic_sink;
       this.loopback_mode = msg.loopback_mode;
+
+      this.slack = this.sample_rate * 1;  // 1 second of slack
+      this.client_slack = this.slack / 2;
+      this.server_slack = this.slack - this.client_slack;
+
+      this.ready = true;
+      return;
+    } else if (!this.ready) {
+      lib.log(LOG_ERROR, "received message before ready:", msg);
       return;
     } else if (msg.type != "samples_in") {
       lib.log(LOG_ERROR, "Unknown message:", msg);
@@ -81,19 +93,67 @@ class Player extends AudioWorkletProcessor {
       this.early_clock = late_clock - this.client_slack;
     }
 
-    if (this.debug_ctr % 10 == 0) {
-      lib.log(LOG_DEBUG, "new input (samples): ", play_samples.length, "; current play buffer:", this.play_buffer, "clocks:", this.early_clock, late_clock);
-    }
-    this.debug_ctr++;
+    lib.log_every(10, "new_samples", LOG_DEBUG, "new input (samples): ", play_samples.length, "; current play buffer:", this.play_buffer, "clocks:", this.early_clock, late_clock);
 
     // TODO: Deal with overflow.
     for (var i = 0; i < play_samples.length; i++) {
-      this.wrapping_write(late_clock + i, play_samples[i]);
+      this.play_buffer.wrapping_write(late_clock + i, play_samples[i]);
     }
     lib.log(LOG_VERYSPAM, "new play buffer:", this.play_buffer, "clocks:", this.early_clock, late_clock);
   }
 
+  // Only for debugging
+  synthesize_input(input) {
+    lib.log(LOG_SPAM, "synthesizing fake input");
+    if (!this.synthetic_source_counter) {
+      lib.log(LOG_INFO, "Starting up synthetic source");
+      this.synthetic_source_counter = 0;
+    }
+    // This is probably not very kosher...
+    for (var i = 0; i < input[0].length; i++) {
+      for (var chan = 0; chan < input.length; chan++) {
+        input[chan][i] = this.synthetic_source_counter;
+      }
+      this.synthetic_source_counter++;
+    }
+  }
+
+  // Only for debugging
+  check_synthetic_output(output) {
+    lib.log(LOG_SPAM, "validating synthesized data in output (channel 0 only):", output[0]);
+    if (typeof this.synthetic_sink_counter === "undefined") {
+      lib.log(LOG_INFO, "Starting up synthetic sink");
+      this.synthetic_sink_counter = 0;
+      this.synthetic_sink_leading_zeroes = 0;
+    }
+    for (var i = 0; i < FRAME_SIZE; i++) {
+      if (this.synthetic_sink_counter == 0) {
+        if (output[0][i] == 0) {
+          // No problem, leading zeroes are fine.
+          this.synthetic_sink_leading_zeroes++;
+        } else {
+          lib.log(LOG_INFO, "Saw", this.synthetic_sink_leading_zeroes, "zeros in stream");
+          this.synthetic_sink_counter++;
+        }
+      } else if (output[0][i] == this.synthetic_sink_counter + 1) {
+        // No problem, incrementing numbers.
+        this.synthetic_sink_counter++;
+        if (this.synthetic_sink_counter % 100000 == 0) {
+          lib.log(LOG_INFO, "Synthetic sink has seen", this.synthetic_sink_counter, "samples");
+        }
+      } else {
+        lib.log(LOG_WARNING, "Misordered data in frame:", output[0]);
+        this.synthetic_sink_counter = output[0][i];
+      }
+    }
+  }
+
   process (inputs, outputs, parameters) {
+    if (!this.ready) {
+      lib.log(LOG_ERROR, "tried to process before ready");
+      return true;
+    }
+
     try {
       var write_clock = null;
       var read_clock = null;
@@ -107,21 +167,12 @@ class Player extends AudioWorkletProcessor {
 
       lib.log(LOG_VERYSPAM, "process inputs:", inputs);
       if (this.synthetic_source) {
-        lib.log(LOG_SPAM, "synthesizing fake input");
-        if (!this.synthetic_source_counter) {
-          lib.log(LOG_INFO, "Starting up synthetic source");
-          this.synthetic_source_counter = 0;
-        }
-        // This is probably not very kosher...
-        for (var i = 0; i < inputs[0][0].length; i++) {
-          for (var chan = 0; chan < inputs[0].length; chan++) {
-            // XXX this is lies
-            inputs[0][chan][i] = this.synthetic_source_counter++;
-          }
-        }
+        // Ignore our input and overwrite it with sequential numbers for debugging
+        this.synthesize_input(inputs[0]);
       }
 
       if (this.loopback_mode === "worklet") {
+        // Send input straight to output and do nothing else with it (only for debugging)
         for (var chan = 0; chan < outputs[0].length; chan++) {
           if (outputs[0].length == inputs[0].length) {
             outputs[0][chan].set(inputs[0][chan]);
@@ -130,6 +181,7 @@ class Player extends AudioWorkletProcessor {
           }
         }
       } else {
+        // Normal input/output handling
         this.port.postMessage({
           type: "samples_out",
           samples: inputs[0][0],
@@ -138,42 +190,19 @@ class Player extends AudioWorkletProcessor {
         }, [inputs[0][0].buffer]);
 
         if (this.early_clock !== undefined) {
-          lib.log(LOG_VERYSPAM, "about to output samples from", this.play_buffer, "with length", this.play_buffer.length, "early clock:", this.early_clock, "starting with:", this.wrapping_read(this.early_clock));
+          lib.log(LOG_VERYSPAM, "about to output samples from", this.play_buffer, "with length", this.play_buffer.length, "early clock:", this.early_clock, "starting with:", this.play_buffer.wrapping_read(this.early_clock));
           for (var i = 0; i < outputs[0][0].length; i++) {
             for (var chan = 0; chan < outputs[0].length; chan++) {
-              outputs[0][chan][i] = this.wrapping_read(this.early_clock + i);
+              outputs[0][chan][i] = this.play_buffer.wrapping_read(this.early_clock + i);
             }
           }
         }
+        // End normal handling
       }
 
       if (this.synthetic_sink) {
-        lib.log(LOG_SPAM, "validating synthesized data in output (channel 0 only):", outputs[0][0]);
-        if (typeof this.synthetic_sink_counter === "undefined") {
-          lib.log(LOG_INFO, "Starting up synthetic sink");
-          this.synthetic_sink_counter = 0;
-          this.synthetic_sink_leading_zeroes = 0;
-        }
-        for (var i = 0; i < FRAME_SIZE; i++) {
-          if (this.synthetic_sink_counter == 0) {
-            if (outputs[0][0][i] == 0) {
-              // No problem, leading zeroes are fine.
-              this.synthetic_sink_leading_zeroes++;
-            } else {
-              lib.log(LOG_INFO, "Saw", this.synthetic_sink_leading_zeroes, "zeros in stream");
-              this.synthetic_sink_counter++;
-            }
-          } else if (outputs[0][0][i] == this.synthetic_sink_counter + 1) {
-            // No problem, incrementing numbers.
-            this.synthetic_sink_counter++;
-            if (this.synthetic_sink_counter % 100000 == 0) {
-              lib.log(LOG_INFO, "Synthetic sink has seen", this.synthetic_sink_counter, "samples");
-            }
-          } else {
-            lib.log(LOG_WARNING, "Misordered data in frame:", outputs[0][0]);
-            this.synthetic_sink_counter = outputs[0][0][i];
-          }
-        }
+        // Check that our output looks like sequential numbers for debugging
+        this.check_synthetic_output(outputs[0]);
       }
 
       return true;

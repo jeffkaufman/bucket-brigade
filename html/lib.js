@@ -56,3 +56,14 @@ export function log(level, ...args) {
     console.log("[" + _session_id + "/" + _context_id + "]", Date.now()/1000, log_level_to_string(level) + ":", ...args);
   }
 }
+
+var log_counts = {}
+export function log_every(n, tag, level, ...args) {
+  if (log_counts[tag] === undefined) {
+    log_counts[tag] = 0;
+  }
+  if (log_counts[tag] % n == 0) {
+    log(level, "<" + tag + "/" + n + ">", ...args);
+  }
+  log_counts[tag]++;
+}

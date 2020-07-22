@@ -218,8 +218,9 @@ async function start() {
   running = true;
   set_controls(running);
   var audio_offset = parseInt(audio_offset_text.value);
+  var sample_rate = 44100;
 
-  audioCtx = new AudioContext({ sampleRate: 44100 });
+  audioCtx = new AudioContext({ sampleRate: sample_rate });
   debug_check_sample_rate(audioCtx.sampleRate);
 
   var loopback_mode = loopback_mode_select.value;
@@ -253,6 +254,7 @@ async function start() {
   });
   playerNode.port.postMessage({
     type: "audio_params",
+    sample_rate: sample_rate,
     offset: audio_offset,
     synthetic_source: synthetic_audio_source,
     synthetic_sink: synthetic_audio_sink,
