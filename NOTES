@@ -3,11 +3,7 @@ To do / to fix:
 * Subtle issue: The relative precision of unsynchronized computer clocks is no better than 1ppm (generally 2-10x worse, IIRC.)
 * Use request headers instead of query params so that URL doesn't change (forcing CORS preflight to be redone).
 
-Debugging notes from 2020-07-20:
-* When we observe the synthetic data on the server (and look at the network logs on the client), somehow it seems like we are skipping half our data OR double-incrementing write_clock with each XHR we send. We see write_clock appearing to increment by 25600 instead of 12800 in the log, and weird things happen on the server when we validate (we seem to wrap too early by 2x.)
-
 Debugging notes from 2020-07-22:
-* (Notes above are probably obsoleted by rewrite)
 * Weird as fuck: sometimes after it lags, when it comes back the pitch
   is too high? ??? ?????? I have seen it too high by a consistent ~3%
   for many seconds. (1/2 a semitone roughly)
