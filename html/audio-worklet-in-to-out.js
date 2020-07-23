@@ -114,53 +114,61 @@ class Player extends AudioWorkletProcessor {
   }
 
   handle_message(event) {
-    var msg = event.data;
-    lib.log(LOG_VERYSPAM, "handle_message in audioworklet:", msg);
+    try {
+      var msg = event.data;
+      lib.log(LOG_VERYSPAM, "handle_message in audioworklet:", msg);
 
-    if (msg.type == "log_params") {
-      if (msg.log_level) {
-        lib.set_log_level(msg.log_level);
+      if (msg.type == "log_params") {
+        if (msg.log_level) {
+          lib.set_log_level(msg.log_level);
+        }
+        if (msg.session_id) {
+          lib.set_logging_session_id(msg.session_id);
+          lib.log(LOG_INFO, "Audio worklet logging ready");
+        }
+        return;
+      } else if (msg.type == "audio_params") {
+        this.sample_rate = msg.sample_rate;
+        this.local_latency = 0.02;  // XXX: Latency from us-speaker-mic-us.
+        this.synthetic_source = msg.synthetic_source;
+        this.synthetic_sink = msg.synthetic_sink;
+        this.loopback_mode = msg.loopback_mode;
+
+        this.slack = this.sample_rate * 3  // 3 seconds of slack (XXX: arbitrary, pick a better value)
+        this.client_slack = this.slack / 2;
+        // XXX unused
+        this.server_slack = this.slack - this.client_slack;
+
+        // 15 seconds of total buffer, `this.slack` seconds of leadin, force things to round to FRAME_SIZE
+        this.play_buffer = new ClockedRingBuffer(
+          Float32Array,
+          Math.round(15 * this.sample_rate / FRAME_SIZE) * FRAME_SIZE,
+          Math.round(this.client_slack / FRAME_SIZE) * FRAME_SIZE);
+
+        this.ready = true;
+        return;
+      } else if (!this.ready) {
+        lib.log(LOG_ERROR, "received message before ready:", msg);
+        return;
+      } else if (msg.type != "samples_in") {
+        lib.log(LOG_ERROR, "Unknown message:", msg);
+        return;
       }
-      if (msg.session_id) {
-        lib.set_logging_session_id(msg.session_id);
-        lib.log(LOG_INFO, "Audio worklet logging ready");
+      var play_samples = msg.samples;
+
+      lib.log_every(10, "new_samples", LOG_DEBUG, "new input (samples): ", play_samples.length, "; current play buffer:", this.play_buffer);
+
+      for (var i = 0; i < play_samples.length; i++) {
+        this.play_buffer.write(play_samples[i], msg.clock - play_samples.length + i);
       }
-      return;
-    } else if (msg.type == "audio_params") {
-      this.sample_rate = msg.sample_rate;
-      this.local_latency = 0.02;  // XXX: Latency from us-speaker-mic-us.
-      this.synthetic_source = msg.synthetic_source;
-      this.synthetic_sink = msg.synthetic_sink;
-      this.loopback_mode = msg.loopback_mode;
-
-      this.slack = this.sample_rate * 3  // 3 seconds of slack (XXX: arbitrary, pick a better value)
-      this.client_slack = this.slack / 2;
-      // XXX unused
-      this.server_slack = this.slack - this.client_slack;
-
-      // 15 seconds of total buffer, `this.slack` seconds of leadin, force things to round to FRAME_SIZE
-      this.play_buffer = new ClockedRingBuffer(
-        Float32Array,
-        Math.round(15 * this.sample_rate / FRAME_SIZE) * FRAME_SIZE,
-        Math.round(this.client_slack / FRAME_SIZE) * FRAME_SIZE);
-
-      this.ready = true;
-      return;
-    } else if (!this.ready) {
-      lib.log(LOG_ERROR, "received message before ready:", msg);
-      return;
-    } else if (msg.type != "samples_in") {
-      lib.log(LOG_ERROR, "Unknown message:", msg);
-      return;
+      lib.log(LOG_VERYSPAM, "new play buffer:", this.play_buffer);
+    } catch (ex) {
+      this.port.postMessage({
+        type: "exception",
+        exception: ex
+      });
+      throw ex;
     }
-    var play_samples = msg.samples;
-
-    lib.log_every(10, "new_samples", LOG_DEBUG, "new input (samples): ", play_samples.length, "; current play buffer:", this.play_buffer);
-
-    for (var i = 0; i < play_samples.length; i++) {
-      this.play_buffer.write(play_samples[i], msg.clock - play_samples.length + i);
-    }
-    lib.log(LOG_VERYSPAM, "new play buffer:", this.play_buffer);
   }
 
   // Only for debugging
