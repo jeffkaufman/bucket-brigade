@@ -1,18 +1,23 @@
 To do / to fix:
-* Obviously using JSON is creating bandwidth problems; need to switch to binary encoding.
-  * We could reduce it further using Float16/Float8/Int12/???
-  * Or more properly we could use a codec.
 * Using a single request to send-and-then-receive data adds variable latency to the received data, since it has to wait in line behind the sent data (and there's no easy way to know how long it waited.)
-* If we do receive data out-of-order, we don't currently attempt to reorder it in the receive buffer, which we should.
-* Rather than have a special "leader" client, we should have the "silent leader" be the server -- it simply needs to advance the global clock and zero the buffer. This requires it either have a periodic timer, or simulate it at the start of every request by checking how much time has elapsed.
 * Subtle issue: The relative precision of unsynchronized computer clocks is no better than 1ppm (generally 2-10x worse, IIRC.)
-* We should probably always request a sample rate of 44100 just in case.
-* Separate init API call?
 * Use request headers instead of query params so that URL doesn't change (forcing CORS preflight to be redone).
-* Debugging idea: Make artificial clients that attempt to send and receive fixed data for debugging.
 
 Debugging notes from 2020-07-20:
 * When we observe the synthetic data on the server (and look at the network logs on the client), somehow it seems like we are skipping half our data OR double-incrementing write_clock with each XHR we send. We see write_clock appearing to increment by 25600 instead of 12800 in the log, and weird things happen on the server when we validate (we seem to wrap too early by 2x.)
+
+Debugging notes from 2020-07-22:
+* (Notes above are probably obsoleted by rewrite)
+* Weird as fuck: sometimes after it lags, when it comes back the pitch
+  is too high? ??? ?????? I have seen it too high by a consistent ~3%
+  for many seconds. (1/2 a semitone roughly)
+  * iiiinteresting, I can repro this using "main app thread" loopback.
+  * this matches with what we see in the visualizer, which is skipping _inside_ a batch sent to the server.
+* Clients seem to get further and further behind. I think they are generally stable except when weird shit is happening, but weird shit causes them to slip, and eventually they slip too far and die. Connecting multiple clients seems to make this happen much faster but I can't tell if that's inherent, or just because it increases lossage due to bandwidth, CPU, etc.
+  * possibly this is triggered by "non-round" offsets? Hrm, seems not...
+  * This may be specific to the bluetooth headset actually, and it may be related to the sporadic glitching I was getting with them many versions ago, which usually goes away if I close and reopen the device.
+* Hmmmmmm, under heavy load (3 clients), my request payloads seem to end up empty, even when the source is constant audio data (hamilton). That doesn't make any sense.
+* Still need to figure out how to deal with client-side latency? Allegedy the web audio API will tell us about the output latency, but input is ????
 
 Time constants:
 * Audioworklet "time quantum": 128 samples @ 44,100Hz ~= 3ms

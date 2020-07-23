@@ -22,7 +22,7 @@ LOG_LEVELS.forEach((level) => {
   log_level_select.appendChild(el);
 });
 
-const SAMPLE_BATCH_SIZE = 100;
+const SAMPLE_BATCH_SIZE = 150;
 
 lib.log(LOG_INFO, "Starting up");
 
@@ -119,8 +119,11 @@ var loopback_mode_select = document.getElementById('loopbackMode');
 var server_path_text = document.getElementById('serverPath');
 var audio_offset_text = document.getElementById('audioOffset');
 var sample_rate_text = document.getElementById('sampleRate');
+var peak_in_text = document.getElementById('peakIn');
+var peak_out_text = document.getElementById('peakOut');
 var hamilton_audio_span = document.getElementById('hamiltonAudioSpan');
 var output_audio_span = document.getElementById('outputAudioSpan');
+var audio_graph_canvas = document.getElementById('audioGraph');
 var running = false;
 
 function set_controls(is_running) {
@@ -211,9 +214,15 @@ function get_output_node(audioCtx, deviceId) {
   return dest;
 }
 
+// NOTE NOTE NOTE:
+// * All `clock` variables are measured in samples.
+// * All `clock` variables represent the END of an interval, NOT the
+//   beginning. It's arbitrary which one to use, but you have to be
+//   consistent, and trust me that it's slightly nicer this way.
+var server_clock;
 var playerNode;
 var micStream;
-var next_read_clock;
+var read_clock;
 var mic_buf;
 var mic_buf_clock;
 var loopback_mode;
@@ -225,9 +234,9 @@ async function start() {
   running = true;
   set_controls(running);
   audio_offset = parseInt(audio_offset_text.value);
-  var sample_rate = 44100;
+  var sample_rate = 11025;
 
-  next_read_clock = null;
+  read_clock = null;
   mic_buf = [];
   mic_buf_clock = null;
   xhrs_inflight = 0;
@@ -265,7 +274,6 @@ async function start() {
     log_level: lib.log_level
   });
 
-  var server_clock;
   if (loopback_mode == "main") {
     // I got yer server right here!
     server_clock = Math.round(Date.now() * sample_rate / 1000.0);
@@ -282,7 +290,7 @@ async function start() {
     server_clock = Math.round(metadata["server_clock"] + server_latency_ms * sample_rate / 1000.0);
     lib.log(LOG_INFO, "Server clock is estimated to be:", server_clock, " (", metadata["server_clock"], "+", server_latency_ms * sample_rate / 1000.0);
   }
-  next_read_clock = server_clock - audio_offset;
+  read_clock = server_clock - audio_offset;
 
   playerNode.port.postMessage({
     type: "audio_params",
@@ -308,6 +316,18 @@ function samples_to_worklet(samples, clock) {
   playerNode.port.postMessage(message);
 }
 
+// XXX
+var sample_encoding = {
+  client: Int8Array,
+  server: "b",
+  // Translate from/to Float32
+  send: (x) => {
+    x = Math.max(Math.min(x, 1.0), -1.0);
+    return Math.round(x * 127);
+  },
+  recv: (x) => x / 127.0
+};
+
 function handle_message(event) {
   var msg = event.data;
   lib.log(LOG_VERYSPAM, "onmessage in main thread received ", msg);
@@ -328,19 +348,26 @@ function handle_message(event) {
   }
 
   var mic_samples = msg.samples;
-  if (mic_buf_clock === null) {
-    mic_buf_clock = msg.clock;
-  }
   mic_buf.push(mic_samples);
 
+  var peak_in = parseFloat(peak_in_text.value);
+  if (isNaN(peak_in)) {
+    peak_in = 0.0;
+  }
+
   if (mic_buf.length == SAMPLE_BATCH_SIZE) {
-    var outdata = new Float32Array(mic_buf.length * mic_samples.length);
-    if (mic_buf_clock !== null) {
+    // Resampling here works automatically for now since we're copying sample-by-sample
+    var outdata = new sample_encoding["client"](mic_buf.length * mic_samples.length);
+    if (msg.clock !== null) {
       for (var i = 0; i < mic_buf.length; i++) {
         for (var j = 0; j < mic_buf[i].length; j++) {
-          outdata[i * mic_buf[0].length + j] = mic_buf[i][j];
+          if (Math.abs(mic_buf[i][j]) > peak_in) {
+            peak_in = Math.abs(mic_buf[i][j]);
+          }
+          outdata[i * mic_buf[0].length + j] = sample_encoding["send"](mic_buf[i][j]);
         }
       }
+      peak_in_text.value = peak_in;
     } else {
       // Still warming up
       for (var i = 0; i < mic_buf.length; i++) {
@@ -353,12 +380,17 @@ function handle_message(event) {
       }
     }
     mic_buf = [];
-    mic_buf_clock = null;
 
     if (loopback_mode == "main") {
       lib.log(LOG_DEBUG, "looping back samples in main thread");
-      samples_to_worklet(outdata, next_read_clock);
-      next_read_clock += outdata.length;
+      var result = new Float32Array(outdata.length);
+      for (var i = 0; i < outdata.length; i++) {
+        result[i] = sample_encoding["recv"](outdata[i]);
+      }
+      // Clocks are at the _end_ of intervals; the longer we've been
+      //   accumulating data, the more we have to read. (Trust me.)
+      read_clock += outdata.length;
+      samples_to_worklet(result, read_clock);
       return;
     }
 
@@ -373,12 +405,15 @@ function handle_message(event) {
     try {
       var target_url = new URL(server_path, document.location);
       var params = new URLSearchParams();
-      if (mic_buf_clock !== null) {
-        params.set('write_clock', mic_buf_clock);
+      if (msg.clock !== null) {
+        params.set('write_clock', msg.clock);
       }
-      params.set('read_clock', next_read_clock);
       // Response size always equals request size.
-      next_read_clock = next_read_clock + outdata.length;
+      // Clocks are at the _end_ of intervals; the longer we've been
+      //   accumulating data, the more we have to read. (Trust me.)
+      read_clock += outdata.length;
+      params.set('read_clock', read_clock);
+      params.set('encoding', sample_encoding["server"]);
       if (loopback_mode == "server") {
         params.set('loopback', true);
         lib.log(LOG_DEBUG, "looping back samples at server");
@@ -394,9 +429,6 @@ function handle_message(event) {
         // Incoming data should take care of itself -- our outgoing
         //   request clocks are tied to the isochronous audioworklet
         //   process() cycle.
-        // This doesn't quite line up with the way we handle underflow
-        //   in process() -- it expects the data will show up late and
-        //   it discards data to compensate.
         return
       }
       lib.log(LOG_SPAM, "Sending XHR w/ ID:", xhr.debug_id, "already in flight:", xhrs_inflight++, "; data size:", outdata.length);
@@ -413,6 +445,11 @@ function handle_message(event) {
   }
 }
 
+var peak_out = parseFloat(peak_out_text.value);
+if (isNaN(peak_out)) {
+  peak_out = 0.0;
+}
+
 // Only called when readystate is 4 (done)
 function handle_xhr_result(xhr) {
   if (!running) {
@@ -423,9 +460,48 @@ function handle_xhr_result(xhr) {
   if (xhr.status == 200) {
     var metadata = JSON.parse(xhr.getResponseHeader("X-Audio-Metadata"));
     lib.log(LOG_DEBUG, "metadata:", metadata);
-    var result = new Float32Array(xhr.response);
+    var result = new sample_encoding["client"](xhr.response);
+    var play_samples = new Float32Array(result.length);
+    for (var i = 0; i < result.length; i++) {
+      play_samples[i] = sample_encoding["recv"](result[i]);
+      if (Math.abs(play_samples[i]) > peak_out) {
+        peak_out = Math.abs(play_samples[i]);
+      }
+    }
+    peak_out_text.value = peak_out;
     lib.log(LOG_SPAM, "Got XHR response w/ ID:", xhr.debug_id, "result:", result, " -- still in flight:", --xhrs_inflight);
-    samples_to_worklet(result, metadata["client_read_clock"]);
+    if (metadata["kill_client"]) {
+      lib.log(LOG_ERROR, "Received kill from server");
+      stop()
+      return;
+    }
+    samples_to_worklet(play_samples, metadata["client_read_clock"]);
+    var queue_summary = metadata["queue_summary"];
+    var queue_size = metadata["queue_size"];
+    // may not be advised to change this after drawing? XXX
+    audio_graph_canvas.style.width = "100%";
+    audio_graph_canvas.width = audio_graph_canvas.clientWidth;
+    audio_graph_canvas.height = 100;
+    var ctx = audio_graph_canvas.getContext('2d');
+    var horz_mult = audio_graph_canvas.clientWidth / queue_size;
+    ctx.setTransform(horz_mult, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, queue_size, 100);
+    ctx.fillStyle = 'rgb(255, 0, 0)';
+    if (queue_summary.length % 2 != 0) {
+      queue_summary.push(queue_size);
+    }
+    for (var i = 0; i < queue_summary.length; i += 2) {
+      ctx.fillRect(queue_summary[i], 0, queue_summary[i+1] - queue_summary[i], 50);
+    }
+    ctx.fillStyle = 'rgb(0, 0, 0)';
+    ctx.fillRect(Math.round(metadata["server_clock"] / 128) % queue_size, 0, 1 / horz_mult, 100);
+    ctx.fillRect(Math.round(metadata["last_request_clock"] / 128) % queue_size, 0, 1 / horz_mult, 100);
+    ctx.fillStyle = 'rgb(0, 255, 0)';
+    ctx.fillRect(Math.round(metadata["client_read_clock"] / 128) % queue_size, 0, 1 / horz_mult, 100);
+    ctx.fillRect(Math.round((metadata["client_read_clock"] - play_samples.length) / 128) % queue_size, 0, 1 / horz_mult, 100);
+    ctx.fillStyle = 'rgb(0, 0, 255)';
+    ctx.fillRect(Math.round(metadata["client_write_clock"] / 128) % queue_size, 0, 1 / horz_mult, 100);
+    ctx.fillRect(Math.round((metadata["client_write_clock"] - play_samples.length) / 128) % queue_size, 0, 1 / horz_mult, 100);
   } else {
     lib.log(LOG_ERROR, "XHR failed w/ ID:", xhr.debug_id, "stopping:", xhr, " -- still in flight:", --xhrs_inflight);
     stop();

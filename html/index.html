@@ -30,8 +30,12 @@ Opera.
   Sample rate:
   <input type=text id=sampleRate value="Loading..." disabled>
 <p>
+  Input / output peak absolute amplitude:
+  <input type=text id=peakIn value="Loading..." disabled>
+  <input type=text id=peakOut value="Loading..." disabled>
+<p>
   Audio offset (samples):
-  <input type=text id=audioOffset value="441000">
+  <input type=text id=audioOffset value="0">
 <p>
   Log level:
   <select id=logLevel></select>
@@ -41,6 +45,8 @@ Opera.
 <p>
   <span id=hamiltonAudioSpan><audio src="hamilton.mp3" preload=true></span>
   <span id=outputAudioSpan><audio id=outputAudio></span>
+<p>
+  <canvas id=audioGraph>
 <p>
 
 <script type="module" src="./app.js"></script>

@@ -133,13 +133,16 @@ class Player extends AudioWorkletProcessor {
       this.synthetic_sink = msg.synthetic_sink;
       this.loopback_mode = msg.loopback_mode;
 
-      this.slack = this.sample_rate * 5;  // 5 seconds of slack (XXX: arbitrary, pick a better value)
+      this.slack = this.sample_rate * 3  // 3 seconds of slack (XXX: arbitrary, pick a better value)
       this.client_slack = this.slack / 2;
       // XXX unused
       this.server_slack = this.slack - this.client_slack;
 
-      // 15 seconds of total buffer, `this.slack` seconds of leadin
-      this.play_buffer = new ClockedRingBuffer(Float32Array, 15 * 44100, this.client_slack);
+      // 15 seconds of total buffer, `this.slack` seconds of leadin, force things to round to FRAME_SIZE
+      this.play_buffer = new ClockedRingBuffer(
+        Float32Array,
+        Math.round(15 * this.sample_rate / FRAME_SIZE) * FRAME_SIZE,
+        Math.round(this.client_slack / FRAME_SIZE) * FRAME_SIZE);
 
       this.ready = true;
       return;
@@ -155,7 +158,7 @@ class Player extends AudioWorkletProcessor {
     lib.log_every(10, "new_samples", LOG_DEBUG, "new input (samples): ", play_samples.length, "; current play buffer:", this.play_buffer);
 
     for (var i = 0; i < play_samples.length; i++) {
-      this.play_buffer.write(play_samples[i], msg.clock + i);
+      this.play_buffer.write(play_samples[i], msg.clock - play_samples.length + i);
     }
     lib.log(LOG_VERYSPAM, "new play buffer:", this.play_buffer);
   }
@@ -232,18 +235,17 @@ class Player extends AudioWorkletProcessor {
         // Normal input/output handling
         lib.log(LOG_VERYSPAM, "about to output samples from", this.play_buffer, "with length", this.play_buffer.length);
 
-        var first_sample_clock = this.play_buffer.get_read_clock();
         for (var i = 0; i < outputs[0][0].length; i++) {
           var val = this.play_buffer.read();
           for (var chan = 0; chan < outputs[0].length; chan++) {
             outputs[0][chan][i] = val;
           }
         }
-
+        var end_clock = this.play_buffer.get_read_clock();
         this.port.postMessage({
           type: "samples_out",
           samples: inputs[0][0],
-          clock: first_sample_clock
+          clock: end_clock
         }, [inputs[0][0].buffer]);
         // End normal handling
       }
