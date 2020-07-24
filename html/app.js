@@ -95,6 +95,11 @@ async function enumerate_devices() {
     in_select.appendChild(el);
 
     el = document.createElement("option");
+    el.value = "ECHO";
+    el.text = "ECHO";
+    in_select.appendChild(el);
+
+    el = document.createElement("option");
     el.value = "SYNTHETIC";
     el.text = "SYNTHETIC";
     in_select.appendChild(el);
@@ -256,15 +261,13 @@ async function start() {
 
   var synthetic_audio_source = null;
   var input_device = in_select.value;
-  if (input_device == "SYNTHETIC") {
-    synthetic_audio_source = "numeric";
+  if (input_device == "SYNTHETIC" ||
+      input_device == "CLICKS" ||
+      input_device == "ECHO") {
+    synthetic_audio_source = input_device;
     input_device = "SILENCE";
   }
-  var input_device = in_select.value;
-  if (input_device == "CLICKS") {
-    synthetic_audio_source = "clicks";
-    input_device = "SILENCE";
-  }
+
   var micNode = await get_input_node(audioCtx, input_device);
 
   var synthetic_audio_sink = false;
@@ -306,7 +309,7 @@ async function start() {
   }
   read_clock = server_clock - audio_offset;
 
-  playerNode.port.postMessage({
+  var audio_params = {
     type: "audio_params",
     sample_rate: sample_rate,
     // We don't know the input latency, but we can guess.
@@ -314,7 +317,11 @@ async function start() {
     synthetic_source: synthetic_audio_source,
     synthetic_sink: synthetic_audio_sink,
     loopback_mode: loopback_mode
-  })
+  }
+  if (synthetic_source !== null) {
+    audio_params.local_latency = 0;
+  }
+  playerNode.port.postMessage(audio_params);
 
   playerNode.port.onmessage = handle_message;
   micNode.connect(playerNode);

@@ -244,10 +244,10 @@ class Player extends AudioWorkletProcessor {
 
     try {
       lib.log(LOG_VERYSPAM, "process inputs:", inputs);
-      if (this.synthetic_source == "numeric") {
+      if (this.synthetic_source == "SYNTHETIC") {
         // Ignore our input and overwrite it with sequential numbers for debugging
         this.synthesize_input(inputs[0]);
-      } else if (this.synthetic_source == "clicks") {
+      } else if (this.synthetic_source == "CLICKS") {
         this.synthesize_clicks(inputs[0]);
       }
 
@@ -268,6 +268,13 @@ class Player extends AudioWorkletProcessor {
           var val = this.play_buffer.read();
           for (var chan = 0; chan < outputs[0].length; chan++) {
             outputs[0][chan][i] = val;
+            // This is the "opposite" of local loopback: There, we take whatever
+            //   we hear on the mic and send to the speaker, whereas here we take
+            //   whatever we're about to send to the speaker, and pretend we
+            //   heard it on the mic.
+            if (this.synthetic_source == "ECHO") {
+              inputs[0][chan][i] = val;
+            }
           }
         }
         var end_clock = this.play_buffer.get_read_clock();
