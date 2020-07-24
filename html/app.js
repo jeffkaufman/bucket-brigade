@@ -90,6 +90,11 @@ async function enumerate_devices() {
     in_select.appendChild(el);
 
     el = document.createElement("option");
+    el.value = "CLICKS";
+    el.text = "CLICKS";
+    in_select.appendChild(el);
+
+    el = document.createElement("option");
     el.value = "SYNTHETIC";
     el.text = "SYNTHETIC";
     in_select.appendChild(el);
@@ -249,10 +254,15 @@ async function start() {
 
   loopback_mode = loopback_mode_select.value;
 
-  var synthetic_audio_source = false;
+  var synthetic_audio_source = null;
   var input_device = in_select.value;
   if (input_device == "SYNTHETIC") {
-    synthetic_audio_source = true;
+    synthetic_audio_source = "numeric";
+    input_device = "SILENCE";
+  }
+  var input_device = in_select.value;
+  if (input_device == "CLICKS") {
+    synthetic_audio_source = "clicks";
     input_device = "SILENCE";
   }
   var micNode = await get_input_node(audioCtx, input_device);

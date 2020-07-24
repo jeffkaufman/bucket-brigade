@@ -185,6 +185,27 @@ class Player extends AudioWorkletProcessor {
     }
   }
 
+  synthesize_clicks(input) {
+    lib.log(LOG_SPAM, "synthesizing clicks");
+    if (!this.synthetic_source_counter) {
+      lib.log(LOG_INFO, "Starting up synthetic source");
+      this.synthetic_source_counter = 0;
+    }
+
+    var sound_level = 0.0;
+    if (this.synthetic_source_counter % Math.round(this.sample_rate / FRAME_SIZE) == 0) {
+      sound_level = 0.1;
+    }
+
+    // This is probably not very kosher...
+    for (var i = 0; i < input[0].length; i++) {
+      for (var chan = 0; chan < input.length; chan++) {
+        input[chan][i] = sound_level;
+      }
+    }
+    this.synthetic_source_counter++;
+  }
+
   // Only for debugging
   check_synthetic_output(output) {
     lib.log(LOG_SPAM, "validating synthesized data in output (channel 0 only):", output[0]);
@@ -223,9 +244,11 @@ class Player extends AudioWorkletProcessor {
 
     try {
       lib.log(LOG_VERYSPAM, "process inputs:", inputs);
-      if (this.synthetic_source) {
+      if (this.synthetic_source == "numeric") {
         // Ignore our input and overwrite it with sequential numbers for debugging
         this.synthesize_input(inputs[0]);
+      } else if (this.synthetic_source == "clicks") {
+        this.synthesize_clicks(inputs[0]);
       }
 
       if (this.loopback_mode === "worklet") {
