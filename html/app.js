@@ -318,7 +318,7 @@ async function start() {
     synthetic_sink: synthetic_audio_sink,
     loopback_mode: loopback_mode
   }
-  if (synthetic_source !== null) {
+  if (synthetic_audio_source !== null) {
     audio_params.local_latency = 0;
   }
   playerNode.port.postMessage(audio_params);
