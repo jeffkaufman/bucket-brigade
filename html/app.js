@@ -244,12 +244,14 @@ var server_path;
 var audio_offset;
 var xhrs_inflight;
 var override_gain = 1.0;
+var synthetic_audio_source;
+var sample_rate;
 
 async function start() {
   running = true;
   set_controls(running);
   audio_offset = parseInt(audio_offset_text.value);
-  var sample_rate = 11025;
+  sample_rate = 11025;
 
   read_clock = null;
   mic_buf = [];
@@ -264,7 +266,7 @@ async function start() {
 
   loopback_mode = loopback_mode_select.value;
 
-  var synthetic_audio_source = null;
+  synthetic_audio_source = null;
   var input_device = in_select.value;
   if (input_device == "SYNTHETIC" ||
       input_device == "CLICKS" ||
@@ -314,17 +316,14 @@ async function start() {
   }
   read_clock = server_clock - audio_offset;
 
+  // Send this before we set audio params, which declares us to be ready for audio
+  send_local_latency();
   var audio_params = {
     type: "audio_params",
     sample_rate: sample_rate,
-    // Convert from ms to samples.
-    local_latency: parseInt(latency_compensation_text.value, 10) * sample_rate / 1000,
     synthetic_source: synthetic_audio_source,
     synthetic_sink: synthetic_audio_sink,
     loopback_mode: loopback_mode
-  }
-  if (synthetic_audio_source !== null) {
-    audio_params.local_latency = 0;
   }
   playerNode.port.postMessage(audio_params);
 
@@ -333,6 +332,18 @@ async function start() {
   playerNode.connect(spkrNode);
 }
 
+function send_local_latency() {
+  // Convert from ms to samples.
+  var local_latency = Math.round(parseFloat(latency_compensation_text.value) * sample_rate / 1000);
+
+  if (synthetic_audio_source !== null) {
+    local_latency = 0;
+  }
+  playerNode.port.postMessage({
+    "type": "local_latency",
+    "local_latency": local_latency,
+  });
+}
 function samples_to_worklet(samples, clock) {
   var message = {
     type: "samples_in",
@@ -556,12 +567,7 @@ async function stop() {
   set_controls(running);
 }
 
-latency_compensation_apply_button.addEventListener("click", () => {
-  playerNode.port.postMessage({
-    "type": "local_latency",
-    "local_latency": parseInt(latency_compensation_text.value, 10),
-  })
-});
+latency_compensation_apply_button.addEventListener("click", send_local_latency);
 start_button.addEventListener("click", start);
 stop_button.addEventListener("click", stop);
 

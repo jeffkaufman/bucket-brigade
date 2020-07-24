@@ -129,7 +129,6 @@ class Player extends AudioWorkletProcessor {
         return;
       } else if (msg.type == "audio_params") {
         this.sample_rate = msg.sample_rate;
-        this.local_latency = msg.local_latency;
         this.synthetic_source = msg.synthetic_source;
         this.synthetic_sink = msg.synthetic_sink;
         this.loopback_mode = msg.loopback_mode;
