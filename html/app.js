@@ -259,6 +259,8 @@ async function start() {
 
   audioCtx = new AudioContext({ sampleRate: sample_rate });
   debug_check_sample_rate(audioCtx.sampleRate);
+  latency_compensation_text.value = audioCtx.baseLatency * 1000 * 2;
+  web_audio_output_latency_text.value = audioCtx.baseLatency * 1000;
 
   loopback_mode = loopback_mode_select.value;
 
@@ -315,7 +317,8 @@ async function start() {
   var audio_params = {
     type: "audio_params",
     sample_rate: sample_rate,
-    local_latency: parseInt(latency_compensation_text.value, 10),
+    // Convert from ms to samples.
+    local_latency: parseInt(latency_compensation_text.value, 10) * sample_rate / 1000,
     synthetic_source: synthetic_audio_source,
     synthetic_sink: synthetic_audio_sink,
     loopback_mode: loopback_mode
@@ -374,7 +377,6 @@ function handle_message(event) {
   }
 
   lib.log_every(10, "audioCtx", LOG_DEBUG, "audioCtx:", audioCtx);
-  web_audio_output_latency_text.value = audioCtx.outputLatency * 1000;
   var mic_samples = msg.samples;
   mic_buf.push(mic_samples);
 

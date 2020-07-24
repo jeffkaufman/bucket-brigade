@@ -284,7 +284,7 @@ class Player extends AudioWorkletProcessor {
         this.port.postMessage({
           type: "samples_out",
           samples: inputs[0][0],
-          clock: end_clock
+          clock: end_clock + this.local_latency,
         }, [inputs[0][0].buffer]);
         // End normal handling
       }
