@@ -129,15 +129,13 @@ class Player extends AudioWorkletProcessor {
         return;
       } else if (msg.type == "audio_params") {
         this.sample_rate = msg.sample_rate;
-        this.local_latency = 0.02;  // XXX: Latency from us-speaker-mic-us.
+        this.local_latency = msg.local_latency;
         this.synthetic_source = msg.synthetic_source;
         this.synthetic_sink = msg.synthetic_sink;
         this.loopback_mode = msg.loopback_mode;
 
-        this.slack = this.sample_rate * 3  // 3 seconds of slack (XXX: arbitrary, pick a better value)
-        this.client_slack = this.slack / 2;
-        // XXX unused
-        this.server_slack = this.slack - this.client_slack;
+        // This is _extra_ slack on top of the size of the server request.
+        this.client_slack = this.sample_rate * 1.5;
 
         // 15 seconds of total buffer, `this.slack` seconds of leadin, force things to round to FRAME_SIZE
         this.play_buffer = new ClockedRingBuffer(

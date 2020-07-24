@@ -172,6 +172,7 @@ async function get_input_node(audioCtx, deviceId) {
     source.start();
     return source;
   } else if (deviceId == "HAMILTON") {
+    override_gain = 0.5;
     var hamilton_audio = hamilton_audio_span.getElementsByTagName('audio')[0];
     // Can't use createMediaElementSource because you can only
     //   ever do that once per element, so we could never restart.
@@ -229,6 +230,7 @@ var loopback_mode;
 var server_path;
 var audio_offset;
 var xhrs_inflight;
+var override_gain = 1.0;
 
 async function start() {
   running = true;
@@ -240,6 +242,7 @@ async function start() {
   mic_buf = [];
   mic_buf_clock = null;
   xhrs_inflight = 0;
+  override_gain = 1.0;
 
   audioCtx = new AudioContext({ sampleRate: sample_rate });
   debug_check_sample_rate(audioCtx.sampleRate);
@@ -285,7 +288,8 @@ async function start() {
       method: "get",  // default
       cache: "no-store",
     });
-    var server_latency_ms = Date.now() - request_time_ms;
+    // We need one-way latency; dividing by 2 is unprincipled but probably close enough.
+    var server_latency_ms = (Date.now() - request_time_ms) / 2.0;
     var metadata = JSON.parse(fetch_result.headers.get("X-Audio-Metadata"));
     server_clock = Math.round(metadata["server_clock"] + server_latency_ms * sample_rate / 1000.0);
     lib.log(LOG_INFO, "Server clock is estimated to be:", server_clock, " (", metadata["server_clock"], "+", server_latency_ms * sample_rate / 1000.0);
@@ -295,6 +299,8 @@ async function start() {
   playerNode.port.postMessage({
     type: "audio_params",
     sample_rate: sample_rate,
+    // We don't know the input latency, but we can guess.
+    local_latency: 2 * audioCtx.output_latency,
     synthetic_source: synthetic_audio_source,
     synthetic_sink: synthetic_audio_sink,
     loopback_mode: loopback_mode
@@ -322,8 +328,9 @@ var sample_encoding = {
   server: "b",
   // Translate from/to Float32
   send: (x) => {
-    x = Math.max(Math.min(x, 1.0), -1.0);
-    return Math.round(x * 127);
+    x = x * override_gain * 128;
+    x = Math.max(Math.min(x, 127), -128);
+    return x;
   },
   recv: (x) => x / 127.0
 };
