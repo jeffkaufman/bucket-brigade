@@ -145,6 +145,9 @@ class Player extends AudioWorkletProcessor {
 
         this.ready = true;
         return;
+      } else if (msg.type == "local_latency") {
+        this.local_latency = msg.local_latency;
+        return;
       } else if (!this.ready) {
         lib.log(LOG_ERROR, "received message before ready:", msg);
         return;

@@ -37,6 +37,15 @@ Opera.
   Audio offset (samples):
   <input type=text id=audioOffset value="0">
 <p>
+<p>
+  Web Audio API reported output latency (ms):
+  <input type=text id=webAudioOutputLatency value="Loading..." disabled>
+<p>
+  Client latency compensation (ms):
+  <!--<input id=latencyCompensation type=range min=0 max=500 value=50>-->
+  <input type=text id=latencyCompensationText value="0">
+  <button id=latencyCompensationApply>Apply</button>
+<p>
   Log level:
   <select id=logLevel></select>
 <p>

@@ -128,6 +128,9 @@ var stop_button = document.getElementById('stopButton');
 var loopback_mode_select = document.getElementById('loopbackMode');
 var server_path_text = document.getElementById('serverPath');
 var audio_offset_text = document.getElementById('audioOffset');
+var web_audio_output_latency_text = document.getElementById('webAudioOutputLatency');
+var latency_compensation_text = document.getElementById('latencyCompensationText');
+var latency_compensation_apply_button = document.getElementById('latencyCompensationApply');
 var sample_rate_text = document.getElementById('sampleRate');
 var peak_in_text = document.getElementById('peakIn');
 var peak_out_text = document.getElementById('peakOut');
@@ -312,8 +315,7 @@ async function start() {
   var audio_params = {
     type: "audio_params",
     sample_rate: sample_rate,
-    // We don't know the input latency, but we can guess.
-    local_latency: 2 * audioCtx.output_latency,
+    local_latency: parseInt(latency_compensation_text.value, 10),
     synthetic_source: synthetic_audio_source,
     synthetic_sink: synthetic_audio_sink,
     loopback_mode: loopback_mode
@@ -371,6 +373,8 @@ function handle_message(event) {
     return;
   }
 
+  lib.log_every(10, "audioCtx", LOG_DEBUG, "audioCtx:", audioCtx);
+  web_audio_output_latency_text.value = audioCtx.outputLatency * 1000;
   var mic_samples = msg.samples;
   mic_buf.push(mic_samples);
 
@@ -550,6 +554,12 @@ async function stop() {
   set_controls(running);
 }
 
+latency_compensation_apply_button.addEventListener("click", () => {
+  playerNode.port.postMessage({
+    "type": "local_latency",
+    "local_latency": parseInt(latency_compensation_text.value, 10),
+  })
+});
 start_button.addEventListener("click", start);
 stop_button.addEventListener("click", stop);
 
