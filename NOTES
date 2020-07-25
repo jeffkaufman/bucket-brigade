@@ -23,6 +23,9 @@ Debugging notes from 2020-07-23 w/ jefftk:
 * more automation / ease of use features will be important for fun testing with people
 * send email about fun testing this weekend
 
+Debugging notes 2020-07-24:
+* NOTE that changing the latency compensation at runtime messes up the continuity of the buffer in the audioworklet and I think virtually guarantees it will report overflow/underflow after wraparound.
+
 Time constants:
 * Audioworklet "time quantum": 128 samples @ 44,100Hz ~= 3ms
 * Our send buffer: SAMPLE_BATCH_SIZE * 128 samples ~= 290ms

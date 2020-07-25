@@ -344,6 +344,7 @@ function send_local_latency() {
     "local_latency": local_latency,
   });
 }
+
 function samples_to_worklet(samples, clock) {
   var message = {
     type: "samples_in",
@@ -387,7 +388,7 @@ function handle_message(event) {
     return;
   }
 
-  lib.log_every(10, "audioCtx", LOG_DEBUG, "audioCtx:", audioCtx);
+  //XXX lib.log_every(10, "audioCtx", LOG_DEBUG, "audioCtx:", audioCtx);
   var mic_samples = msg.samples;
   mic_buf.push(mic_samples);
 

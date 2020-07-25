@@ -134,7 +134,7 @@ class Player extends AudioWorkletProcessor {
         this.loopback_mode = msg.loopback_mode;
 
         // This is _extra_ slack on top of the size of the server request.
-        this.client_slack = this.sample_rate * 1.5;
+        this.client_slack = this.sample_rate * 1.5; // XXX: should we shrink this?
 
         // 15 seconds of total buffer, `this.slack` seconds of leadin, force things to round to FRAME_SIZE
         this.play_buffer = new ClockedRingBuffer(
@@ -280,10 +280,14 @@ class Player extends AudioWorkletProcessor {
           }
         }
         var end_clock = this.play_buffer.get_read_clock();
+        var server_write_clock = null;
+        if (end_clock !== null) {
+          server_write_clock = end_clock - this.local_latency;
+        }
         this.port.postMessage({
           type: "samples_out",
           samples: inputs[0][0],
-          clock: end_clock + this.local_latency,
+          clock: server_write_clock,
         }, [inputs[0][0].buffer]);
         // End normal handling
       }
