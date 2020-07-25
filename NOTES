@@ -15,6 +15,14 @@ Debugging notes from 2020-07-22:
 * Hmmmmmm, under heavy load (3 clients), my request payloads seem to end up empty, even when the source is constant audio data (hamilton). That doesn't make any sense.
 * Still need to figure out how to deal with client-side latency? Allegedy the web audio API will tell us about the output latency, but input is ????
 
+Debugging notes from 2020-07-23 w/ jefftk:
+* should add an alert if something goes wrong with the fixed-offset relationship between the read and write clocks going to the server
+* a speaker-to-mic echo test with clicks seemed quite smooth, which is cool
+* outputLatency on the audio context object is never available; also the object claims it is closed, which is weird (maybe there are multiple objects?)
+* somehow our write clock is ending up being 512 after the local latency work, so something has gone wrong there
+* more automation / ease of use features will be important for fun testing with people
+* send email about fun testing this weekend
+
 Time constants:
 * Audioworklet "time quantum": 128 samples @ 44,100Hz ~= 3ms
 * Our send buffer: SAMPLE_BATCH_SIZE * 128 samples ~= 290ms
