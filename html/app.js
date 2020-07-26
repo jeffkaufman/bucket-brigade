@@ -55,6 +55,7 @@ async function wait_for_mic_permissions() {
 
 var in_select = document.getElementById('inSelect');
 var out_select = document.getElementById('outSelect');
+var click_bpm = document.getElementById('clickBPM');
 
 async function enumerate_devices() {
   navigator.mediaDevices.enumerateDevices().then((devices) => {
@@ -147,6 +148,7 @@ function set_controls(is_running) {
   stop_button.disabled = !is_running;
   loopback_mode_select.disabled = is_running;
   in_select.disabled = is_running;
+  click_bpm.disabled = is_running;
   out_select.disabled = is_running;
   server_path_text.disabled = is_running;
   audio_offset_text.disabled = is_running;
@@ -248,6 +250,7 @@ var audio_offset;
 var xhrs_inflight;
 var override_gain = 1.0;
 var synthetic_audio_source;
+var synthetic_click_interval;
 var sample_rate;
 
 async function start() {
@@ -275,6 +278,7 @@ async function start() {
       input_device == "CLICKS" ||
       input_device == "ECHO") {
     synthetic_audio_source = input_device;
+    synthetic_click_interval = 60.0 / parseFloat(click_bpm.value);
     input_device = "SILENCE";
   }
 
@@ -325,6 +329,7 @@ async function start() {
     type: "audio_params",
     sample_rate: sample_rate,
     synthetic_source: synthetic_audio_source,
+    click_interval: synthetic_click_interval,
     synthetic_sink: synthetic_audio_sink,
     loopback_mode: loopback_mode
   }

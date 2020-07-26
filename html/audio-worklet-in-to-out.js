@@ -130,6 +130,7 @@ class Player extends AudioWorkletProcessor {
       } else if (msg.type == "audio_params") {
         this.sample_rate = msg.sample_rate;
         this.synthetic_source = msg.synthetic_source;
+        this.click_interval = msg.click_interval;
         this.synthetic_sink = msg.synthetic_sink;
         this.loopback_mode = msg.loopback_mode;
 
@@ -187,7 +188,7 @@ class Player extends AudioWorkletProcessor {
     }
   }
 
-  synthesize_clicks(input) {
+  synthesize_clicks(input, interval) {
     lib.log(LOG_SPAM, "synthesizing clicks");
     if (!this.synthetic_source_counter) {
       lib.log(LOG_INFO, "Starting up clicks");
@@ -195,7 +196,7 @@ class Player extends AudioWorkletProcessor {
     }
 
     var sound_level = 0.0;
-    if (this.synthetic_source_counter % Math.round(this.sample_rate / FRAME_SIZE) == 0) {
+    if (this.synthetic_source_counter % Math.round(this.sample_rate * interval / FRAME_SIZE) == 0) {
       sound_level = 0.1;
     }
 
@@ -250,7 +251,7 @@ class Player extends AudioWorkletProcessor {
         // Ignore our input and overwrite it with sequential numbers for debugging
         this.synthesize_input(inputs[0]);
       } else if (this.synthetic_source == "CLICKS") {
-        this.synthesize_clicks(inputs[0]);
+        this.synthesize_clicks(inputs[0], this.click_interval);
       }
 
       if (this.loopback_mode === "worklet") {
