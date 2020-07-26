@@ -25,6 +25,10 @@ Debugging notes from 2020-07-23 w/ jefftk:
 
 Debugging notes 2020-07-24:
 * NOTE that changing the latency compensation at runtime messes up the continuity of the buffer in the audioworklet and I think virtually guarantees it will report overflow/underflow after wraparound.
+* Would be good if we could automatically calibrate latency
+* Would be good if offset were in seconds not samples
+* Would be good if we could automatically tell you what your overall latency window looks like, to set the next person's offset
+* Would be good if latency window did not grow when the software / network glitches out
 
 Time constants:
 * Audioworklet "time quantum": 128 samples @ 44,100Hz ~= 3ms

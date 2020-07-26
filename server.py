@@ -98,7 +98,13 @@ class OurHandler(BaseHTTPRequestHandler):
         client_write_clock = query_params.get("write_clock", None)
         if client_write_clock is not None:
             client_write_clock = int(client_write_clock[0])
-        client_read_clock = int(query_params["read_clock"][0])
+        client_read_clock = query_params.get("read_clock", None)
+        if client_read_clock is not None:
+            client_read_clock = int(client_read_clock[0])
+        else:
+            self.send_response(500)
+            self.end_headers()
+            return
         client_encoding = query_params.get("encoding", ["f"])[0]
         client_sample_size = SAMPLE_PARAMS[client_encoding]["size"]
         client_decoder = SAMPLE_PARAMS[client_encoding]["decode"]

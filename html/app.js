@@ -163,7 +163,7 @@ async function initialize() {
 }
 
 function debug_check_sample_rate(rate) {
-  if (sample_rate_text.value == "Loading...") {
+  if (isNaN(parseInt(sample_rate_text.value)) /* warning text */) {
     lib.log(LOG_DEBUG, "First setting sample rate:", rate);
     sample_rate_text.value = rate;
   } else if (sample_rate_text.value == rate.toString()) {
@@ -581,5 +581,21 @@ log_level_select.addEventListener("change", () => {
     });
   }
 });
+
+var coll = document.getElementsByClassName("collapse");
+for (var i = 0; i < coll.length; i++) {
+  coll[i].addEventListener("click", function() {
+    //this.classList.toggle("active");
+    var otherlabel = this.dataset.otherlabel;
+    this.dataset.otherlabel = this.textContent;
+    this.textContent = otherlabel;
+    var content = this.nextElementSibling;
+    if (content.style.display === "block") {
+      content.style.display = "none";
+    } else {
+      content.style.display = "block";
+    }
+  });
+}
 
 initialize();

@@ -1,62 +1,72 @@
 <html>
-<h1>Audio Demo</h1>
-
-As of 2020-05 this depends on an API that is implemented in
-Firefox 76 and the Blink-based browsers: Chrome, Edge, Brave, and
-Opera.
-
-<p>
+<title>"Bucket Brigade" Audio Demo</title>
+<h1>"Bucket Brigade" Audio Demo</h1>
+<h3>Settings:</h3>
   Input device:
   <select id=inSelect disabled=true>
     <option>Loading...</option>
   </select>
-<p>
-  Out device:
+<br>
+  Output device:
   <select id=outSelect disabled=true>
     <option>Loading...</option>
   </select>
-<p>
-  Loopback:
-  <select id=loopbackMode>
-    <option value=none selected>None (default)</option>
-    <option value=worklet>Inside worklet process()</option>
-    <option value=main>In main app thread</option>
-    <option value=server>Server-side</option>
-  </select>
-<p>
-  Server path:
-  <input type=text id=serverPath value="/api/">
-<p>
-  Sample rate:
-  <input type=text id=sampleRate value="Loading..." disabled>
-<p>
-  Input / output peak absolute amplitude:
-  <input type=text id=peakIn value="Loading..." disabled>
-  <input type=text id=peakOut value="Loading..." disabled>
-<p>
-  Audio offset (samples):
+<br>
+  Audio offset (seconds):
   <input type=text id=audioOffset value="0">
-<p>
-<p>
-  Web Audio API reported output latency (ms):
-  <input type=text id=webAudioOutputLatency value="Loading..." disabled>
-<p>
+<br>
   Client latency compensation (ms):
   <!--<input id=latencyCompensation type=range min=0 max=500 value=50>-->
   <input type=text id=latencyCompensationText value="0">
-  <button id=latencyCompensationApply>Apply</button>
-<p>
-  Log level:
-  <select id=logLevel></select>
-<p>
+  <button id=latencyCompensationApply>Set</button>
+<br>
+<h3>Controls:</h3>
   <button id=startButton disabled=true>Start</button>
   <button id=stopButton disabled=true>Stop</button>
-<p>
-  <span id=hamiltonAudioSpan><audio src="hamilton.mp3" preload=true></span>
-  <span id=outputAudioSpan><audio id=outputAudio></span>
-<p>
+<br>
+
+<button type="button" data-otherlabel="Close debug settings" class="collapse">Open debug settings</button>
+<div style="display:none">
+    Loopback mode:
+    <select id=loopbackMode>
+      <option value=none selected>None (default)</option>
+      <option value=worklet>Inside worklet process()</option>
+      <option value=main>In main app thread</option>
+      <option value=server>Server-side</option>
+    </select>
+  <br>
+    Server path:
+    <input type=text id=serverPath value="/api/">
+  <br>
+    Console log level:
+    <select id=logLevel></select>
+</div>
+<h3>Debug info:</h3>
+  Sample rate:
+  <input type=text id=sampleRate value="(not available yet)" disabled>
+<br>
+  Input / output peak absolute amplitude:
+  <input type=text id=peakIn value="(not available yet)" disabled>
+  <input type=text id=peakOut value="(not available yet)" disabled>
+<br>
+  Web Audio API reported output latency (ms):
+  <input type=text id=webAudioOutputLatency value="(not available yet)" disabled>
+<br>
+<br>
+  Server audio buffer visualization:
+  <ul>
+    <li>Black bars: server's clearing window (leading bar represents "now", trailing bar is mostly meaningless except for debugging)</li>
+    <li>Green bars: This client's reading window (source of our audio during previous network request)</li>
+    <li>Blue bars: This client's writing window (where our audio was written during previous network request)
+    <li>The buffer is circular (it wraps around). Other clients' windows are not visible here.
+  </ul>
   <canvas id=audioGraph>
-<p>
+<br>
+
+<div id="secretCrap" style="display:none">
+  <span id=hamiltonAudioSpan><audio src="hamilton.mp3" preload=true></audio></span>
+  <span id=outputAudioSpan><audio id=outputAudio></audio></span>
+</div>
 
 <script type="module" src="./app.js"></script>
 </html>
