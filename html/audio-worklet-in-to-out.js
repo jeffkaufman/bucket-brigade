@@ -190,7 +190,7 @@ class Player extends AudioWorkletProcessor {
   synthesize_clicks(input) {
     lib.log(LOG_SPAM, "synthesizing clicks");
     if (!this.synthetic_source_counter) {
-      lib.log(LOG_INFO, "Starting up synthetic source");
+      lib.log(LOG_INFO, "Starting up clicks");
       this.synthetic_source_counter = 0;
     }
 
@@ -246,7 +246,7 @@ class Player extends AudioWorkletProcessor {
 
     try {
       lib.log(LOG_VERYSPAM, "process inputs:", inputs);
-      if (this.synthetic_source == "SYNTHETIC") {
+      if (this.synthetic_source == "NUMERIC") {
         // Ignore our input and overwrite it with sequential numbers for debugging
         this.synthesize_input(inputs[0]);
       } else if (this.synthetic_source == "CLICKS") {

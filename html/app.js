@@ -84,10 +84,13 @@ async function enumerate_devices() {
     el.text = "SILENCE";
     in_select.appendChild(el);
 
+    /* Disabled for more public test, since it wastes a lot
+       of bandwidth re-downloading a giant MP3
     el = document.createElement("option");
     el.value = "HAMILTON";
     el.text = "HAMILTON";
     in_select.appendChild(el);
+    */
 
     el = document.createElement("option");
     el.value = "CLICKS";
@@ -100,8 +103,8 @@ async function enumerate_devices() {
     in_select.appendChild(el);
 
     el = document.createElement("option");
-    el.value = "SYNTHETIC";
-    el.text = "SYNTHETIC";
+    el.value = "NUMERIC";
+    el.text = "NUMERIC";
     in_select.appendChild(el);
 
     el = document.createElement("option");
@@ -115,8 +118,8 @@ async function enumerate_devices() {
     out_select.appendChild(el);
 
     el = document.createElement("option");
-    el.value = "SYNTHETIC";
-    el.text = "SYNTHETIC (use with synthetic source)";
+    el.value = "NUMERIC";
+    el.text = "NUMERIC (use with NUMERIC source)";
     out_select.appendChild(el);
   });
 }
@@ -268,7 +271,7 @@ async function start() {
 
   synthetic_audio_source = null;
   var input_device = in_select.value;
-  if (input_device == "SYNTHETIC" ||
+  if (input_device == "NUMERIC" ||
       input_device == "CLICKS" ||
       input_device == "ECHO") {
     synthetic_audio_source = input_device;
@@ -279,7 +282,7 @@ async function start() {
 
   var synthetic_audio_sink = false;
   var output_device = out_select.value;
-  if (output_device == "SYNTHETIC") {
+  if (output_device == "NUMERIC") {
     synthetic_audio_sink = true;
     output_device = "NOWHERE";
   }
