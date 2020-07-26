@@ -141,6 +141,7 @@ var peak_out_text = document.getElementById('peakOut');
 var hamilton_audio_span = document.getElementById('hamiltonAudioSpan');
 var output_audio_span = document.getElementById('outputAudioSpan');
 var audio_graph_canvas = document.getElementById('audioGraph');
+var client_total_time = document.getElementById('clientTotalTime');
 var running = false;
 
 function set_controls(is_running) {
@@ -256,8 +257,8 @@ var sample_rate;
 async function start() {
   running = true;
   set_controls(running);
-  audio_offset = parseInt(audio_offset_text.value);
   sample_rate = 11025;
+  audio_offset = parseInt(audio_offset_text.value) * sample_rate;
 
   read_clock = null;
   mic_buf = [];
@@ -455,14 +456,16 @@ function handle_message(event) {
     try {
       var target_url = new URL(server_path, document.location);
       var params = new URLSearchParams();
-      if (msg.clock !== null) {
-        params.set('write_clock', msg.clock);
-      }
       // Response size always equals request size.
       // Clocks are at the _end_ of intervals; the longer we've been
       //   accumulating data, the more we have to read. (Trust me.)
       read_clock += outdata.length;
       params.set('read_clock', read_clock);
+      if (msg.clock !== null) {
+        params.set('write_clock', msg.clock);
+
+        client_total_time.value = (read_clock - msg.clock + outdata.length) / sample_rate;
+      }
       params.set('encoding', sample_encoding["server"]);
       if (loopback_mode == "server") {
         params.set('loopback', true);
@@ -481,6 +484,7 @@ function handle_message(event) {
         //   process() cycle.
         return
       }
+
       lib.log(LOG_SPAM, "Sending XHR w/ ID:", xhr.debug_id, "already in flight:", xhrs_inflight++, "; data size:", outdata.length);
       xhr.open("POST", target_url, true);
       xhr.setRequestHeader("Content-Type", "application/octet-stream");
