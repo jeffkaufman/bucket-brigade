@@ -19,16 +19,23 @@ Debugging notes from 2020-07-23 w/ jefftk:
 * should add an alert if something goes wrong with the fixed-offset relationship between the read and write clocks going to the server
 * a speaker-to-mic echo test with clicks seemed quite smooth, which is cool
 * outputLatency on the audio context object is never available; also the object claims it is closed, which is weird (maybe there are multiple objects?)
-* somehow our write clock is ending up being 512 after the local latency work, so something has gone wrong there
+  * update, the 'closed' thing is probably a red herring due to console evaluation shenanigans.
 * more automation / ease of use features will be important for fun testing with people
-* send email about fun testing this weekend
 
 Debugging notes 2020-07-24:
 * NOTE that changing the latency compensation at runtime messes up the continuity of the buffer in the audioworklet and I think virtually guarantees it will report overflow/underflow after wraparound.
 * Would be good if we could automatically calibrate latency
-* Would be good if offset were in seconds not samples
-* Would be good if we could automatically tell you what your overall latency window looks like, to set the next person's offset
 * Would be good if latency window did not grow when the software / network glitches out
+
+Debugging notes 2020-07-26:
+* Automatic latency calibration is absolutely mandatory to have
+  * For futher testing, in case of any doubt, multiple options would be good to make sure there's something that works for everyone, as long as they're all easy to try and it's obvious if it worked.
+* Noise is obnoxiously additive
+  * I think a lot of this is quantization noise from naive downsampling to 8-bit. Some is just background noise. (Jeff suggests gating.)
+* No point in sending audio if we know it's silent OR we know we're the caboose
+* "Snap to caboose" feature would be nice
+  * Ray thinks it would be cool for people e.g. with iphones to be able to just hear stuff and not send any stuff (since sending stuff doesn't work.)
+* No point in receiving audio if we're not going to do anything with it, give us a way to just not request it.
 
 Time constants:
 * Audioworklet "time quantum": 128 samples @ 44,100Hz ~= 3ms
