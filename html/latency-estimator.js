@@ -1,3 +1,18 @@
+import * as lib from './lib.js';
+import {LOG_VERYSPAM, LOG_SPAM, LOG_DEBUG, LOG_INFO, LOG_WARNING, LOG_ERROR} from './lib.js';
+
+// This trick allows us to load this file as a regular module, which in turn
+//   allows us to flush it from the cache when needed, as a workaround for
+//   https://bugs.chromium.org/p/chromium/issues/detail?id=880784 .
+if (typeof AudioWorkletProcessor === "undefined") {
+  lib.log(LOG_INFO, "Latency estimator module preloading");
+  // If we are loaded as a regular module, skip the entire rest of the file
+  //   (which will not be valid outside the audio worklet context).
+} else {
+
+lib.set_logging_context_id("latencyestimator");
+lib.log(LOG_INFO, "Latency estimator module loading");
+
 class Player extends AudioWorkletProcessor {
   constructor() {
     super();
@@ -7,14 +22,14 @@ class Player extends AudioWorkletProcessor {
     this.frame_size = 128;
     this.click_frame_interval =
       Math.round(sampleRate / this.frame_size / 1); // 60 bpm
-    
+
     // peak detection
     this.window = [];
     this.last_peak = Date.now();
     this.background_noise = 0;
     this.sample_index = 0;
     this.frames_since_last_beat = 0;
-    
+
     // tuning params
     this.peak_ratio = 10;
     this.min_peak_interval_ms = 200;
@@ -23,7 +38,7 @@ class Player extends AudioWorkletProcessor {
 
     this.latencies = [];
   }
-  
+
   process (inputs, outputs, parameters) {
     this.click_index++;
     var is_beat = this.click_index % this.click_frame_interval == 0;
@@ -44,7 +59,7 @@ class Player extends AudioWorkletProcessor {
     for (var i = 0 ; i < inputs[0][0].length; i++) {
       this.sample_index++;
       this.background_noise += Math.abs(inputs[0][0][i]);
-      
+
       this.window.push(inputs[0][0][i]);
       if (this.window.length > this.window_size_samples) {
         this.window.shift();
@@ -68,16 +83,22 @@ class Player extends AudioWorkletProcessor {
       if (latency_ms > 500) {
         latency_ms -= 1000;
       }
-      
+
       this.latencies.push(latency_ms);
       this.latencies.sort();
-      console.log(
+      lib.log(LOG_DEBUG,
         "latency: " + latency_ms +
           " (median " + this.latencies[Math.trunc(this.latencies.length/2)] + ")");
-      
-    }      
+      this.port.postMessage({
+        "type": "latency_estimate",
+        "samples": this.latencies.length,
+        "latency": this.latencies[Math.trunc(this.latencies.length/2)],
+      })
+
+    }
   }
 }
 
 registerProcessor('player', Player);
 
+} // end clever workaround wrapper

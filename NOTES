@@ -10,21 +10,15 @@ Debugging notes from 2020-07-22:
   * iiiinteresting, I can repro this using "main app thread" loopback.
   * this matches with what we see in the visualizer, which is skipping _inside_ a batch sent to the server.
 * Clients seem to get further and further behind. I think they are generally stable except when weird shit is happening, but weird shit causes them to slip, and eventually they slip too far and die. Connecting multiple clients seems to make this happen much faster but I can't tell if that's inherent, or just because it increases lossage due to bandwidth, CPU, etc.
-  * possibly this is triggered by "non-round" offsets? Hrm, seems not...
   * This may be specific to the bluetooth headset actually, and it may be related to the sporadic glitching I was getting with them many versions ago, which usually goes away if I close and reopen the device.
 * Hmmmmmm, under heavy load (3 clients), my request payloads seem to end up empty, even when the source is constant audio data (hamilton). That doesn't make any sense.
-* Still need to figure out how to deal with client-side latency? Allegedy the web audio API will tell us about the output latency, but input is ????
 
 Debugging notes from 2020-07-23 w/ jefftk:
 * should add an alert if something goes wrong with the fixed-offset relationship between the read and write clocks going to the server
 * a speaker-to-mic echo test with clicks seemed quite smooth, which is cool
-* outputLatency on the audio context object is never available; also the object claims it is closed, which is weird (maybe there are multiple objects?)
-  * update, the 'closed' thing is probably a red herring due to console evaluation shenanigans.
-* more automation / ease of use features will be important for fun testing with people
 
 Debugging notes 2020-07-24:
 * NOTE that changing the latency compensation at runtime messes up the continuity of the buffer in the audioworklet and I think virtually guarantees it will report overflow/underflow after wraparound.
-* Would be good if we could automatically calibrate latency
 * Would be good if latency window did not grow when the software / network glitches out
 
 Debugging notes 2020-07-26:
@@ -36,6 +30,22 @@ Debugging notes 2020-07-26:
 * "Snap to caboose" feature would be nice
   * Ray thinks it would be cool for people e.g. with iphones to be able to just hear stuff and not send any stuff (since sending stuff doesn't work.)
 * No point in receiving audio if we're not going to do anything with it, give us a way to just not request it.
+* If things lag, sometimes we start up with an unexpectedly high "client total time consumed" from the very beginning. (~9s vs ~5s.) [I _think_ this makes sense due to how we're managing our server connection, but I need to think more about it and how to fix it.]
+* I saw at one point that a client was experiencing "cascading read slippage", i.e. it was getting later and later (and slippage getting larger) on every request. I don't understand what could cause this. I took a profile using the dev tools profiler, and there's a lot of weird stuff in it, but I don't really know how to read it.
+  * The profile contains multiple tabs sharing threads, which makes sense in retrospect, but makes things confusing, and seems like it COULD be somehow related to the actual problem.
+  * Comparing to a non-slippage profile: Rendering of "frames" starts to take longer and longer. Hundreds, then thousands of ms. (With CPU time dozens of ms, up to over 100.) In the healthy state it takes consistently <10 ms and a decent fraction of that is CPU time. I don't know whether this is real or an artifact.
+  * Our tab's "frames" show up as stretching from a point when the OTHER tab completes a network request, until a point where we do. That makes no sense to me. I'm not sure whether it's an artifact but I think it could be.
+*** UGH *** I may be screwing myself with my testing method. The blocking limit of XHRs per domain is SHARED if I have many window to the same domain open. So I can rapidly run out if they overlap. The offending XHRs causing the apparent priority inversion are from DIFFERENT WINDOWS. The multiple entries on the audioworklet thread are also. [NOTE: During the offending tests we did not ever run out of parallel XHRs that I could see, but this is still a problem.]
+  * I can't figure out whether the apparent interaction between windows is real or an artifact, whether the "long frames" are real or a devtools bug, if they really are long, if that's a chrome bug or my bug somehow.
+  * It kind of seems like the XHRs are just happening at a consistent but too-slow interval. If the "long frames" are an artifact, then this would seemingly be caused by process not getting called often enough, or otherwise somehow us not having the target amount of data to send until later?
+  * Could our process be getting starved or something by the other window's process, which kicks in if they happen to drift into alignment or something?
+  * We seem to be running very close to 3/4 target speed, which is .... weird unless something changed the sample rate or something broke in Web Audio.
+
+*** We should start tracking things like how often our callbacks get called, how much data we accumulate, and whether it seems to match the purported sample rate. ***
+
+* Random note: "go to chrome://flags, search for worklet and enable the flag named "Use realtime priority thread for Audio Worklet"
+
+* NOTE: test and fix in firefox
 
 Time constants:
 * Audioworklet "time quantum": 128 samples @ 44,100Hz ~= 3ms

@@ -129,11 +129,13 @@ var audioCtx;
 
 var start_button = document.getElementById('startButton');
 var stop_button = document.getElementById('stopButton');
+var estimate_latency_button = document.getElementById('estimateLatencyButton');
 var loopback_mode_select = document.getElementById('loopbackMode');
 var server_path_text = document.getElementById('serverPath');
 var audio_offset_text = document.getElementById('audioOffset');
 var web_audio_output_latency_text = document.getElementById('webAudioOutputLatency');
 var latency_compensation_text = document.getElementById('latencyCompensationText');
+var latency_compensation_label = document.getElementById('latencyCompensationLabel');
 var latency_compensation_apply_button = document.getElementById('latencyCompensationApply');
 var sample_rate_text = document.getElementById('sampleRate');
 var peak_in_text = document.getElementById('peakIn');
@@ -142,10 +144,12 @@ var hamilton_audio_span = document.getElementById('hamiltonAudioSpan');
 var output_audio_span = document.getElementById('outputAudioSpan');
 var audio_graph_canvas = document.getElementById('audioGraph');
 var client_total_time = document.getElementById('clientTotalTime');
+var client_read_slippage = document.getElementById('clientReadSlippage');
 var running = false;
 
 function set_controls(is_running) {
   start_button.disabled = is_running;
+  estimate_latency_button.disabled = is_running;
   stop_button.disabled = !is_running;
   loopback_mode_select.disabled = is_running;
   in_select.disabled = is_running;
@@ -158,9 +162,7 @@ function set_controls(is_running) {
 async function initialize() {
   await wait_for_mic_permissions();
   await enumerate_devices();
-  in_select.disabled = false;
-  out_select.disabled = false;
-  start_button.disabled = false;
+  set_controls(running);
 
   if (document.location.hostname == "localhost") {
     // Better default
@@ -181,7 +183,18 @@ function debug_check_sample_rate(rate) {
   }
 }
 
-async function get_input_node(audioCtx, deviceId) {
+async function configure_input_node(audioCtx) {
+  synthetic_audio_source = null;
+  var deviceId = in_select.value;
+  if (deviceId == "NUMERIC" ||
+      deviceId == "CLICKS" ||
+      deviceId == "ECHO") {
+    synthetic_audio_source = deviceId;
+    synthetic_click_interval = 60.0 / parseFloat(click_bpm.value);
+    // Signal the audioworklet for special handling, then treat as "SILENCE" for other purposes.
+    deviceId = "SILENCE";
+  }
+
   if (deviceId == "SILENCE") {
     var buffer = audioCtx.createBuffer(1, 128, audioCtx.sampleRate);
     var source = audioCtx.createBufferSource();
@@ -221,16 +234,23 @@ async function get_input_node(audioCtx, deviceId) {
   return new MediaStreamAudioSourceNode(audioCtx, { mediaStream: micStream });
 }
 
-function get_output_node(audioCtx, deviceId) {
-  if (deviceId == "NOWHERE") {
-    return audioCtx.createMediaStreamDestination();
+function configure_output_node(audioCtx) {
+  synthetic_audio_sink = false;
+  var deviceId = out_select.value;
+  var dest = audioCtx.createMediaStreamDestination();
+
+  if (deviceId == "NUMERIC") {
+    // Leave the device empty, but signal the worklet for special handling
+    synthetic_audio_sink = true;
+  } else if (deviceId == "NOWHERE") {
+    // Leave the device empty
+  } else {
+    var audio_out = new Audio();
+    audio_out.srcObject = dest.stream;
+    audio_out.setSinkId(deviceId);
+    audio_out.play();
   }
 
-  var audio_out = new Audio();
-  var dest = audioCtx.createMediaStreamDestination();
-  audio_out.srcObject = dest.stream;
-  audio_out.setSinkId(deviceId);
-  audio_out.play();
   return dest;
 }
 
@@ -251,60 +271,39 @@ var audio_offset;
 var xhrs_inflight;
 var override_gain = 1.0;
 var synthetic_audio_source;
+var synthetic_audio_sink;
 var synthetic_click_interval;
-var sample_rate;
+var sample_rate = 11025;
 
-async function start() {
+async function estimate_latency() {
   running = true;
   set_controls(running);
-  sample_rate = 11025;
-  audio_offset = parseInt(audio_offset_text.value) * sample_rate;
 
-  read_clock = null;
-  mic_buf = [];
-  mic_buf_clock = null;
-  xhrs_inflight = 0;
-  override_gain = 1.0;
-
+  var AudioContext = window.AudioContext || window.webkitAudioContext;
   audioCtx = new AudioContext({ sampleRate: sample_rate });
   debug_check_sample_rate(audioCtx.sampleRate);
-  latency_compensation_text.value = audioCtx.baseLatency * 1000 * 2;
-  web_audio_output_latency_text.value = audioCtx.baseLatency * 1000;
+  var micNode = await configure_input_node(audioCtx);
+  var spkrNode = configure_output_node(audioCtx);
+  var micNode = new MediaStreamAudioSourceNode(audioCtx, { mediaStream: micStream });
+  await audioCtx.audioWorklet.addModule('latency-estimator.js');
+  var playerNode = new AudioWorkletNode(audioCtx, 'player');
+  playerNode.port.onmessage = process_latency_estimate;
+  micNode.connect(playerNode)
+  playerNode.connect(spkrNode);
+}
 
-  loopback_mode = loopback_mode_select.value;
-
-  synthetic_audio_source = null;
-  var input_device = in_select.value;
-  if (input_device == "NUMERIC" ||
-      input_device == "CLICKS" ||
-      input_device == "ECHO") {
-    synthetic_audio_source = input_device;
-    synthetic_click_interval = 60.0 / parseFloat(click_bpm.value);
-    input_device = "SILENCE";
+function process_latency_estimate(event) {
+  var msg = event.data;
+  if (msg.type != "latency_estimate") {
+    lib.log(LOG_ERROR, "Unknown message:", msg);
+    return;
   }
 
-  var micNode = await get_input_node(audioCtx, input_device);
+  latency_compensation_text.value = msg.latency;
+  latency_compensation_label.innerText = "(Median of " + msg.samples + " samples.)"
+}
 
-  var synthetic_audio_sink = false;
-  var output_device = out_select.value;
-  if (output_device == "NUMERIC") {
-    synthetic_audio_sink = true;
-    output_device = "NOWHERE";
-  }
-  var spkrNode = get_output_node(audioCtx, output_device);
-
-  server_path = server_path_text.value;
-
-  await audioCtx.audioWorklet.addModule('audio-worklet-in-to-out.js');
-  playerNode = new AudioWorkletNode(audioCtx, 'player');
-  // Stop if there is an exception inside the worklet.
-  playerNode.addEventListener("processorerror", stop);
-  playerNode.port.postMessage({
-    type: "log_params",
-    session_id: session_id,
-    log_level: lib.log_level
-  });
-
+async function query_server_clock() {
   if (loopback_mode == "main") {
     // I got yer server right here!
     server_clock = Math.round(Date.now() * sample_rate / 1000.0);
@@ -322,6 +321,41 @@ async function start() {
     server_clock = Math.round(metadata["server_clock"] + server_latency_ms * sample_rate / 1000.0);
     lib.log(LOG_INFO, "Server clock is estimated to be:", server_clock, " (", metadata["server_clock"], "+", server_latency_ms * sample_rate / 1000.0);
   }
+}
+
+async function start() {
+  running = true;
+  set_controls(running);
+  audio_offset = parseInt(audio_offset_text.value) * sample_rate;
+
+  read_clock = null;
+  mic_buf = [];
+  mic_buf_clock = null;
+  xhrs_inflight = 0;
+  override_gain = 1.0;
+
+  var AudioContext = window.AudioContext || window.webkitAudioContext;
+  audioCtx = new AudioContext({ sampleRate: sample_rate });
+  debug_check_sample_rate(audioCtx.sampleRate);
+
+  loopback_mode = loopback_mode_select.value;
+
+  var micNode = await configure_input_node(audioCtx);
+  var spkrNode = configure_output_node(audioCtx);
+
+  server_path = server_path_text.value;
+
+  await audioCtx.audioWorklet.addModule('audio-worklet-in-to-out.js');
+  playerNode = new AudioWorkletNode(audioCtx, 'player');
+  // Stop if there is an exception inside the worklet.
+  playerNode.addEventListener("processorerror", stop);
+  playerNode.port.postMessage({
+    type: "log_params",
+    session_id: session_id,
+    log_level: lib.log_level
+  });
+
+  await query_server_clock();
   read_clock = server_clock - audio_offset;
 
   // Send this before we set audio params, which declares us to be ready for audio
@@ -418,6 +452,7 @@ function handle_message(event) {
           outdata[i * mic_buf[0].length + j] = sample_encoding["send"](mic_buf[i][j]);
         }
       }
+      // XXX: touching the DOM
       peak_in_text.value = peak_in;
     } else {
       // Still warming up
@@ -463,8 +498,6 @@ function handle_message(event) {
       params.set('read_clock', read_clock);
       if (msg.clock !== null) {
         params.set('write_clock', msg.clock);
-
-        client_total_time.value = (read_clock - msg.clock + outdata.length) / sample_rate;
       }
       params.set('encoding', sample_encoding["server"]);
       if (loopback_mode == "server") {
@@ -522,7 +555,7 @@ function handle_xhr_result(xhr) {
         peak_out = Math.abs(play_samples[i]);
       }
     }
-    peak_out_text.value = peak_out;
+
     lib.log(LOG_SPAM, "Got XHR response w/ ID:", xhr.debug_id, "result:", result, " -- still in flight:", --xhrs_inflight);
     if (metadata["kill_client"]) {
       lib.log(LOG_ERROR, "Received kill from server");
@@ -532,30 +565,39 @@ function handle_xhr_result(xhr) {
     samples_to_worklet(play_samples, metadata["client_read_clock"]);
     var queue_summary = metadata["queue_summary"];
     var queue_size = metadata["queue_size"];
-    // may not be advised to change this after drawing? XXX
-    audio_graph_canvas.style.width = "100%";
-    audio_graph_canvas.width = audio_graph_canvas.clientWidth;
-    audio_graph_canvas.height = 100;
-    var ctx = audio_graph_canvas.getContext('2d');
-    var horz_mult = audio_graph_canvas.clientWidth / queue_size;
-    ctx.setTransform(horz_mult, 0, 0, 1, 0, 0);
-    ctx.clearRect(0, 0, queue_size, 100);
-    ctx.fillStyle = 'rgb(255, 0, 0)';
-    if (queue_summary.length % 2 != 0) {
-      queue_summary.push(queue_size);
+
+    // Defer touching the DOM, just to be safe.
+    requestAnimationFrame(() => {
+      peak_out_text.value = peak_out;
+
+      client_total_time.value = (metadata["client_read_clock"] - metadata["client_write_clock"] + play_samples.length) / sample_rate;
+      client_read_slippage.value = (metadata["server_clock"] - metadata["client_read_clock"] - audio_offset) / sample_rate;
+
+      // Don't touch the DOM unless we have to
+      if (audio_graph_canvas.width != audio_graph_canvas.clientWidth) {
+        audio_graph_canvas.width = audio_graph_canvas.clientWidth;
+      }
+      var ctx = audio_graph_canvas.getContext('2d');
+      var horz_mult = audio_graph_canvas.clientWidth / queue_size;
+      ctx.setTransform(horz_mult, 0, 0, 1, 0, 0);
+      ctx.clearRect(0, 0, queue_size, 100);
+      ctx.fillStyle = 'rgb(255, 0, 0)';
+      if (queue_summary.length % 2 != 0) {
+        queue_summary.push(queue_size);
+      }
+      for (var i = 0; i < queue_summary.length; i += 2) {
+        ctx.fillRect(queue_summary[i], 0, queue_summary[i+1] - queue_summary[i], 50);
+      }
+      ctx.fillStyle = 'rgb(0, 0, 0)';
+      ctx.fillRect(Math.round(metadata["server_clock"] / 128) % queue_size, 0, 1 / horz_mult, 100);
+      ctx.fillRect(Math.round(metadata["last_request_clock"] / 128) % queue_size, 0, 1 / horz_mult, 100);
+      ctx.fillStyle = 'rgb(0, 255, 0)';
+      ctx.fillRect(Math.round(metadata["client_read_clock"] / 128) % queue_size, 0, 1 / horz_mult, 100);
+      ctx.fillRect(Math.round((metadata["client_read_clock"] - play_samples.length) / 128) % queue_size, 0, 1 / horz_mult, 100);
+      ctx.fillStyle = 'rgb(0, 0, 255)';
+      ctx.fillRect(Math.round(metadata["client_write_clock"] / 128) % queue_size, 0, 1 / horz_mult, 100);
+      ctx.fillRect(Math.round((metadata["client_write_clock"] - play_samples.length) / 128) % queue_size, 0, 1 / horz_mult, 100);
     }
-    for (var i = 0; i < queue_summary.length; i += 2) {
-      ctx.fillRect(queue_summary[i], 0, queue_summary[i+1] - queue_summary[i], 50);
-    }
-    ctx.fillStyle = 'rgb(0, 0, 0)';
-    ctx.fillRect(Math.round(metadata["server_clock"] / 128) % queue_size, 0, 1 / horz_mult, 100);
-    ctx.fillRect(Math.round(metadata["last_request_clock"] / 128) % queue_size, 0, 1 / horz_mult, 100);
-    ctx.fillStyle = 'rgb(0, 255, 0)';
-    ctx.fillRect(Math.round(metadata["client_read_clock"] / 128) % queue_size, 0, 1 / horz_mult, 100);
-    ctx.fillRect(Math.round((metadata["client_read_clock"] - play_samples.length) / 128) % queue_size, 0, 1 / horz_mult, 100);
-    ctx.fillStyle = 'rgb(0, 0, 255)';
-    ctx.fillRect(Math.round(metadata["client_write_clock"] / 128) % queue_size, 0, 1 / horz_mult, 100);
-    ctx.fillRect(Math.round((metadata["client_write_clock"] - play_samples.length) / 128) % queue_size, 0, 1 / horz_mult, 100);
   } else {
     lib.log(LOG_ERROR, "XHR failed w/ ID:", xhr.debug_id, "stopping:", xhr, " -- still in flight:", --xhrs_inflight);
     stop();
@@ -583,6 +625,7 @@ async function stop() {
 latency_compensation_apply_button.addEventListener("click", send_local_latency);
 start_button.addEventListener("click", start);
 stop_button.addEventListener("click", stop);
+estimate_latency_button.addEventListener("click", estimate_latency);
 
 log_level_select.addEventListener("change", () => {
   lib.set_log_level(parseInt(log_level_select.value));
