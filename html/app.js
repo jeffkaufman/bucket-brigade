@@ -4,7 +4,7 @@ import {LOG_LEVELS} from './lib.js';
 
 // Work around some issues related to caching and error reporting
 //   by forcing this to load up top, before we try to 'addModule' it.
-import './audio-worklet-in-to-out.js';
+import './audio-worklet.js';
 
 const session_id = Math.floor(Math.random() * 2**32).toString(16);
 lib.set_logging_session_id(session_id);
@@ -354,7 +354,7 @@ async function start() {
 
   server_path = server_path_text.value;
 
-  await audioCtx.audioWorklet.addModule('audio-worklet-in-to-out.js');
+  await audioCtx.audioWorklet.addModule('audio-worklet.js');
   playerNode = new AudioWorkletNode(audioCtx, 'player');
   // Stop if there is an exception inside the worklet.
   playerNode.addEventListener("processorerror", stop);
