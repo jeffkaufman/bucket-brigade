@@ -316,7 +316,16 @@ async function query_server_clock() {
       cache: "no-store",
     });
     // We need one-way latency; dividing by 2 is unprincipled but probably close enough.
-    var server_latency_ms = (Date.now() - request_time_ms) / 2.0;
+    // XXX: This is not actually correct. We should really be using the roundtrip latency here. Because we want to know not "what is the server clock now", but "what will the server clock be by the time my request reaches the server."
+    // Proposed alternative:
+    /*
+      var request_time_samples = Math.round(request_time_ms * sample_rate / 1000.0);
+      var metadata = JSON.parse(fetch_result.headers.get("X-Audio-Metadata"));
+      // Add this to "our time now" to yield "server time when it gets our request."
+      server_sample_offset = metadata["server_clock"] - request_time_samples;
+      // Note: In the presence of network jitter, our message can get to the server either before or after the target server moment. This means that if our target server moment is "now", our actual requested moment could end up in the future. Someone on one side or the other has to deal with this. But in general if we are requesting "now" it means we do not expect to get audio data at all, so it should be okay for us to never ask for audio data in the case (and it should be ok for the server to give us zeros for "future" data, since we should never have asked, but that's what _would_ be there.)
+    */
+    var server_latency_ms = (Date.now() - request_time_ms) / 2.0;  // Wrong, see above
     var metadata = JSON.parse(fetch_result.headers.get("X-Audio-Metadata"));
     server_clock = Math.round(metadata["server_clock"] + server_latency_ms * sample_rate / 1000.0);
     lib.log(LOG_INFO, "Server clock is estimated to be:", server_clock, " (", metadata["server_clock"], "+", server_latency_ms * sample_rate / 1000.0);
