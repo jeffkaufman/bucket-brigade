@@ -149,7 +149,7 @@ var running = false;
 
 function set_controls(is_running) {
   start_button.disabled = is_running;
-  estimate_latency_button.disabled = is_running;
+  estimate_latency_button.disabled = !is_running;
   stop_button.disabled = !is_running;
   loopback_mode_select.disabled = is_running;
   in_select.disabled = is_running;
@@ -275,34 +275,6 @@ var synthetic_audio_sink;
 var synthetic_click_interval;
 var sample_rate = 11025;
 
-async function estimate_latency() {
-  running = true;
-  set_controls(running);
-
-  var AudioContext = window.AudioContext || window.webkitAudioContext;
-  audioCtx = new AudioContext({ sampleRate: sample_rate });
-  debug_check_sample_rate(audioCtx.sampleRate);
-  var micNode = await configure_input_node(audioCtx);
-  var spkrNode = configure_output_node(audioCtx);
-  var micNode = new MediaStreamAudioSourceNode(audioCtx, { mediaStream: micStream });
-  await audioCtx.audioWorklet.addModule('latency-estimator.js');
-  var playerNode = new AudioWorkletNode(audioCtx, 'player');
-  playerNode.port.onmessage = process_latency_estimate;
-  micNode.connect(playerNode)
-  playerNode.connect(spkrNode);
-}
-
-function process_latency_estimate(event) {
-  var msg = event.data;
-  if (msg.type != "latency_estimate") {
-    lib.log(LOG_ERROR, "Unknown message:", msg);
-    return;
-  }
-
-  latency_compensation_text.value = msg.latency;
-  latency_compensation_label.innerText = "(Median of " + msg.samples + " samples.)"
-}
-
 async function query_server_clock() {
   if (loopback_mode == "main") {
     // I got yer server right here!
@@ -330,6 +302,17 @@ async function query_server_clock() {
     server_clock = Math.round(metadata["server_clock"] + server_latency_ms * sample_rate / 1000.0);
     lib.log(LOG_INFO, "Server clock is estimated to be:", server_clock, " (", metadata["server_clock"], "+", server_latency_ms * sample_rate / 1000.0);
   }
+}
+
+var estimate_latency_mode = false;
+estimate_latency_button.value = "Start latency estimation";
+function estimate_latency_toggle() {
+  estimate_latency_mode = !estimate_latency_mode;
+  playerNode.port.postMessage({
+    "type": "latency_estimation_mode",
+    "enabled": estimate_latency_mode
+  });
+  estimate_latency_button.innerText = (estimate_latency_mode?"Stop":"Start") + " latency estimation";
 }
 
 async function start() {
@@ -371,7 +354,6 @@ async function start() {
   send_local_latency();
   var audio_params = {
     type: "audio_params",
-    sample_rate: sample_rate,
     synthetic_source: synthetic_audio_source,
     click_interval: synthetic_click_interval,
     synthetic_sink: synthetic_audio_sink,
@@ -434,6 +416,10 @@ function handle_message(event) {
     lib.log(LOG_ERROR, "Exception thrown in audioworklet:", msg.exception);
     stop();
     return;
+  } else if (msg.type == "latency_estimate") {
+    latency_compensation_text.value = msg.latency;
+    latency_compensation_label.innerText = "(Median of " + msg.samples + " samples.)"
+    send_local_latency();
   } else if (msg.type != "samples_out") {
     lib.log(LOG_ERROR, "Got message of unknown type:", msg);
     stop();
@@ -606,7 +592,7 @@ function handle_xhr_result(xhr) {
       ctx.fillStyle = 'rgb(0, 0, 255)';
       ctx.fillRect(Math.round(metadata["client_write_clock"] / 128) % queue_size, 0, 1 / horz_mult, 100);
       ctx.fillRect(Math.round((metadata["client_write_clock"] - play_samples.length) / 128) % queue_size, 0, 1 / horz_mult, 100);
-    }
+    });
   } else {
     lib.log(LOG_ERROR, "XHR failed w/ ID:", xhr.debug_id, "stopping:", xhr, " -- still in flight:", --xhrs_inflight);
     stop();
@@ -634,7 +620,7 @@ async function stop() {
 latency_compensation_apply_button.addEventListener("click", send_local_latency);
 start_button.addEventListener("click", start);
 stop_button.addEventListener("click", stop);
-estimate_latency_button.addEventListener("click", estimate_latency);
+estimate_latency_button.addEventListener("click", estimate_latency_toggle);
 
 log_level_select.addEventListener("change", () => {
   lib.set_log_level(parseInt(log_level_select.value));

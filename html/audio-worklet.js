@@ -111,6 +111,27 @@ class Player extends AudioWorkletProcessor {
     super();
     this.ready = false;
     this.port.onmessage = this.handle_message.bind(this);
+
+    // State related to peak detection processing:
+    // clicks
+    this.click_index = 0;
+    this.click_frame_interval =
+      Math.round(sampleRate / FRAME_SIZE / 1); // 60 bpm
+
+    // peak detection
+    this.window = [];
+    this.last_peak = Date.now();
+    this.background_noise = 0;
+    this.sample_index = 0;
+    this.frames_since_last_beat = 0;
+
+    // tuning params
+    this.peak_ratio = 10;
+    this.min_peak_interval_ms = 200;
+    this.window_size_samples = 20;
+    this.click_interval_samples = 3000;
+
+    this.latencies = [];
   }
 
   handle_message(event) {
@@ -128,25 +149,27 @@ class Player extends AudioWorkletProcessor {
         }
         return;
       } else if (msg.type == "audio_params") {
-        this.sample_rate = msg.sample_rate;
         this.synthetic_source = msg.synthetic_source;
         this.click_interval = msg.click_interval;
         this.synthetic_sink = msg.synthetic_sink;
         this.loopback_mode = msg.loopback_mode;
 
         // This is _extra_ slack on top of the size of the server request.
-        this.client_slack = this.sample_rate * 1.5; // XXX: should we shrink this?
+        this.client_slack = sampleRate * 1.5; // XXX: should we shrink this?
 
         // 15 seconds of total buffer, `this.slack` seconds of leadin, force things to round to FRAME_SIZE
         this.play_buffer = new ClockedRingBuffer(
           Float32Array,
-          Math.round(15 * this.sample_rate / FRAME_SIZE) * FRAME_SIZE,
+          Math.round(15 * sampleRate / FRAME_SIZE) * FRAME_SIZE,
           Math.round(this.client_slack / FRAME_SIZE) * FRAME_SIZE);
 
         this.ready = true;
         return;
       } else if (msg.type == "local_latency") {
         this.local_latency = msg.local_latency;
+        return;
+      } else if (msg.type == "latency_estimation_mode") {
+        this.latency_measurement_mode = msg.enabled;
         return;
       } else if (!this.ready) {
         lib.log(LOG_ERROR, "received message before ready:", msg);
@@ -180,10 +203,8 @@ class Player extends AudioWorkletProcessor {
       this.synthetic_source_counter = 0;
     }
     // This is probably not very kosher...
-    for (var i = 0; i < input[0].length; i++) {
-      for (var chan = 0; chan < input.length; chan++) {
-        input[chan][i] = this.synthetic_source_counter;
-      }
+    for (var i = 0; i < input.length; i++) {
+      input[i] = this.synthetic_source_counter;
       this.synthetic_source_counter++;
     }
   }
@@ -196,15 +217,13 @@ class Player extends AudioWorkletProcessor {
     }
 
     var sound_level = 0.0;
-    if (this.synthetic_source_counter % Math.round(this.sample_rate * interval / FRAME_SIZE) == 0) {
+    if (this.synthetic_source_counter % Math.round(sampleRate * interval / FRAME_SIZE) == 0) {
       sound_level = 0.1;
     }
 
     // This is probably not very kosher...
-    for (var i = 0; i < input[0].length; i++) {
-      for (var chan = 0; chan < input.length; chan++) {
-        input[chan][i] = sound_level;
-      }
+    for (var i = 0; i < input.length; i++) {
+      input[i] = sound_level;
     }
     this.synthetic_source_counter++;
   }
@@ -219,86 +238,143 @@ class Player extends AudioWorkletProcessor {
     }
     for (var i = 0; i < FRAME_SIZE; i++) {
       if (this.synthetic_sink_counter == 0) {
-        if (output[0][i] == 0) {
+        if (output[i] == 0) {
           // No problem, leading zeroes are fine.
           this.synthetic_sink_leading_zeroes++;
         } else {
           lib.log(LOG_INFO, "Saw", this.synthetic_sink_leading_zeroes, "zeros in stream");
           this.synthetic_sink_counter++;
         }
-      } else if (output[0][i] == this.synthetic_sink_counter + 1) {
+      } else if (output[i] == this.synthetic_sink_counter + 1) {
         // No problem, incrementing numbers.
         this.synthetic_sink_counter++;
         if (this.synthetic_sink_counter % 100000 == 0) {
           lib.log(LOG_INFO, "Synthetic sink has seen", this.synthetic_sink_counter, "samples");
         }
       } else {
-        lib.log(LOG_WARNING, "Misordered data in frame:", output[0]);
-        this.synthetic_sink_counter = output[0][i];
+        lib.log(LOG_WARNING, "Misordered data in frame:", output);
+        this.synthetic_sink_counter = output[i];
       }
     }
   }
 
-  process (inputs, outputs, parameters) {
+  detect_peak(index, now) {
+    var abs_sum = 0;
+    for (var i = 0; i < this.window.length; i++) {
+      abs_sum += Math.abs(this.window[i]);
+    }
+    if (abs_sum / this.window.length >
+        this.background_noise / this.sample_index * this.peak_ratio &&
+        now - this.last_peak > this.min_peak_interval_ms) {
+      this.last_peak = now;
+      var latency_samples = index + 128*this.frames_since_last_beat;
+      var latency_ms = 1000.0 * latency_samples / sampleRate;
+      if (latency_ms > 500) {
+        latency_ms -= 1000;
+      }
+
+      this.latencies.push(latency_ms);
+      this.latencies.sort();
+      lib.log(LOG_DEBUG,
+        "latency: " + latency_ms +
+          " (median " + this.latencies[Math.trunc(this.latencies.length/2)] + ")");
+      this.port.postMessage({
+        "type": "latency_estimate",
+        "samples": this.latencies.length,
+        "latency": this.latencies[Math.trunc(this.latencies.length/2)],
+      })
+
+    }
+  }
+
+  process_latency_measurement(input, output) {
+    this.click_index++;
+    var is_beat = this.click_index % this.click_frame_interval == 0;
+    if (is_beat) {
+      this.frames_since_last_beat = 0;
+    } else {
+      this.frames_since_last_beat++;
+    }
+    for (var k = 0; k < output.length; k++) {
+      output[k] = is_beat ? 0.1 : 0;
+    }
+
+    var now = Date.now();
+    for (var i = 0 ; i < input.length; i++) {
+      this.sample_index++;
+      this.background_noise += Math.abs(input[i]);
+
+      this.window.push(input[i]);
+      if (this.window.length > this.window_size_samples) {
+        this.window.shift();
+      }
+      this.detect_peak(i, now);
+    }
+  }
+
+  process_normal(input, output) {
+    lib.log(LOG_VERYSPAM, "process_normal:", input);
+    if (this.synthetic_source == "NUMERIC") {
+      // Ignore our input and overwrite it with sequential numbers for debugging
+      this.synthesize_input(input);
+    } else if (this.synthetic_source == "CLICKS") {
+      this.synthesize_clicks(input, this.click_interval);
+    }
+
+    if (this.loopback_mode === "worklet") {
+      // Send input straight to output and do nothing else with it (only for debugging)
+      output.set(input);
+    } else {
+      // Normal input/output handling
+      lib.log(LOG_VERYSPAM, "about to output samples from", this.play_buffer, "with length", this.play_buffer.length);
+
+      for (var i = 0; i < output.length; i++) {
+        var val = this.play_buffer.read();
+        output[i] = val;
+        // This is the "opposite" of local loopback: There, we take whatever
+        //   we hear on the mic and send to the speaker, whereas here we take
+        //   whatever we're about to send to the speaker, and pretend we
+        //   heard it on the mic.
+        if (this.synthetic_source == "ECHO") {
+          input[i] = val;
+        }
+      }
+      var end_clock = this.play_buffer.get_read_clock();
+      var server_write_clock = null;
+      if (end_clock !== null) {
+        server_write_clock = end_clock - this.local_latency;
+      }
+      this.port.postMessage({
+        type: "samples_out",
+        samples: input,
+        clock: server_write_clock,
+      }, [input.buffer]);
+      // End normal handling
+    }
+
+    if (this.synthetic_sink) {
+      // Check that our output looks like sequential numbers for debugging
+      this.check_synthetic_output(output);
+    }
+  }
+
+  process(inputs, outputs) {
+    var input = inputs[0][0];
+    var output = outputs[0][0];
+
     if (!this.ready) {
       lib.log_every(100, "process_before_ready", LOG_ERROR, "tried to process before ready");
       return true;
     }
 
     try {
-      lib.log(LOG_VERYSPAM, "process inputs:", inputs);
-      if (this.synthetic_source == "NUMERIC") {
-        // Ignore our input and overwrite it with sequential numbers for debugging
-        this.synthesize_input(inputs[0]);
-      } else if (this.synthetic_source == "CLICKS") {
-        this.synthesize_clicks(inputs[0], this.click_interval);
+      if (this.latency_measurement_mode) {
+        this.process_latency_measurement(input, output);
+        // Fake out the real processing function
+        input = new Float32Array(input.length);
+        output = new Float32Array(output.length);
       }
-
-      if (this.loopback_mode === "worklet") {
-        // Send input straight to output and do nothing else with it (only for debugging)
-        for (var chan = 0; chan < outputs[0].length; chan++) {
-          if (outputs[0].length == inputs[0].length) {
-            outputs[0][chan].set(inputs[0][chan]);
-          } else {
-            outputs[0][chan].set(inputs[0][0]);
-          }
-        }
-      } else {
-        // Normal input/output handling
-        lib.log(LOG_VERYSPAM, "about to output samples from", this.play_buffer, "with length", this.play_buffer.length);
-
-        for (var i = 0; i < outputs[0][0].length; i++) {
-          var val = this.play_buffer.read();
-          for (var chan = 0; chan < outputs[0].length; chan++) {
-            outputs[0][chan][i] = val;
-            // This is the "opposite" of local loopback: There, we take whatever
-            //   we hear on the mic and send to the speaker, whereas here we take
-            //   whatever we're about to send to the speaker, and pretend we
-            //   heard it on the mic.
-            if (this.synthetic_source == "ECHO") {
-              inputs[0][chan][i] = val;
-            }
-          }
-        }
-        var end_clock = this.play_buffer.get_read_clock();
-        var server_write_clock = null;
-        if (end_clock !== null) {
-          server_write_clock = end_clock - this.local_latency;
-        }
-        this.port.postMessage({
-          type: "samples_out",
-          samples: inputs[0][0],
-          clock: server_write_clock,
-        }, [inputs[0][0].buffer]);
-        // End normal handling
-      }
-
-      if (this.synthetic_sink) {
-        // Check that our output looks like sequential numbers for debugging
-        this.check_synthetic_output(outputs[0]);
-      }
-
-      return true;
+      this.process_normal(input, output);
     } catch (ex) {
       this.port.postMessage({
         type: "exception",
@@ -306,6 +382,10 @@ class Player extends AudioWorkletProcessor {
       });
       throw ex;
     }
+    for (var chan = 1; chan < outputs[0].length; chan++) {
+      outputs[0][chan].set(outputs[0][0]);
+    }
+    return true;
   }
 }
 
