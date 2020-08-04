@@ -47,6 +47,8 @@ Debugging notes 2020-07-26:
 
 * NOTE: test and fix in firefox
 
+* Perhaps we can get audiocontext latency more stable if we request a specific value (perhaps we can measure and then request higher?)
+
 Time constants:
 * Audioworklet "time quantum": 128 samples @ 44,100Hz ~= 3ms
 * Our send buffer: SAMPLE_BATCH_SIZE * 128 samples ~= 290ms
