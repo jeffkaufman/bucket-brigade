@@ -1,6 +1,90 @@
 <html>
 <title>"Bucket Brigade" Audio Demo</title>
 <h1>"Bucket Brigade" Audio Demo</h1>
+
+<h3>Instructions</h3>
+
+This is a program that allows multiple people to make music together
+over the internet. You can think of it like one person recording their
+voice onto except tape, mailing it to the next person who adds their
+voice, mailing it to the next person who has their voice, etc. Except
+it's much faster than using the post!
+
+<p>
+
+The audio offset controls where you are in the series of people. The
+larger your offset, the farther along you are in the chain, the more
+people will be ahead for you to hear, and the fewer people will be
+behind to hear you.  If you're with a group of people, figure out now
+who will be at which position. A good place to start is people at
+0, 10, 20, 30, and 40.  Numbers over 50 generally won't work.
+
+<p>
+
+Audio offset (seconds):
+<input type=text id=audioOffset value="0">
+
+<p>
+
+Once everyone has an audio offset dialed in, if you're using a video
+call everyone should mute yourselves and switch to using chat.  Press
+<button id=startButton disabled=true>Start</button> and then <button
+id=estimateLatencyButton disabled=true>Run latency
+estimation</button>.  You should hear some clicks, once per second.
+
+<p>
+
+If you're not using headphones, the system should be able to hear the
+clicks it is producing and get a good estimate of your latency.  If
+you're using headphones, try to position the earpiece as close as
+possible to the mouthpiece.  If that's working you should see "median
+of N samples" for progressively larger N:
+
+<p>
+
+Client latency compensation (ms):
+<input type=text id=latencyCompensationText value="0">
+<span id=latencyCompensationLabel></span>
+<button id=latencyCompensationApply>Set</button>
+
+<p>
+
+If it doesn't work, try turning up the click
+volume:
+
+<p>
+
+Click volume: <input id=clickVolumeSlider type=range min=0 max=100
+value=60>
+
+<p>
+
+You can also try turning up the overall volume on your computer.
+
+<p>
+
+If it still doesn't work, you can calibrate it manually. Each time you
+hear a click, clap your hands. This won't be as accurate, but it's
+still pretty good. Try to clap right on the click, and it should be
+able to make a good estimate for your latency.
+
+<p>
+
+Once you have a good latency estimate, scroll back up and click "Stop
+Latency Estimation".  Post in chat that you're calibrated and ready.
+
+<p>
+
+At this point the system is running, and if someone with a smaller
+audio offset than you says something, you should hear it several
+seconds later.  Try having a person at position zero saying something,
+and have everyone else sing along.
+
+<p>
+
+To stop the demo, press <button id=stopButton
+disabled=true>Stop</button>.
+
 <h3>Settings:</h3>
   Input device:
   <select id=inSelect disabled=true>
@@ -13,20 +97,8 @@
     <option>Loading...</option>
   </select>
 <br>
-  Audio offset (seconds):
-  <input type=text id=audioOffset value="0">
-<br>
-  Client latency compensation (ms):
-  <!--<input id=latencyCompensation type=range min=0 max=500 value=50>-->
-  <input type=text id=latencyCompensationText value="0">
-  <span id=latencyCompensationLabel></span>
-  <button id=latencyCompensationApply>Set</button>
 <br>
 <h3>Controls:</h3>
-  <button id=startButton disabled=true>Start</button>
-  <button id=stopButton disabled=true>Stop</button>
-<br>
-  <button id=estimateLatencyButton disabled=true>Run latency estimation</button>
 <br>
 
 <button type="button" data-otherlabel="Close debug settings" class="collapse">Open debug settings</button>
