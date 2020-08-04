@@ -169,6 +169,14 @@ async function initialize() {
   await enumerate_devices();
   set_controls(running);
 
+  var saved_local_latency = window.localStorage.getItem("local_latency");
+  if (saved_local_latency) {
+    saved_local_latency = parseInt(saved_local_latency, 10);
+    if (saved_local_latency > 0 && saved_local_latency < 500) {
+      latency_compensation_text.value = saved_local_latency;
+    }
+  }
+
   if (document.location.hostname == "localhost") {
     // Better default
     server_path_text.value = "http://localhost:8081/"
@@ -372,8 +380,13 @@ async function start() {
 }
 
 function send_local_latency() {
+  var local_latency_ms = parseFloat(latency_compensation_text.value);
+  if (local_latency_ms > 0) {
+    window.localStorage.setItem("local_latency", Math.round(local_latency_ms));
+  }
+
   // Convert from ms to samples.
-  var local_latency = Math.round(parseFloat(latency_compensation_text.value) * sample_rate / 1000);
+  var local_latency = Math.round(local_latency_ms * sample_rate / 1000);
 
   if (synthetic_audio_source !== null) {
     local_latency = 0;
