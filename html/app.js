@@ -135,6 +135,7 @@ var audioCtx;
 var start_button = document.getElementById('startButton');
 var stop_button = document.getElementById('stopButton');
 var estimate_latency_button = document.getElementById('estimateLatencyButton');
+var click_volume_slider = document.getElementById('clickVolumeSlider');
 var loopback_mode_select = document.getElementById('loopbackMode');
 var server_path_text = document.getElementById('serverPath');
 var audio_offset_text = document.getElementById('audioOffset');
@@ -155,6 +156,7 @@ var running = false;
 function set_controls(is_running) {
   start_button.disabled = is_running;
   estimate_latency_button.disabled = !is_running;
+  click_volume_slider.disabled = !is_running;
   stop_button.disabled = !is_running;
   loopback_mode_select.disabled = is_running;
   in_select.disabled = is_running;
@@ -320,6 +322,13 @@ function estimate_latency_toggle() {
   estimate_latency_button.innerText = (estimate_latency_mode?"Stop":"Start") + " latency estimation";
 }
 
+function click_volume_change() {
+  playerNode.port.postMessage({
+    "type": "click_volume_change",
+    "value": click_volume_slider.value
+  });
+}
+
 async function start() {
   running = true;
   set_controls(running);
@@ -357,6 +366,7 @@ async function start() {
 
   // Send this before we set audio params, which declares us to be ready for audio
   send_local_latency();
+  click_volume_change();
   var audio_params = {
     type: "audio_params",
     synthetic_source: synthetic_audio_source,
@@ -626,6 +636,7 @@ latency_compensation_apply_button.addEventListener("click", send_local_latency);
 start_button.addEventListener("click", start);
 stop_button.addEventListener("click", stop);
 estimate_latency_button.addEventListener("click", estimate_latency_toggle);
+click_volume_slider.addEventListener("change", click_volume_change);
 
 log_level_select.addEventListener("change", () => {
   lib.set_log_level(parseInt(log_level_select.value));
