@@ -38,19 +38,24 @@ async function force_permission_prompt() {
 }
 
 async function wait_for_mic_permissions() {
-  var perm_status = await navigator.permissions.query({name: "microphone"});
-  if (perm_status.state == "granted" || perm_status.state == "denied") {
+  try {
+    var perm_status = await navigator.permissions.query({name: "microphone"});
+    if (perm_status.state == "granted" || perm_status.state == "denied") {
+      return;
+    }
+  } catch {
+    await force_permission_prompt();
     return;
-  } else {
-    force_permission_prompt();
-    return new Promise((resolve, reject) => {
-      perm_status.onchange = (e) => {
-        if (e.target.state == "granted" || e.target.state == "denied") {
-          resolve();
-        }
-      }
-    });
   }
+
+  force_permission_prompt();
+  return new Promise((resolve, reject) => {
+    perm_status.onchange = (e) => {
+      if (e.target.state == "granted" || e.target.state == "denied") {
+        resolve();
+      }
+    }
+  });
 }
 
 var in_select = document.getElementById('inSelect');
@@ -226,7 +231,7 @@ async function configure_input_node(audioCtx) {
     audio: {
       echoCancellation: false,
       noiseSuppression: false,
-      autoGainControl: false,
+      autoGainControl: true,
       deviceId: { exact: deviceId }
     }
   });
@@ -273,7 +278,7 @@ var override_gain = 1.0;
 var synthetic_audio_source;
 var synthetic_audio_sink;
 var synthetic_click_interval;
-var sample_rate = 11025;
+var sample_rate = 44100;  // Firefox may get upset if we use a weird value here?
 
 async function query_server_clock() {
   if (loopback_mode == "main") {
