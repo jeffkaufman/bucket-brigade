@@ -173,6 +173,14 @@ async function initialize() {
     // Better default
     server_path_text.value = "http://localhost:8081/"
   }
+
+  var hash = window.location.hash;
+  if (hash && hash.length > 1) {
+    var audio_offset = parseInt(hash.substr(1), 10);
+    if (audio_offset >= 0 && audio_offset <= 60) {
+      audio_offset_text.value = audio_offset;
+    }
+  }
 }
 
 function debug_check_sample_rate(rate) {
