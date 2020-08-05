@@ -172,6 +172,9 @@ class Player extends AudioWorkletProcessor {
       } else if (msg.type == "latency_estimation_mode") {
         this.latency_measurement_mode = msg.enabled;
         return;
+      } else if (msg.type == "mute_mode") {
+        this.mute_mode = msg.enabled;
+        return;
       } else if (msg.type == "click_volume_change") {
         this.set_click_volume(msg.value/100);
         return;
@@ -377,8 +380,10 @@ class Player extends AudioWorkletProcessor {
     }
 
     try {
-      if (this.latency_measurement_mode) {
-        this.process_latency_measurement(input, output);
+      if (this.latency_measurement_mode || this.mute_mode) {
+        if (this.latency_measurement_mode) {
+          this.process_latency_measurement(input, output);
+        }
         // Fake out the real processing function
         input = new Float32Array(input.length);
         output = new Float32Array(output.length);

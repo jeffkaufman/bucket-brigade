@@ -134,6 +134,7 @@ var audioCtx;
 
 var start_button = document.getElementById('startButton');
 var stop_button = document.getElementById('stopButton');
+var mute_button = document.getElementById('muteButton');
 var estimate_latency_button = document.getElementById('estimateLatencyButton');
 var click_volume_slider = document.getElementById('clickVolumeSlider');
 var loopback_mode_select = document.getElementById('loopbackMode');
@@ -158,6 +159,7 @@ function set_controls(is_running) {
   estimate_latency_button.disabled = !is_running;
   click_volume_slider.disabled = !is_running;
   stop_button.disabled = !is_running;
+  mute_button.disabled = !is_running;
   loopback_mode_select.disabled = is_running;
   in_select.disabled = is_running;
   click_bpm.disabled = is_running;
@@ -342,6 +344,16 @@ function click_volume_change() {
   playerNode.port.postMessage({
     "type": "click_volume_change",
     "value": click_volume_slider.value
+  });
+}
+
+var muted = false;
+function toggle_mute() {
+  muted = !muted;
+  mute_button.innerText = muted ? "Unmute" : "Mute";
+  playerNode.port.postMessage({
+    "type": "mute_mode",
+    "enabled": muted
   });
 }
 
@@ -662,6 +674,7 @@ async function stop() {
 latency_compensation_apply_button.addEventListener("click", send_local_latency);
 start_button.addEventListener("click", start);
 stop_button.addEventListener("click", stop);
+mute_button.addEventListener("click", toggle_mute);
 estimate_latency_button.addEventListener("click", estimate_latency_toggle);
 click_volume_slider.addEventListener("change", click_volume_change);
 
