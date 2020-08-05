@@ -117,6 +117,7 @@ class Player extends AudioWorkletProcessor {
     this.click_index = 0;
     this.click_frame_interval =
       Math.round(sampleRate / FRAME_SIZE / 1); // 60 bpm
+    this.click_volume = 0;
 
     // peak detection
     this.window = [];
@@ -171,6 +172,9 @@ class Player extends AudioWorkletProcessor {
       } else if (msg.type == "latency_estimation_mode") {
         this.latency_measurement_mode = msg.enabled;
         return;
+      } else if (msg.type == "click_volume_change") {
+        this.set_click_volume(msg.value/100);
+        return;
       } else if (!this.ready) {
         lib.log(LOG_ERROR, "received message before ready:", msg);
         return;
@@ -193,6 +197,11 @@ class Player extends AudioWorkletProcessor {
       });
       throw ex;
     }
+  }
+
+  set_click_volume(linear_volume) {
+    // https://www.dr-lex.be/info-stuff/volumecontrols.html
+    this.click_volume = Math.exp(6.908 * linear_volume)/1000;
   }
 
   // Only for debugging
@@ -218,7 +227,7 @@ class Player extends AudioWorkletProcessor {
 
     var sound_level = 0.0;
     if (this.synthetic_source_counter % Math.round(sampleRate * interval / FRAME_SIZE) == 0) {
-      sound_level = 0.1;
+      sound_level = this.click_volume;
     }
 
     // This is probably not very kosher...
@@ -296,7 +305,7 @@ class Player extends AudioWorkletProcessor {
       this.frames_since_last_beat++;
     }
     for (var k = 0; k < output.length; k++) {
-      output[k] = is_beat ? 0.1 : 0;
+      output[k] = is_beat ? this.click_volume : 0;
     }
 
     var now = Date.now();

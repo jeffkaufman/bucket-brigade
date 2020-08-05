@@ -135,6 +135,7 @@ var audioCtx;
 var start_button = document.getElementById('startButton');
 var stop_button = document.getElementById('stopButton');
 var estimate_latency_button = document.getElementById('estimateLatencyButton');
+var click_volume_slider = document.getElementById('clickVolumeSlider');
 var loopback_mode_select = document.getElementById('loopbackMode');
 var server_path_text = document.getElementById('serverPath');
 var audio_offset_text = document.getElementById('audioOffset');
@@ -155,6 +156,7 @@ var running = false;
 function set_controls(is_running) {
   start_button.disabled = is_running;
   estimate_latency_button.disabled = !is_running;
+  click_volume_slider.disabled = !is_running;
   stop_button.disabled = !is_running;
   loopback_mode_select.disabled = is_running;
   in_select.disabled = is_running;
@@ -169,9 +171,25 @@ async function initialize() {
   await enumerate_devices();
   set_controls(running);
 
+  var saved_local_latency = window.localStorage.getItem("local_latency");
+  if (saved_local_latency) {
+    saved_local_latency = parseInt(saved_local_latency, 10);
+    if (saved_local_latency > 0 && saved_local_latency < 500) {
+      latency_compensation_text.value = saved_local_latency;
+    }
+  }
+
   if (document.location.hostname == "localhost") {
     // Better default
     server_path_text.value = "http://localhost:8081/"
+  }
+
+  var hash = window.location.hash;
+  if (hash && hash.length > 1) {
+    var audio_offset = parseInt(hash.substr(1), 10);
+    if (audio_offset >= 0 && audio_offset <= 60) {
+      audio_offset_text.value = audio_offset;
+    }
   }
 }
 
@@ -320,6 +338,13 @@ function estimate_latency_toggle() {
   estimate_latency_button.innerText = (estimate_latency_mode?"Stop":"Start") + " latency estimation";
 }
 
+function click_volume_change() {
+  playerNode.port.postMessage({
+    "type": "click_volume_change",
+    "value": click_volume_slider.value
+  });
+}
+
 async function start() {
   running = true;
   set_controls(running);
@@ -357,6 +382,7 @@ async function start() {
 
   // Send this before we set audio params, which declares us to be ready for audio
   send_local_latency();
+  click_volume_change();
   var audio_params = {
     type: "audio_params",
     synthetic_source: synthetic_audio_source,
@@ -372,8 +398,13 @@ async function start() {
 }
 
 function send_local_latency() {
+  var local_latency_ms = parseFloat(latency_compensation_text.value);
+  if (local_latency_ms > 0) {
+    window.localStorage.setItem("local_latency", Math.round(local_latency_ms));
+  }
+
   // Convert from ms to samples.
-  var local_latency = Math.round(parseFloat(latency_compensation_text.value) * sample_rate / 1000);
+  var local_latency = Math.round(local_latency_ms * sample_rate / 1000);
 
   if (synthetic_audio_source !== null) {
     local_latency = 0;
@@ -626,6 +657,7 @@ latency_compensation_apply_button.addEventListener("click", send_local_latency);
 start_button.addEventListener("click", start);
 stop_button.addEventListener("click", stop);
 estimate_latency_button.addEventListener("click", estimate_latency_toggle);
+click_volume_slider.addEventListener("change", click_volume_change);
 
 log_level_select.addEventListener("change", () => {
   lib.set_log_level(parseInt(log_level_select.value));
