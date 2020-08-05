@@ -278,7 +278,7 @@ var override_gain = 1.0;
 var synthetic_audio_source;
 var synthetic_audio_sink;
 var synthetic_click_interval;
-var sample_rate = 44100;  // Firefox may get upset if we use a weird value here?
+var sample_rate = 11025;  // Firefox may get upset if we use a weird value here?
 
 async function query_server_clock() {
   if (loopback_mode == "main") {
