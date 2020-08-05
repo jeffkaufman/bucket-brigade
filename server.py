@@ -31,7 +31,7 @@ first_client_total_samples = None
 first_client_value = None
 
 QUEUE_SECONDS = 60
-SAMPLE_RATE = 44100
+SAMPLE_RATE = 11025
 # Force rounding to multiple of FRAME_SIZE
 queue = [0] * (QUEUE_SECONDS * SAMPLE_RATE // FRAME_SIZE * FRAME_SIZE)
 
