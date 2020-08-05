@@ -358,6 +358,7 @@ async function start() {
 
   var AudioContext = window.AudioContext || window.webkitAudioContext;
   audioCtx = new AudioContext({ sampleRate: sample_rate });
+  lib.log(LOG_DEBUG, "Audio Context:", audioCtx);
   debug_check_sample_rate(audioCtx.sampleRate);
 
   loopback_mode = loopback_mode_select.value;
@@ -394,7 +395,12 @@ async function start() {
 
   playerNode.port.onmessage = handle_message;
   micNode.connect(playerNode);
+
+  // This may not work in Firefox.
   playerNode.connect(spkrNode);
+
+  // To use the default output device, which should be supported on all browsers, instead use:
+  // playerNode.connect(audioCtx.destination);
 }
 
 function send_local_latency() {
