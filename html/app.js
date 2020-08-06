@@ -38,19 +38,24 @@ async function force_permission_prompt() {
 }
 
 async function wait_for_mic_permissions() {
-  var perm_status = await navigator.permissions.query({name: "microphone"});
-  if (perm_status.state == "granted" || perm_status.state == "denied") {
+  try {
+    var perm_status = await navigator.permissions.query({name: "microphone"});
+    if (perm_status.state == "granted" || perm_status.state == "denied") {
+      return;
+    }
+  } catch {
+    await force_permission_prompt();
     return;
-  } else {
-    force_permission_prompt();
-    return new Promise((resolve, reject) => {
-      perm_status.onchange = (e) => {
-        if (e.target.state == "granted" || e.target.state == "denied") {
-          resolve();
-        }
-      }
-    });
   }
+
+  force_permission_prompt();
+  return new Promise((resolve, reject) => {
+    perm_status.onchange = (e) => {
+      if (e.target.state == "granted" || e.target.state == "denied") {
+        resolve();
+      }
+    }
+  });
 }
 
 var in_select = document.getElementById('inSelect');
@@ -129,7 +134,9 @@ var audioCtx;
 
 var start_button = document.getElementById('startButton');
 var stop_button = document.getElementById('stopButton');
+var mute_button = document.getElementById('muteButton');
 var estimate_latency_button = document.getElementById('estimateLatencyButton');
+var click_volume_slider = document.getElementById('clickVolumeSlider');
 var loopback_mode_select = document.getElementById('loopbackMode');
 var server_path_text = document.getElementById('serverPath');
 var audio_offset_text = document.getElementById('audioOffset');
@@ -150,8 +157,10 @@ var alarms = {};
 
 function set_controls(is_running) {
   start_button.disabled = is_running;
-  estimate_latency_button.disabled = is_running;
+  estimate_latency_button.disabled = !is_running;
+  click_volume_slider.disabled = !is_running;
   stop_button.disabled = !is_running;
+  mute_button.disabled = !is_running;
   loopback_mode_select.disabled = is_running;
   in_select.disabled = is_running;
   click_bpm.disabled = is_running;
@@ -165,9 +174,25 @@ async function initialize() {
   await enumerate_devices();
   set_controls(running);
 
+  var saved_local_latency = window.localStorage.getItem("local_latency");
+  if (saved_local_latency) {
+    saved_local_latency = parseInt(saved_local_latency, 10);
+    if (saved_local_latency > 0 && saved_local_latency < 500) {
+      latency_compensation_text.value = saved_local_latency;
+    }
+  }
+
   if (document.location.hostname == "localhost") {
     // Better default
     server_path_text.value = "http://localhost:8081/"
+  }
+
+  var hash = window.location.hash;
+  if (hash && hash.length > 1) {
+    var audio_offset = parseInt(hash.substr(1), 10);
+    if (audio_offset >= 0 && audio_offset <= 60) {
+      audio_offset_text.value = audio_offset;
+    }
   }
 }
 
@@ -227,7 +252,7 @@ async function configure_input_node(audioCtx) {
     audio: {
       echoCancellation: false,
       noiseSuppression: false,
-      autoGainControl: false,
+      autoGainControl: true,
       deviceId: { exact: deviceId }
     }
   });
@@ -274,35 +299,7 @@ var override_gain = 1.0;
 var synthetic_audio_source;
 var synthetic_audio_sink;
 var synthetic_click_interval;
-var sample_rate = 11025;
-
-async function estimate_latency() {
-  running = true;
-  set_controls(running);
-
-  var AudioContext = window.AudioContext || window.webkitAudioContext;
-  audioCtx = new AudioContext({ sampleRate: sample_rate });
-  debug_check_sample_rate(audioCtx.sampleRate);
-  var micNode = await configure_input_node(audioCtx);
-  var spkrNode = configure_output_node(audioCtx);
-  var micNode = new MediaStreamAudioSourceNode(audioCtx, { mediaStream: micStream });
-  await audioCtx.audioWorklet.addModule('latency-estimator.js');
-  var playerNode = new AudioWorkletNode(audioCtx, 'player');
-  playerNode.port.onmessage = process_latency_estimate;
-  micNode.connect(playerNode)
-  playerNode.connect(spkrNode);
-}
-
-function process_latency_estimate(event) {
-  var msg = event.data;
-  if (msg.type != "latency_estimate") {
-    lib.log(LOG_ERROR, "Unknown message:", msg);
-    return;
-  }
-
-  latency_compensation_text.value = msg.latency;
-  latency_compensation_label.innerText = "(Median of " + msg.samples + " samples.)"
-}
+var sample_rate = 11025;  // Firefox may get upset if we use a weird value here?
 
 async function query_server_clock() {
   if (loopback_mode == "main") {
@@ -333,6 +330,34 @@ async function query_server_clock() {
   }
 }
 
+var estimate_latency_mode = false;
+estimate_latency_button.value = "Start latency estimation";
+function estimate_latency_toggle() {
+  estimate_latency_mode = !estimate_latency_mode;
+  playerNode.port.postMessage({
+    "type": "latency_estimation_mode",
+    "enabled": estimate_latency_mode
+  });
+  estimate_latency_button.innerText = (estimate_latency_mode?"Stop":"Start") + " latency estimation";
+}
+
+function click_volume_change() {
+  playerNode.port.postMessage({
+    "type": "click_volume_change",
+    "value": click_volume_slider.value
+  });
+}
+
+var muted = false;
+function toggle_mute() {
+  muted = !muted;
+  mute_button.innerText = muted ? "Unmute" : "Mute";
+  playerNode.port.postMessage({
+    "type": "mute_mode",
+    "enabled": muted
+  });
+}
+
 async function start() {
   running = true;
   set_controls(running);
@@ -346,6 +371,7 @@ async function start() {
 
   var AudioContext = window.AudioContext || window.webkitAudioContext;
   audioCtx = new AudioContext({ sampleRate: sample_rate });
+  lib.log(LOG_DEBUG, "Audio Context:", audioCtx);
   debug_check_sample_rate(audioCtx.sampleRate);
 
   loopback_mode = loopback_mode_select.value;
@@ -370,9 +396,9 @@ async function start() {
 
   // Send this before we set audio params, which declares us to be ready for audio
   send_local_latency();
+  click_volume_change();
   var audio_params = {
     type: "audio_params",
-    sample_rate: sample_rate,
     synthetic_source: synthetic_audio_source,
     click_interval: synthetic_click_interval,
     synthetic_sink: synthetic_audio_sink,
@@ -382,16 +408,26 @@ async function start() {
 
   playerNode.port.onmessage = handle_message;
   micNode.connect(playerNode);
+
+  // This may not work in Firefox.
   playerNode.connect(spkrNode);
+
   if (document.lyricsStartHook) {
       document.lyricsStartHook();
   }
 
+  // To use the default output device, which should be supported on all browsers, instead use:
+  // playerNode.connect(audioCtx.destination);
 }
 
 function send_local_latency() {
+  var local_latency_ms = parseFloat(latency_compensation_text.value);
+  if (local_latency_ms > 0) {
+    window.localStorage.setItem("local_latency", Math.round(local_latency_ms));
+  }
+
   // Convert from ms to samples.
-  var local_latency = Math.round(parseFloat(latency_compensation_text.value) * sample_rate / 1000);
+  var local_latency = Math.round(local_latency_ms * sample_rate / 1000);
 
   if (synthetic_audio_source !== null) {
     local_latency = 0;
@@ -439,6 +475,10 @@ function handle_message(event) {
     lib.log(LOG_ERROR, "Exception thrown in audioworklet:", msg.exception);
     stop();
     return;
+  } else if (msg.type == "latency_estimate") {
+    latency_compensation_text.value = msg.latency;
+    latency_compensation_label.innerText = "(Median of " + msg.samples + " samples.)"
+    send_local_latency();
   } else if (msg.type == "alarm") {
     if (msg.time in alarms) alarms[msg.time]();
     return;
@@ -627,7 +667,7 @@ function handle_xhr_result(xhr) {
       ctx.fillRect(Math.round((metadata["client_read_clock"] - play_samples.length) / 128) % queue_size, 0, 1 / horz_mult, 100);
       ctx.fillStyle = 'rgb(0, 0, 255)';
       ctx.fillRect(Math.round(metadata["client_write_clock"] / 128) % queue_size, 0, 1 / horz_mult, 100);
-        ctx.fillRect(Math.round((metadata["client_write_clock"] - play_samples.length) / 128) % queue_size, 0, 1 / horz_mult, 100);
+      ctx.fillRect(Math.round((metadata["client_write_clock"] - play_samples.length) / 128) % queue_size, 0, 1 / horz_mult, 100);
     });
   } else {
     lib.log(LOG_ERROR, "XHR failed w/ ID:", xhr.debug_id, "stopping:", xhr, " -- still in flight:", --xhrs_inflight);
@@ -659,7 +699,9 @@ async function stop() {
 latency_compensation_apply_button.addEventListener("click", send_local_latency);
 start_button.addEventListener("click", start);
 stop_button.addEventListener("click", stop);
-estimate_latency_button.addEventListener("click", estimate_latency);
+mute_button.addEventListener("click", toggle_mute);
+estimate_latency_button.addEventListener("click", estimate_latency_toggle);
+click_volume_slider.addEventListener("change", click_volume_change);
 
 log_level_select.addEventListener("change", () => {
   lib.set_log_level(parseInt(log_level_select.value));

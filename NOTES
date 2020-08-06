@@ -47,6 +47,18 @@ Debugging notes 2020-07-26:
 
 * NOTE: test and fix in firefox
 
+* Perhaps we can get audiocontext latency more stable if we request a specific value (perhaps we can measure and then request higher?)
+
+* make calibration user interface nicer and easier to use -- guide people through volume settings, max out our click volume but warn them not to hurt their ears, see if automatic works, then suggest manual. Tell them when we think it's done.
+  * allow calibrating any time, whether or not connected to server. allow stopping
+    and starting at any time without destroying audio context.
+  * ideally, allow changing server offset and such without reconnecting
+* getting everyone set up with offsets and so forth is really obnoxious, and then
+  having to do the jump-to-end thing or it otherwise being hard to hear what we did
+  * it would be good to be able to 'admin' configure server settings like short wrapping, and clearing on/off.
+  * would be nice to be able to admin-force people to offsets (this requires being
+    able to change offsets dynamically at all)
+
 Time constants:
 * Audioworklet "time quantum": 128 samples @ 44,100Hz ~= 3ms
 * Our send buffer: SAMPLE_BATCH_SIZE * 128 samples ~= 290ms
