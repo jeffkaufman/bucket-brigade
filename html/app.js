@@ -146,6 +146,7 @@ var audio_graph_canvas = document.getElementById('audioGraph');
 var client_total_time = document.getElementById('clientTotalTime');
 var client_read_slippage = document.getElementById('clientReadSlippage');
 var running = false;
+var alarms = {};
 
 function set_controls(is_running) {
   start_button.disabled = is_running;
@@ -382,6 +383,10 @@ async function start() {
   playerNode.port.onmessage = handle_message;
   micNode.connect(playerNode);
   playerNode.connect(spkrNode);
+  if (document.lyricsStartHook) {
+      document.lyricsStartHook();
+  }
+
 }
 
 function send_local_latency() {
@@ -433,6 +438,9 @@ function handle_message(event) {
   if (msg.type == "exception") {
     lib.log(LOG_ERROR, "Exception thrown in audioworklet:", msg.exception);
     stop();
+    return;
+  } else if (msg.type == "alarm") {
+    if (msg.time in alarms) alarms[msg.time]();
     return;
   } else if (msg.type != "samples_out") {
     lib.log(LOG_ERROR, "Got message of unknown type:", msg);
@@ -530,6 +538,10 @@ function handle_message(event) {
       lib.log(LOG_SPAM, "Sending XHR w/ ID:", xhr.debug_id, "already in flight:", xhrs_inflight++, "; data size:", outdata.length);
       xhr.open("POST", target_url, true);
       xhr.setRequestHeader("Content-Type", "application/octet-stream");
+      if (document.lyricsSendHook) {
+        let lyric_data = document.lyricsSendHook(msg.clock, sample_rate) || '';
+        xhr.setRequestHeader("X-Lyric-Data", lyric_data);
+      }
       xhr.responseType = "arraybuffer";
       xhr.send(outdata);
       lib.log(LOG_SPAM, "... XHR sent.");
@@ -582,6 +594,16 @@ function handle_xhr_result(xhr) {
       client_total_time.value = (metadata["client_read_clock"] - metadata["client_write_clock"] + play_samples.length) / sample_rate;
       client_read_slippage.value = (metadata["server_clock"] - metadata["client_read_clock"] - audio_offset) / sample_rate;
 
+      if (document.lyricsRecHook) {
+        for (let ev of metadata["lyrics"]) {  
+          alarms[ev["t"]] = document.lyricsRecHook.bind(null, ev["lid"]);
+          playerNode.port.postMessage({
+            type: "set_alarm",
+            time: ev["t"]
+          });
+        }
+      }
+        
       // Don't touch the DOM unless we have to
       if (audio_graph_canvas.width != audio_graph_canvas.clientWidth) {
         audio_graph_canvas.width = audio_graph_canvas.clientWidth;
@@ -629,6 +651,9 @@ async function stop() {
   lib.log(LOG_INFO, "...closed.");
 
   set_controls(running);
+  if (document.lyricsStopHook) {
+      document.lyricsStopHook();
+  }
 }
 
 latency_compensation_apply_button.addEventListener("click", send_local_latency);

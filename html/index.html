@@ -1,6 +1,14 @@
 <html>
-<title>"Bucket Brigade" Audio Demo</title>
+<link rel=stylesheet href=lyrics.css>
+  <title>"Bucket Brigade" Audio Demo</title>
 <h1>"Bucket Brigade" Audio Demo</h1>
+
+<div id="lyrics">
+  <div id="lyricHolder"></div>
+  <a id=lyricButton>Tap on Downbeat</a>
+  <div id="lyricDbg"></div>
+</div>
+
 <h3>Settings:</h3>
   Input device:
   <select id=inSelect disabled=true>
@@ -76,4 +84,5 @@
 </div>
 
 <script type="module" src="./app.js"></script>
+<script type="module" src="./lyrics.js"></script>
 </html>
