@@ -11,16 +11,12 @@ body {
   margin: 1em;
   padding: 1em;
 }
+input[type=text] {
+  width: 3em;
+}
 </style>
 
 <h1>"Bucket Brigade" Audio Demo</h1>
-
-<div id="lyrics">
-  <div id="lyricHolder"></div>
-  <a id=lyricButton>Tap on Downbeat</a>
-  <div id="lyricDbg"></div>
-</div>
-
 <div class=warning>
 
 This is a prototype, and there is only one active instance. Please
@@ -29,6 +25,32 @@ Glenn. If you're a programmer, I would recommend opening up devtools
 so you can see if there are any interesting console messages.
 
 </div>
+
+<h3>Lyrics</h3>
+<div id="lyricHolder">(Will show up when you start)</div>
+<a id=lyricButton>Tap on Downbeat</a>
+<div id="lyricDbg"></div>
+
+<h3>Controls</h3>
+
+Audio offset (seconds):
+<input type=text id=audioOffset value="0"><br>
+
+<button id=startButton disabled=true>Start</button>
+<button id=estimateLatencyButton disabled=true>Run latency
+estimation</button>
+<button id=stopButton
+        disabled=true>Stop</button> <br>
+
+Client latency compensation (ms):
+<input type=text id=latencyCompensationText value="0">
+<span id=latencyCompensationLabel></span>
+<button id=latencyCompensationApply>Set</button> <br>
+
+Click volume: <input id=clickVolumeSlider type=range min=0 max=100
+                     value=60><br>
+
+<button id=muteButton disabled=true>Mute</button>
 
 <h3>Instructions</h3>
 
@@ -53,16 +75,13 @@ tune this so delays can be much smaller.
 
 <p>
 
-Audio offset (seconds):
-<input type=text id=audioOffset value="0">
 
 <p>
 
 Once everyone has an audio offset dialed in, if you're using a video
 call everyone should mute yourselves and switch to using chat.  Press
-<button id=startButton disabled=true>Start</button> and then <button
-id=estimateLatencyButton disabled=true>Run latency
-estimation</button>.  You should hear some clicks, once per second.
+the "start" button and then the "run latency estimation" button.  You
+should hear some clicks, once per second.
 
 <p>
 
@@ -82,10 +101,6 @@ of N samples" for progressively larger N:
 
 <p>
 
-Client latency compensation (ms):
-<input type=text id=latencyCompensationText value="0">
-<span id=latencyCompensationLabel></span>
-<button id=latencyCompensationApply>Set</button>
 
 <p>
 
@@ -94,8 +109,6 @@ volume:
 
 <p>
 
-Click volume: <input id=clickVolumeSlider type=range min=0 max=100
-value=60>
 
 <p>
 
@@ -122,10 +135,8 @@ and have everyone else sing along.
 
 <p>
 
-To stop the demo, press <button id=stopButton
-disabled=true>Stop</button>.
+To stop the demo, press the Stop button.
 
->>>>>>> f9eef24bee47288cc7bc5aa955312a741fefe141
 <h3>Settings:</h3>
   Input device:
   <select id=inSelect disabled=true>
@@ -139,11 +150,8 @@ disabled=true>Stop</button>.
   </select>
 <br>
 <br>
-<h3>Controls:</h3>
 
-<button id=muteButton disabled=true>Mute</button>
-
-<br>
+<h3>Debug info:</h3>
 
 <button type="button" data-otherlabel="Close debug settings" class="collapse">Open debug settings</button>
 <div style="display:none">
@@ -161,7 +169,7 @@ disabled=true>Stop</button>.
     Console log level:
     <select id=logLevel></select>
 </div>
-<h3>Debug info:</h3>
+
   Sample rate:
   <input type=text id=sampleRate value="(not available yet)" disabled>
 <br>

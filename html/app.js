@@ -413,7 +413,16 @@ async function start() {
   playerNode.connect(spkrNode);
 
   if (document.lyricsStartHook) {
-      document.lyricsStartHook();
+    if (audio_offset == 0) {
+      let target_url = server_path + "reset_lyrics";
+      lib.log(LOG_INFO, ' ########### target_url=',target_url);
+      var xhr = new XMLHttpRequest();
+      xhr.open("POST", target_url, true);
+      xhr.send();
+    } else {
+      lib.log(LOG_INFO, ' ########### audio_offest=',audio_offset);
+    }
+    document.lyricsStartHook();
   }
 
   // To use the default output device, which should be supported on all browsers, instead use:

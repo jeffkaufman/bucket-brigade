@@ -93,6 +93,12 @@ class OurHandler(BaseHTTPRequestHandler):
 
         content_length = int(self.headers["Content-Length"])
         parsed_url = urllib.parse.urlparse(self.path)
+
+        if parsed_url.path == "/reset_lyrics":
+            lyrics.clear()
+            self.send_response(204)
+            return
+
         query_params = {}
         if parsed_url.query:
             query_params = urllib.parse.parse_qs(parsed_url.query, strict_parsing=True)
