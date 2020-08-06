@@ -6,7 +6,7 @@ SAMPLE_RATE=11025
 
 def prepare():
   with open("/tmp/stress.empty", "w") as outf:
-    for i in range(192000):
+    for i in range(19200):
       outf.write('\0')
 
 def send_request():
