@@ -47,6 +47,7 @@ class ClockedRingBuffer {
 
     this.port = port;
 
+    this.read_callbacks = {};
     // For debugging, mostly
     this.buffered_data = 0;
     this.last_write_clock = null;
@@ -141,6 +142,11 @@ class ClockedRingBuffer {
     this.buf[this.real_offset(this.read_clock)] = NaN;  // Mostly for debugging
     this.read_clock++;
     this.buffered_data--;
+    if (this.read_clock in this.read_callbacks) {
+      lib.log(LOG_INFO, "Firing callback at ", this.read_clock);
+      this.read_callbacks[this.read_clock]();
+      delete this.read_callbacks[this.read_clock];
+    }
     return val;
   }
 
@@ -386,7 +392,7 @@ class Player extends AudioWorkletProcessor {
       };
       this.clock_reference = new ClientClockReference({ sample_rate: sampleRate });
       this.local_latency = 150;  // rough initial guess; XXX pretty sure this is wrong units
-      this.click_volume = 0;  
+      this.click_volume = 0;
     })
   }
 
@@ -467,6 +473,20 @@ class Player extends AudioWorkletProcessor {
       return;
     } else if (msg.type == "click_volume_change") {
       this.set_click_volume(msg.value/100);
+      return;
+    } else if (msg.type == "request_cur_clock") {
+      this.port.postMessage({
+        type: "cur_clock",
+        clock: this.play_buffer.read_clock
+      });
+      return;
+    } else if (msg.type == "set_alarm") {
+      let cb = ()=>{ this.port.postMessage({type:"alarm",time:msg.time }) };
+      if (msg.time > this.play_buffer.read_clock) {
+        this.play_buffer.read_callbacks[msg.time] = cb;
+      } else {
+        cb();
+      }
       return;
     } else if (!this.ready) {
       lib.log(LOG_ERROR, "received message before ready:", msg);

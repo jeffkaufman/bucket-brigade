@@ -403,6 +403,12 @@ choose a new one. Enter a number between 6 and 115:
 <br>
 <hr>
 
+<h3>Lyrics</h3>
+<div id="lyricHolder">(Will show up when you start)</div>
+<a id=lyricButton>Tap on Downbeat</a>
+<div id="lyricDbg"></div>
+<input type=checkbox id=lyricCtrlCb name=lyricCtrlCb><label for=lyricCtrlCb>Control lyric advancement</label><br>
+
 <button type="button" data-otherlabel="Close debug settings" class="collapse">Open debug settings</button>
 <div style="display:none">
     Disable tutorial:
@@ -494,5 +500,6 @@ choose a new one. Enter a number between 6 and 115:
 </div>
 
 <script type="module" src="./app.js"></script>
+<script type="module" src="./lyrics.js"></script>
 
 </html>

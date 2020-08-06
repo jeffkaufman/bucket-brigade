@@ -1,0 +1,38 @@
+#lyrics {
+    background: #ffc;
+    margin: auto;
+}
+
+.lyrics {
+    white-space: pre-wrap;
+    color: #4aa;
+}
+
+.clicked {
+    color: black;
+    text-shadow: 0 0 1px yellow;
+}
+
+.heard {
+    color: red;
+    text-shadow: 0 0 1px red;
+}
+
+#lyriccontrols {
+    display: none;
+}
+
+#lyricButton {
+    width: 30vw;
+    background: #aaa;
+    text-decoration: none;
+    box-shadow: 2px 2px 1px #666;
+    display: none;
+    text-align: center;
+    padding: 9vw 0;
+    margin: 4px auto;
+}
+
+#lyrics textarea {
+    font-size: 7pt;
+}
