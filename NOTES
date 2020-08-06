@@ -59,6 +59,11 @@ Debugging notes 2020-07-26:
   * would be nice to be able to admin-force people to offsets (this requires being
     able to change offsets dynamically at all)
 
+* Notes from 2020-08-05 testing:
+  * We really need a way to test audio I/O at the beginning before doing ANYTHING else, as several people had problems
+  * (Debian Chrome, the default device had weird behavior, it displayed as "default" with no description and for at least one person it didn't seem to work for input at first, and then changing the input selection possibly caused output to stop working)
+  * Background noise remains annoying
+
 Time constants:
 * Audioworklet "time quantum": 128 samples @ 44,100Hz ~= 3ms
 * Our send buffer: SAMPLE_BATCH_SIZE * 128 samples ~= 290ms
