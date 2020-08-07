@@ -184,6 +184,12 @@ class Player extends AudioWorkletProcessor {
       } else if (msg.type == "click_volume_change") {
         this.set_click_volume(msg.value/100);
         return;
+      } else if (msg.type == "request_cur_clock") {
+        this.port.postMessage({
+          type: "cur_clock",
+          clock: this.play_buffer.read_clock
+        });
+        return;
       } else if (msg.type == "set_alarm") {
         let cb = ()=>{ this.port.postMessage({type:"alarm",time:msg.time }) };
         if (msg.time > this.play_buffer.read_clock) {

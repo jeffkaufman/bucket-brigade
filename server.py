@@ -35,7 +35,7 @@ SAMPLE_RATE = 11025
 # Force rounding to multiple of FRAME_SIZE
 queue = [0] * (QUEUE_SECONDS * SAMPLE_RATE // FRAME_SIZE * FRAME_SIZE)
 
-lyrics = {}
+events = {}
 
 def queue_summary():
     result = []
@@ -58,7 +58,7 @@ class OurHandler(BaseHTTPRequestHandler):
     def do_OPTIONS(self):
         self.send_response(200)
         self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Lyric-Data")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Event-Data")
         self.end_headers()
 
     def do_GET(self):
@@ -94,8 +94,8 @@ class OurHandler(BaseHTTPRequestHandler):
         content_length = int(self.headers["Content-Length"])
         parsed_url = urllib.parse.urlparse(self.path)
 
-        if parsed_url.path == "/reset_lyrics":
-            lyrics.clear()
+        if parsed_url.path == "/reset_events":
+            events.clear()
             self.send_response(204)
             return
 
@@ -119,12 +119,12 @@ class OurHandler(BaseHTTPRequestHandler):
         client_encoder = SAMPLE_PARAMS[client_encoding]["encode"]
 
         try:
-            ldh = self.headers["X-Lyric-Data"]
-            lyric_events = json.loads(ldh)
+            evh = self.headers["X-Event-Data"]
+            new_events = json.loads(evh)
         except (KeyError, json.decoder.JSONDecodeError) as e:
-            lyric_events = []
-        if type(lyric_events) != list:
-            lyric_events = []
+            new_events = []
+        if type(new_events) != list:
+            new_events = []
         
         in_data_raw = self.rfile.read(content_length)
         n_samples = len(in_data_raw) // client_sample_size
@@ -158,13 +158,8 @@ class OurHandler(BaseHTTPRequestHandler):
             #first_client_total_samples += n_samples
             for i in range(n_samples):
                 queue[(client_write_clock - n_samples + i) % len(queue)] += client_decoder(in_data[i])
-            if len(lyric_events) and lyric_events[0]["lid"]==0:
-                lyrics.clear()
-                start = lyric_events[0]["t"]
-                for d in range(1,20):
-                    lyrics[-d] = start - d*SAMPLE_RATE
-            for ev in lyric_events:
-                lyrics[ev["lid"]] = ev["t"]
+            for ev in new_events:
+                events[ev["evid"]] = ev["clock"]
 
 
         # Why subtract n_samples above and below? Because the future is to the
@@ -197,10 +192,10 @@ class OurHandler(BaseHTTPRequestHandler):
         else:
             data = struct.pack(str(n_samples) + client_encoding, *data)
 
-        lyrics_to_send = list(lyrics.items())
-        lyrics_to_send.sort(key=lambda x:x[0])
-        lyrics_to_send = [ {"lid":i[0], "t":i[1]} for i in lyrics_to_send ]
-        # TODO: chop lyric events that are too old to be relevant?
+        events_to_send = list(events.items())
+        events_to_send = [ {"evid":i[0], "clock":i[1]} for i in events_to_send ]
+        print(events_to_send)
+        # TODO: chop events that are too old to be relevant?
             
         self.send_response(200)
         self.send_header("Access-Control-Allow-Origin", "*")
@@ -215,7 +210,7 @@ class OurHandler(BaseHTTPRequestHandler):
             "queue_summary": queue_summary(),
             "queue_size": len(queue) / FRAME_SIZE,
             "kill_client": kill_client,
-            "lyrics": lyrics_to_send,
+            "events": events_to_send,
         }))
         self.send_header("Content-Length", len(data))
         self.send_header("Content-Type", "application/octet-stream")

@@ -153,7 +153,21 @@ var audio_graph_canvas = document.getElementById('audioGraph');
 var client_total_time = document.getElementById('clientTotalTime');
 var client_read_slippage = document.getElementById('clientReadSlippage');
 var running = false;
+
+export var start_hooks = [];
+export var stop_hooks = [];
+export var event_hooks = [];
+var event_data = [];
 var alarms = {};
+var alarms_fired = {};
+var cur_clock_cbs = [];
+
+export function declare_event(evid, offset) {
+  cur_clock_cbs.push( (clock)=>{ event_data.push({evid,clock:clock-(offset||0)*sample_rate}); } );
+  playerNode.port.postMessage({
+    type: "request_cur_clock"
+  });
+}
 
 function set_controls(is_running) {
   start_button.disabled = is_running;
@@ -412,21 +426,20 @@ async function start() {
   // This may not work in Firefox.
   playerNode.connect(spkrNode);
 
-  if (document.lyricsStartHook) {
-    if (audio_offset == 0) {
-      let target_url = server_path + "reset_lyrics";
-      lib.log(LOG_INFO, ' ########### target_url=',target_url);
-      var xhr = new XMLHttpRequest();
-      xhr.open("POST", target_url, true);
-      xhr.send();
-    } else {
-      lib.log(LOG_INFO, ' ########### audio_offest=',audio_offset);
-    }
-    document.lyricsStartHook();
+  alarms_fired = {};
+  for (let hook of start_hooks) {
+    hook();
   }
 
   // To use the default output device, which should be supported on all browsers, instead use:
   // playerNode.connect(audioCtx.destination);
+}
+
+export function init_events() {
+  let target_url = server_path + "reset_events";
+  let xhr = new XMLHttpRequest();
+  xhr.open("POST", target_url, true);
+  xhr.send();
 }
 
 function send_local_latency() {
@@ -489,8 +502,17 @@ function handle_message(event) {
     latency_compensation_label.innerText = "(Median of " + msg.samples + " samples.)"
     send_local_latency();
   } else if (msg.type == "alarm") {
-    if (msg.time in alarms) alarms[msg.time]();
+    if ((msg.time in alarms) && ! (msg.time in alarms_fired)) {
+      alarms[msg.time]();
+      alarms_fired[msg.time] = True;
+    }
     return;
+  } else if (msg.type == "cur_clock") {
+    for (let cb of cur_clock_cbs) {
+      cb(msg.clock);
+    }
+    cur_clock_cbs = [];
+    return
   } else if (msg.type != "samples_out") {
     lib.log(LOG_ERROR, "Got message of unknown type:", msg);
     stop();
@@ -587,10 +609,8 @@ function handle_message(event) {
       lib.log(LOG_SPAM, "Sending XHR w/ ID:", xhr.debug_id, "already in flight:", xhrs_inflight++, "; data size:", outdata.length);
       xhr.open("POST", target_url, true);
       xhr.setRequestHeader("Content-Type", "application/octet-stream");
-      if (document.lyricsSendHook) {
-        let lyric_data = document.lyricsSendHook(msg.clock, sample_rate) || '';
-        xhr.setRequestHeader("X-Lyric-Data", lyric_data);
-      }
+      xhr.setRequestHeader("X-Event-Data", JSON.stringify(event_data));
+      event_data = [];
       xhr.responseType = "arraybuffer";
       xhr.send(outdata);
       lib.log(LOG_SPAM, "... XHR sent.");
@@ -643,14 +663,13 @@ function handle_xhr_result(xhr) {
       client_total_time.value = (metadata["client_read_clock"] - metadata["client_write_clock"] + play_samples.length) / sample_rate;
       client_read_slippage.value = (metadata["server_clock"] - metadata["client_read_clock"] - audio_offset) / sample_rate;
 
-      if (document.lyricsRecHook) {
-        for (let ev of metadata["lyrics"]) {  
-          alarms[ev["t"]] = document.lyricsRecHook.bind(null, ev["lid"]);
-          playerNode.port.postMessage({
-            type: "set_alarm",
-            time: ev["t"]
-          });
-        }
+      for (let ev of metadata["events"]) {  
+        alarms[ev["clock"]] = () => event_hooks.map(f=>f(ev["evid"]));
+        lib.log(LOG_INFO, ev);  
+        playerNode.port.postMessage({
+          type: "set_alarm",
+          time: ev["clock"]
+        });
       }
         
       // Don't touch the DOM unless we have to
@@ -700,8 +719,8 @@ async function stop() {
   lib.log(LOG_INFO, "...closed.");
 
   set_controls(running);
-  if (document.lyricsStopHook) {
-      document.lyricsStopHook();
+  for (let hook of stop_hooks) {
+    hook();
   }
 }
 
