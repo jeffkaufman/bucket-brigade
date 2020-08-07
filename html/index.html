@@ -122,6 +122,8 @@ disabled=true>Stop</button>.
   <select id=inSelect disabled=true>
     <option>Loading...</option>
   </select>
+  Mic level: <canvas id=micLevelGraph width=100 height=17></canvas>
+
   <div id=clickParams>(Clicks BPM if selected: <input type=text id=clickBPM value=60>)</div>
 <br>
   Output device:
@@ -174,7 +176,7 @@ disabled=true>Stop</button>.
     <li>Blue bars: This client's writing window (where our audio was written during previous network request)
     <li>The buffer is circular (it wraps around). Other clients' windows are not visible here.
   </ul>
-  <canvas id=audioGraph style="width:100%" height=100>
+  <canvas id=audioGraph style="width:100%" height=100></canvas>
 <br>
 
 <div id="secretCrap" style="display:none">

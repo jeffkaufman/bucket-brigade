@@ -131,6 +131,8 @@ async function enumerate_devices() {
 }
 
 var audioCtx;
+var micNode;
+var spkrNode;
 
 var start_button = document.getElementById('startButton');
 var stop_button = document.getElementById('stopButton');
@@ -150,6 +152,7 @@ var peak_out_text = document.getElementById('peakOut');
 var hamilton_audio_span = document.getElementById('hamiltonAudioSpan');
 var output_audio_span = document.getElementById('outputAudioSpan');
 var audio_graph_canvas = document.getElementById('audioGraph');
+var mic_level_graph_canvas = document.getElementById('micLevelGraph');
 var client_total_time = document.getElementById('clientTotalTime');
 var client_read_slippage = document.getElementById('clientReadSlippage');
 var running = false;
@@ -161,11 +164,12 @@ function set_controls(is_running) {
   stop_button.disabled = !is_running;
   mute_button.disabled = !is_running;
   loopback_mode_select.disabled = is_running;
-  in_select.disabled = is_running;
   click_bpm.disabled = is_running;
-  out_select.disabled = is_running;
   server_path_text.disabled = is_running;
   audio_offset_text.disabled = is_running;
+
+  out_select.disabled = false;
+  in_select.disabled = false;
 }
 
 async function initialize() {
@@ -193,6 +197,11 @@ async function initialize() {
       audio_offset_text.value = audio_offset;
     }
   }
+
+  var AudioContext = window.AudioContext || window.webkitAudioContext;
+  audioCtx = new AudioContext({ sampleRate: sample_rate });
+  lib.log(LOG_DEBUG, "Audio Context:", audioCtx);
+  debug_check_sample_rate(audioCtx.sampleRate);
 }
 
 function debug_check_sample_rate(rate) {
@@ -208,7 +217,22 @@ function debug_check_sample_rate(rate) {
   }
 }
 
-async function configure_input_node(audioCtx) {
+async function configure_input_node() {
+  lib.log(LOG_DEBUG, "In configure_input_node, audio context is:", audioCtx);
+
+  // Disconnect any existing input node
+  if (micNode) {
+    micNode.disconnect();
+    micNode = undefined;
+  }
+
+  // If we don't do this, it seems like the mic will stay on even if we're no longer using the audio from it
+  if (micStream) {
+    lib.log(LOG_DEBUG, "closing mic stream");
+    close_stream(micStream);
+    micStream = undefined;
+  }
+
   synthetic_audio_source = null;
   var deviceId = in_select.value;
   if (deviceId == "NUMERIC" ||
@@ -250,19 +274,23 @@ async function configure_input_node(audioCtx) {
   micStream = await navigator.mediaDevices.getUserMedia({
     audio: {
       echoCancellation: false,
-      noiseSuppression: false,
+      noiseSuppression: true,
       autoGainControl: true,
       deviceId: { exact: deviceId }
     }
   });
 
-  return new MediaStreamAudioSourceNode(audioCtx, { mediaStream: micStream });
+  micNode = new MediaStreamAudioSourceNode(audioCtx, { mediaStream: micStream });
+  micNode.connect(playerNode);
 }
 
-function configure_output_node(audioCtx) {
+function configure_output_node() {
+  // Clear any existing output node
+  playerNode.disconnect();
+
   synthetic_audio_sink = false;
   var deviceId = out_select.value;
-  var dest = audioCtx.createMediaStreamDestination();
+  spkrNode = audioCtx.createMediaStreamDestination();
 
   if (deviceId == "NUMERIC") {
     // Leave the device empty, but signal the worklet for special handling
@@ -271,12 +299,16 @@ function configure_output_node(audioCtx) {
     // Leave the device empty
   } else {
     var audio_out = new Audio();
-    audio_out.srcObject = dest.stream;
+    audio_out.srcObject = spkrNode.stream;
     audio_out.setSinkId(deviceId);
     audio_out.play();
   }
 
-  return dest;
+  // This may not work in Firefox.
+  playerNode.connect(spkrNode);
+
+  // To use the default output device, which should be supported on all browsers, instead use:
+  // playerNode.connect(audioCtx.destination);
 }
 
 // NOTE NOTE NOTE:
@@ -368,16 +400,9 @@ async function start() {
   xhrs_inflight = 0;
   override_gain = 1.0;
 
-  var AudioContext = window.AudioContext || window.webkitAudioContext;
-  audioCtx = new AudioContext({ sampleRate: sample_rate });
-  lib.log(LOG_DEBUG, "Audio Context:", audioCtx);
-  debug_check_sample_rate(audioCtx.sampleRate);
+  // XXX formerly created audio context here
 
   loopback_mode = loopback_mode_select.value;
-
-  var micNode = await configure_input_node(audioCtx);
-  var spkrNode = configure_output_node(audioCtx);
-
   server_path = server_path_text.value;
 
   await audioCtx.audioWorklet.addModule('audio-worklet.js');
@@ -406,13 +431,10 @@ async function start() {
   playerNode.port.postMessage(audio_params);
 
   playerNode.port.onmessage = handle_message;
-  micNode.connect(playerNode);
 
-  // This may not work in Firefox.
-  playerNode.connect(spkrNode);
 
-  // To use the default output device, which should be supported on all browsers, instead use:
-  // playerNode.connect(audioCtx.destination);
+  configure_input_node();
+  configure_output_node();
 }
 
 function send_local_latency() {
@@ -462,7 +484,8 @@ function handle_message(event) {
   lib.log(LOG_VERYSPAM, "onmessage in main thread received ", msg);
 
   if (!running) {
-    lib.log(LOG_WARNING, "Got message when done running");
+    // XXX: this is no longer an error and should probably be handled better
+    lib.log_every(500, "msg_not_running", LOG_SPAM, "Got message when not running");
     return;
   }
 
@@ -480,7 +503,6 @@ function handle_message(event) {
     return;
   }
 
-  //XXX lib.log_every(10, "audioCtx", LOG_DEBUG, "audioCtx:", audioCtx);
   var mic_samples = msg.samples;
   mic_buf.push(mic_samples);
 
@@ -489,20 +511,40 @@ function handle_message(event) {
     peak_in = 0.0;
   }
 
+  requestAnimationFrame(() => {
+    var peak_frame = 0.0;
+    for (var j = 0; j < mic_samples.length; j++) {
+      var abs_val = Math.abs(mic_samples[j]);
+      if (abs_val > peak_frame) {
+        peak_frame = abs_val;
+        if (abs_val > peak_in) {
+          peak_in = abs_val;
+        }
+      }
+    }
+    peak_in_text.value = peak_in;
+
+    var mic_level_height = in_select.clientHeight;
+    if (mic_level_graph_canvas.height != mic_level_height) {
+      mic_level_graph_canvas.height = mic_level_height;
+    }
+    var ctx = mic_level_graph_canvas.getContext('2d');
+    ctx.clearRect(0, 0, 100, mic_level_height);
+    ctx.fillStyle = 'rgb(255, 0, 0)';
+    ctx.fillRect(0, 0, peak_in * 100, mic_level_height);
+    ctx.fillStyle = 'rgb(0, 255, 0)';
+    ctx.fillRect(0, 0, peak_frame * 100, mic_level_height);
+  });
+
   if (mic_buf.length == SAMPLE_BATCH_SIZE) {
     // Resampling here works automatically for now since we're copying sample-by-sample
     var outdata = new sample_encoding["client"](mic_buf.length * mic_samples.length);
     if (msg.clock !== null) {
       for (var i = 0; i < mic_buf.length; i++) {
         for (var j = 0; j < mic_buf[i].length; j++) {
-          if (Math.abs(mic_buf[i][j]) > peak_in) {
-            peak_in = Math.abs(mic_buf[i][j]);
-          }
           outdata[i * mic_buf[0].length + j] = sample_encoding["send"](mic_buf[i][j]);
         }
       }
-      // XXX: touching the DOM
-      peak_in_text.value = peak_in;
     } else {
       // Still warming up
       for (var i = 0; i < mic_buf.length; i++) {
@@ -656,18 +698,6 @@ function handle_xhr_result(xhr) {
 
 async function stop() {
   running = false;
-
-  lib.log(LOG_INFO, "Closing audio context and mic stream...");
-  if (audioCtx) {
-    await audioCtx.close();
-    audioCtx = undefined;
-  }
-  if (micStream) {
-    close_stream(micStream);
-    micStream = undefined;
-  }
-  lib.log(LOG_INFO, "...closed.");
-
   set_controls(running);
 }
 
@@ -687,6 +717,9 @@ log_level_select.addEventListener("change", () => {
     });
   }
 });
+
+in_select.addEventListener("change", configure_input_node);
+out_select.addEventListener("change", configure_output_node);
 
 var coll = document.getElementsByClassName("collapse");
 for (var i = 0; i < coll.length; i++) {
