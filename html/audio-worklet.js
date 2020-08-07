@@ -379,11 +379,6 @@ class Player extends AudioWorkletProcessor {
       return true;
     }
 
-    if (input === undefined || output === undefined) {
-      lib.log_every(500, "undefined devices", LOG_SPAM, "tried to process but missing input or output device");
-      return true;
-    }
-
     try {
       if (this.latency_measurement_mode || this.mute_mode) {
         if (this.latency_measurement_mode) {
