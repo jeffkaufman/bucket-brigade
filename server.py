@@ -4,7 +4,6 @@ import http.server
 from http.server import BaseHTTPRequestHandler
 import json
 import urllib.parse
-import struct
 import time
 import numpy as np
 
