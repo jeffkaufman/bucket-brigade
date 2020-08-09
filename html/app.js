@@ -548,7 +548,6 @@ function handle_message(event) {
       if (msg.clock !== null) {
         params.set('write_clock', msg.clock);
       }
-      params.set('encoding', sample_encoding["server"]);
       if (loopback_mode == "server") {
         params.set('loopback', true);
         lib.log(LOG_DEBUG, "looping back samples at server");

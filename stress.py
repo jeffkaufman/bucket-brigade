@@ -13,7 +13,7 @@ def send_request():
   ts = int(time.time()) * SAMPLE_RATE
   cmd = [
     'curl',
-    'https://echo.jefftk.com/api/?read_clock=%s&encoding=b' % ts,
+    'http://localhost:8081/?read_clock=%s&encoding=b' % ts,
     '-H', 'Content-Type: application/octet-stream',
     '--data-binary', "@/tmp/stress.empty",
     '--compressed',

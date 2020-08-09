@@ -10,22 +10,6 @@ import numpy as np
 
 FRAME_SIZE = 128
 
-def clamp(n, min_n, max_n):
-    return max(min(max_n, n), min_n)
-
-SAMPLE_PARAMS = {
-    "f": {
-        "size": 4,
-        "decode": lambda x: x,
-        "encode": lambda x: x,
-    },
-    "b": {
-        "size": 1,
-        "decode": lambda x: x / 127.0,
-        "encode": lambda x: int(clamp(x, -1.0, 1.0) * 127),
-    }
-}
-
 last_request_clock = None
 first_client_write_clock = None
 first_client_total_samples = None
@@ -33,9 +17,10 @@ first_client_value = None
 
 QUEUE_SECONDS = 120
 SAMPLE_RATE = 11025
-# Force rounding to multiple of FRAME_SIZE
-queue = np.array([0] * (QUEUE_SECONDS * SAMPLE_RATE // FRAME_SIZE * FRAME_SIZE))  # TODO: want 16 bit integers
 
+# Force rounding to multiple of FRAME_SIZE
+queue = np.zeros((QUEUE_SECONDS * SAMPLE_RATE // FRAME_SIZE * FRAME_SIZE),
+                 np.int16)
 
 def wrap_get(start, len_vals):
     start_in_queue = start % len(queue)
@@ -137,14 +122,9 @@ class OurHandler(BaseHTTPRequestHandler):
             self.send_response(500)
             self.end_headers()
             return
-        client_encoding = query_params.get("encoding", ["f"])[0]
-        client_sample_size = SAMPLE_PARAMS[client_encoding]["size"]
-        client_decoder = SAMPLE_PARAMS[client_encoding]["decode"]
-        client_encoder = SAMPLE_PARAMS[client_encoding]["encode"]
 
         in_data_raw = self.rfile.read(content_length)
-        n_samples = len(in_data_raw) // client_sample_size
-        in_data = struct.unpack(str(n_samples) + client_encoding, in_data_raw)
+        in_data = np.frombuffer(in_data_raw, dtype=np.int8)
 
         # Audio from clients is summed, so we need to clear the circular
         #   buffer ahead of them. The range we are clearing was "in the
@@ -161,7 +141,7 @@ class OurHandler(BaseHTTPRequestHandler):
         # Note: If we get a write that is "too far" in the past, we need to throw it away.
         if client_write_clock is None:
             pass
-        elif client_write_clock - n_samples < server_clock - len(queue):
+        elif client_write_clock - len(in_data) < server_clock - len(queue):
             # Client is too far behind and going to wrap the buffer. :-(
             kill_client = True
         else:
@@ -171,20 +151,22 @@ class OurHandler(BaseHTTPRequestHandler):
             #    first_client_total_samples = 0
             #    first_client_value = in_data[0]
             #    print("First client value is:", first_client_value)
-            #first_client_total_samples += n_samples
-            wrap_assign(client_write_clock, wrap_get(client_write_clock, n_samples) + np.array(in_data, dtype=np.int16))
+            #first_client_total_samples += len(in_data)
+            wrap_assign(client_write_clock,
+                        wrap_get(client_write_clock, len(in_data)) +
+                        np.array(in_data, dtype=np.int16))
 
-        # Why subtract n_samples above and below? Because the future is to the
+        # Why subtract len(in_data) above and below? Because the future is to the
         #   right. So when a client asks for n samples at time t, what they
         #   actually want is "the time interval ending at t", i.e. [t-n, t). Since
         #   the latest possible time they can ask for is "now", this means that
         #   the latest possible time interval they can get is "the recent past"
         #   instead of "the near future".
         # This doesn't matter to the clients if they all use the same value of
-        #   n_samples, but it matters if n_samples changes, and it matters for
+        #   len(in_data), but it matters if len(in_data) changes, and it matters for
         #   the server's zeroing.
 
-        data = wrap_get(client_read_clock, n_samples)
+        data = wrap_get(client_read_clock, len(in_data))
         data = np.minimum(data, 127)
         data = np.maximum(data, -128)
         data = np.array(data, dtype=np.int8)
