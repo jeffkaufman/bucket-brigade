@@ -6,6 +6,7 @@ import json
 import urllib.parse
 import time
 import numpy as np
+import struct
 
 FRAME_SIZE = 128
 
@@ -17,9 +18,30 @@ first_client_value = None
 QUEUE_SECONDS = 120
 SAMPLE_RATE = 11025
 
+
+def clamp(n, min_n, max_n):
+    return max(min(max_n, n), min_n)
+
+SAMPLE_PARAMS = {
+    "f": {
+        "size": 4,
+        "decode": lambda x: x,
+        "encode": lambda x: x,
+    },
+    "b": {
+        "size": 1,
+        "decode": lambda x: x / 127.0,
+        "encode": lambda x: int(clamp(x, -1.0, 1.0) * 127),
+    }
+}
+
 # Force rounding to multiple of FRAME_SIZE
-queue = np.zeros((QUEUE_SECONDS * SAMPLE_RATE // FRAME_SIZE * FRAME_SIZE),
-                 np.int16)
+mode = 0
+if mode > 0:
+    queue = np.zeros((QUEUE_SECONDS * SAMPLE_RATE // FRAME_SIZE * FRAME_SIZE),
+                     np.int16)
+else:
+    queue = [0] * (QUEUE_SECONDS * SAMPLE_RATE // FRAME_SIZE * FRAME_SIZE)
 
 def wrap_get(start, len_vals):
     start_in_queue = start % len(queue)
@@ -58,8 +80,18 @@ def queue_summary():
     zero = True
     for i in range(len(queue)//FRAME_SIZE):
         # not technically correct but close enough for debugging
-        # numpy computation doesn't short circuit so is faster than loop in worst case but often slower
-        all_zero = np.sum(queue[(FRAME_SIZE*i):(FRAME_SIZE*(i+1))]) == 0
+        # numpy computation doesn't short circuit so is faster than loop in
+        # worst case but often slower
+
+        if mode > 0:
+            all_zero = np.sum(queue[(FRAME_SIZE*i):(FRAME_SIZE*(i+1))]) == 0
+        else:
+            all_zero = True
+            for j in range(FRAME_SIZE):
+                if queue[FRAME_SIZE*i + j] != 0:
+                    all_zero = False
+                    break
+            
         if zero and (not all_zero):
             zero = False
             result.append(i)
@@ -74,6 +106,10 @@ def handle_post(in_data_raw, query_params):
     global first_client_total_samples
     global first_client_value
 
+    client_sample_size = SAMPLE_PARAMS['b']["size"]
+    client_decoder = SAMPLE_PARAMS['b']["decode"]
+    client_encoder = SAMPLE_PARAMS['b']["encode"]
+    
     # NOTE NOTE NOTE:
     # * All `clock` variables are measured in samples.
     # * All `clock` variables represent the END of an interval, NOT the
@@ -94,15 +130,23 @@ def handle_post(in_data_raw, query_params):
     else:
         raise ValueError("no client read clock")
 
-    in_data = np.frombuffer(in_data_raw, dtype=np.int8)
+    if mode > 0:
+        in_data = np.frombuffer(in_data_raw, dtype=np.int8)
+    else:
+        n_samples = len(in_data_raw) // client_sample_size
+        in_data = struct.unpack(str(n_samples) + 'b', in_data_raw)
 
     # Audio from clients is summed, so we need to clear the circular
     #   buffer ahead of them. The range we are clearing was "in the
     #   future" as of the last request, and we never touch the future,
     #   so nothing has touched it yet "this time around".
     if last_request_clock is not None:
-        zeros = np.zeros(server_clock - last_request_clock, np.int16)
-        wrap_assign(last_request_clock, zeros)
+        if mode > 0:
+            zeros = np.zeros(server_clock - last_request_clock, np.int16)
+            wrap_assign(last_request_clock, zeros)
+        else:
+            for i in range(last_request_clock, server_clock):
+                queue[i % len(queue)] = 0
 
     saved_last_request_clock = last_request_clock
     last_request_clock = server_clock
@@ -122,9 +166,14 @@ def handle_post(in_data_raw, query_params):
         #    first_client_value = in_data[0]
         #    print("First client value is:", first_client_value)
         #first_client_total_samples += len(in_data)
-        wrap_assign(client_write_clock,
-                    wrap_get(client_write_clock, len(in_data)) +
-                    np.array(in_data, dtype=np.int16))
+        if mode > 0:
+            wrap_assign(client_write_clock,
+                        wrap_get(client_write_clock, len(in_data)) +
+                        np.array(in_data, dtype=np.int16))
+        else:
+            for i in range(n_samples):
+                queue[(client_write_clock - n_samples + i) %
+                      len(queue)] += client_decoder(in_data[i])
 
     # Why subtract len(in_data) above and below? Because the future is to the
     #   right. So when a client asks for n samples at time t, what they
@@ -136,34 +185,26 @@ def handle_post(in_data_raw, query_params):
     #   len(in_data), but it matters if len(in_data) changes, and it matters for
     #   the server's zeroing.
 
-    data = wrap_get(client_read_clock, len(in_data))
-    data = np.minimum(data, 127)
-    data = np.maximum(data, -128)
-    data = np.array(data, dtype=np.int8)
-
-    # Validate the first queue worth of writes from the first client
-    """
-    if first_client_total_samples is not None and first_client_total_samples <= len(queue):
-        validation_offset = first_client_write_clock
-        for i in range(len(queue)):
-            if queue[(validation_offset + i) % len(queue)] not in (0, first_client_value + i):
-                print("Validation failed?!")
-                import code
-                code.interact(local=dict(globals(), **locals()))
-    """
-
-    if query_params.get("loopback", [None])[0] == "true":
-        data = in_data_raw
-    else:
+    if mode > 0:
+        data = wrap_get(client_read_clock, len(in_data))
+        data = np.minimum(data, 127)
+        data = np.maximum(data, -128)
+        data = np.array(data, dtype=np.int8)
         data = data.tobytes()
-
+    else:
+        data = [0] * n_samples
+        for i in range(n_samples):
+            data[i] = client_encoder(queue[(client_read_clock - n_samples + i)
+                                           % len(queue)])
+        data = struct.pack(str(n_samples) + 'b', *data)
+        
     x_audio_metadata = json.dumps({
         "server_clock": server_clock,
         "last_request_clock": saved_last_request_clock,
         "client_read_clock": client_read_clock,
         "client_write_clock": client_write_clock,
         # Both of the following use units of 128-sample frames
-        "queue_summary": queue_summary(),
+        "queue_summary": None, #queue_summary(),
         "queue_size": len(queue) / FRAME_SIZE,
         "kill_client": kill_client,
     })

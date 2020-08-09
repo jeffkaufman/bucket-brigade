@@ -12,12 +12,18 @@ def fake_request():
   })
 
 def stress():
-  while True:
+  s = []
+  n = 1000
+  for i in range(n):
     start = time.time()
     fake_request()
     end = time.time()
-
-    print("elapsed: %sms" % int((end-start)*1000))
+    s.append(((end-start)*1000))
+    print("%s: %s" % (i, s[-1]))
+  s.sort()
+  print("median: %s" % s[n // 2])
+    
+  
   
 if __name__ == "__main__":
   stress()
