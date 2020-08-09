@@ -206,5 +206,6 @@ class OurHandler(BaseHTTPRequestHandler):
 
         self.wfile.write(data)
 
-server = http.server.HTTPServer(('', 8081), OurHandler)
-server.serve_forever()
+if __name__ == "__main__":
+    server = http.server.HTTPServer(('', 8081), OurHandler)
+    server.serve_forever()
