@@ -5,38 +5,28 @@ from http.server import BaseHTTPRequestHandler
 import json
 import urllib.parse
 import struct
+import numpy as np
 import time
+import cProfile
 
 FRAME_SIZE = 128
-
-def clamp(n, min_n, max_n):
-    return max(min(max_n, n), min_n)
-
-SAMPLE_PARAMS = {
-    "f": {
-        "size": 4,
-        "decode": lambda x: x,
-        "encode": lambda x: x,
-    },
-    "b": {
-        "size": 1,
-        "decode": lambda x: x / 127.0,
-        "encode": lambda x: int(clamp(x, -1.0, 1.0) * 127),
-    }
-}
+PROFILE = cProfile.Profile()
 
 last_request_clock = None
-first_client_write_clock = None
-first_client_total_samples = None
-first_client_value = None
+
+# hardcode float32
+client_encoding = "f"
+client_sample_size = 4
+client_type = np.float32
 
 QUEUE_SECONDS = 120
 SAMPLE_RATE = 11025
 # Force rounding to multiple of FRAME_SIZE
-queue = [0] * (QUEUE_SECONDS * SAMPLE_RATE // FRAME_SIZE * FRAME_SIZE)
+queue = np.zeros(QUEUE_SECONDS * SAMPLE_RATE // FRAME_SIZE * FRAME_SIZE, client_type)
 
 def queue_summary():
     result = []
+    """
     zero = True
     for i in range(len(queue)//FRAME_SIZE):
         all_zero = True
@@ -50,7 +40,34 @@ def queue_summary():
         elif (not zero) and all_zero:
             zero = True
             result.append(i)
+    """
     return result
+
+def slice_wrap(a, off, length):
+    off %= len(a)
+
+    if length > len(a):
+        raise Exception("slice past end of array")
+
+    if off + length <= len(a):
+        return (a[off:off+length], np.zeros(0))
+    else:
+        return (a[off:], a[:off+length - len(a)])
+
+def clear_array(a, start, length):
+    view = slice_wrap(a, start, length)
+    view[0][:] = 0
+    view[1][:] = 0
+
+def copy_in(dest, dstart, src):
+    view = slice_wrap(dest, dstart, len(src))
+    view[0][:] = src[:len(view[0])]
+    view[1][:] = src[len(view[0]):]
+
+def copy_out(dest, sstart, src):
+    view = slice_wrap(src, sstart, len(dest))
+    dest[:len(view[0])] = view[0]
+    dest[len(view[0]):] = view[1]
 
 class OurHandler(BaseHTTPRequestHandler):
     def do_OPTIONS(self):
@@ -71,6 +88,9 @@ class OurHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", 0)
         self.send_header("Content-Type", "application/octet-stream")
         self.end_headers()
+
+    #def do_POST(self):
+    #    PROFILE.runcall(self.do_real_POST)
 
     def do_POST(self):
         global last_request_clock
@@ -105,43 +125,30 @@ class OurHandler(BaseHTTPRequestHandler):
             self.send_response(500)
             self.end_headers()
             return
-        client_encoding = query_params.get("encoding", ["f"])[0]
-        client_sample_size = SAMPLE_PARAMS[client_encoding]["size"]
-        client_decoder = SAMPLE_PARAMS[client_encoding]["decode"]
-        client_encoder = SAMPLE_PARAMS[client_encoding]["encode"]
 
         in_data_raw = self.rfile.read(content_length)
+        in_data = np.frombuffer(in_data_raw, dtype=client_type)
         n_samples = len(in_data_raw) // client_sample_size
-        in_data = struct.unpack(str(n_samples) + client_encoding, in_data_raw)
 
         # Audio from clients is summed, so we need to clear the circular
         #   buffer ahead of them. The range we are clearing was "in the
         #   future" as of the last request, and we never touch the future,
         #   so nothing has touched it yet "this time around".
         if last_request_clock is not None:
-            for i in range(last_request_clock, server_clock):
-                queue[i % len(queue)] = 0
+            clear_array(queue, start=server_clock, length=last_request_clock-server_clock)
 
         saved_last_request_clock = last_request_clock
         last_request_clock = server_clock
 
         kill_client = False
-        # Note: If we get a write that is "too far" in the past, we need to throw it away.
         if client_write_clock is None:
             pass
         elif client_write_clock - n_samples < server_clock - len(queue):
             # Client is too far behind and going to wrap the buffer. :-(
             kill_client = True
         else:
-            # XXX: debugging hackery
-            #if first_client_write_clock is None:
-            #    first_client_write_clock = client_write_clock
-            #    first_client_total_samples = 0
-            #    first_client_value = in_data[0]
-            #    print("First client value is:", first_client_value)
-            #first_client_total_samples += n_samples
-            for i in range(n_samples):
-                queue[(client_write_clock - n_samples + i) % len(queue)] += client_decoder(in_data[i])
+            writepos = client_write_clock - n_samples
+            copy_in(dest=queue, dstart=writepos, src=in_data)
 
         # Why subtract n_samples above and below? Because the future is to the
         #   right. So when a client asks for n samples at time t, what they
@@ -153,25 +160,13 @@ class OurHandler(BaseHTTPRequestHandler):
         #   n_samples, but it matters if n_samples changes, and it matters for
         #   the server's zeroing.
 
-        data = [0] * n_samples
-        for i in range(n_samples):
-            data[i] = client_encoder(queue[(client_read_clock - n_samples + i) % len(queue)])
-
-        # Validate the first queue worth of writes from the first client
-        """
-        if first_client_total_samples is not None and first_client_total_samples <= len(queue):
-            validation_offset = first_client_write_clock
-            for i in range(len(queue)):
-                if queue[(validation_offset + i) % len(queue)] not in (0, first_client_value + i):
-                    print("Validation failed?!")
-                    import code
-                    code.interact(local=dict(globals(), **locals()))
-        """
-
         if query_params.get("loopback", [None])[0] == "true":
-            data = in_data_raw
+            out_data = in_data_raw
         else:
-            data = struct.pack(str(n_samples) + client_encoding, *data)
+            out_data = np.zeros(n_samples, client_type)
+            readpos = client_read_clock - n_samples
+            copy_out(dest=out_data, sstart=readpos, src=queue)
+            out_data = out_data.tobytes()
 
         self.send_response(200)
         self.send_header("Access-Control-Allow-Origin", "*")
@@ -187,11 +182,18 @@ class OurHandler(BaseHTTPRequestHandler):
             "queue_size": len(queue) / FRAME_SIZE,
             "kill_client": kill_client,
         }))
-        self.send_header("Content-Length", len(data))
+        self.send_header("Content-Length", len(out_data))
         self.send_header("Content-Type", "application/octet-stream")
         self.end_headers()
 
-        self.wfile.write(data)
+        self.wfile.write(out_data)
 
 server = http.server.HTTPServer(('', 8081), OurHandler)
-server.serve_forever()
+
+try:
+    PROFILE.runcall(server.serve_forever)
+except:
+    print("shutting down...")
+    server.shutdown()
+    print("...done.")
+    PROFILE.print_stats(sort='cumtime')
