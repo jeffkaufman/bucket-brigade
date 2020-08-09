@@ -6,6 +6,7 @@ import json
 import urllib.parse
 import struct
 import time
+import numpy as np
 
 FRAME_SIZE = 128
 
@@ -33,17 +34,48 @@ first_client_value = None
 QUEUE_SECONDS = 120
 SAMPLE_RATE = 11025
 # Force rounding to multiple of FRAME_SIZE
-queue = [0] * (QUEUE_SECONDS * SAMPLE_RATE // FRAME_SIZE * FRAME_SIZE)
+queue = np.array([0] * (QUEUE_SECONDS * SAMPLE_RATE // FRAME_SIZE * FRAME_SIZE))  # TODO: want 16 bit integers
+
+
+def wrap_get(start, len_vals):
+    start_in_queue = start % len(queue)
+
+    if start_in_queue + len_vals <= len(queue):
+        return queue[start_in_queue:(start_in_queue+len_vals)]
+    else:
+        second_section_size = (start_in_queue + len_vals) % len(queue)
+        first_section_size = len_vals - second_section_size
+        assert second_section_size > 0
+        assert first_section_size > 0
+
+        return np.concatenate([
+            queue[start_in_queue:(start_in_queue+first_section_size)],
+            queue[0:second_section_size]
+            ])
+
+def wrap_assign(start, vals):
+    assert len(vals) <= len(queue)
+    start_in_queue = start % len(queue)
+
+    if start_in_queue + len(vals) <= len(queue):
+        queue[start_in_queue:(start_in_queue+len(vals))] = vals
+    else:
+        second_section_size = (start_in_queue + len(vals) )% len(queue)
+        first_section_size = len(vals) - second_section_size
+        assert second_section_size > 0
+        assert first_section_size > 0
+
+        queue[start_in_queue:(start_in_queue+first_section_size)] = vals[:first_section_size]
+        queue[0:second_section_size] = vals[first_section_size:]
+
 
 def queue_summary():
     result = []
     zero = True
     for i in range(len(queue)//FRAME_SIZE):
-        all_zero = True
-        for j in range(FRAME_SIZE):
-            if queue[FRAME_SIZE*i + j] != 0:
-                all_zero = False
-                break
+        # not technically correct but close enough for debugging
+        # numpy computation doesn't short circuit so is faster than loop in worst case but often slower
+        all_zero = np.sum(queue[(FRAME_SIZE*i):(FRAME_SIZE*(i+1))]) == 0
         if zero and (not all_zero):
             zero = False
             result.append(i)
@@ -119,8 +151,8 @@ class OurHandler(BaseHTTPRequestHandler):
         #   future" as of the last request, and we never touch the future,
         #   so nothing has touched it yet "this time around".
         if last_request_clock is not None:
-            for i in range(last_request_clock, server_clock):
-                queue[i % len(queue)] = 0
+            zeros = np.zeros(server_clock - last_request_clock, np.int16)
+            wrap_assign(last_request_clock, zeros)
 
         saved_last_request_clock = last_request_clock
         last_request_clock = server_clock
@@ -140,8 +172,7 @@ class OurHandler(BaseHTTPRequestHandler):
             #    first_client_value = in_data[0]
             #    print("First client value is:", first_client_value)
             #first_client_total_samples += n_samples
-            for i in range(n_samples):
-                queue[(client_write_clock - n_samples + i) % len(queue)] += client_decoder(in_data[i])
+            wrap_assign(client_write_clock, wrap_get(client_write_clock, n_samples) + np.array(in_data, dtype=np.int16))
 
         # Why subtract n_samples above and below? Because the future is to the
         #   right. So when a client asks for n samples at time t, what they
@@ -153,9 +184,10 @@ class OurHandler(BaseHTTPRequestHandler):
         #   n_samples, but it matters if n_samples changes, and it matters for
         #   the server's zeroing.
 
-        data = [0] * n_samples
-        for i in range(n_samples):
-            data[i] = client_encoder(queue[(client_read_clock - n_samples + i) % len(queue)])
+        data = wrap_get(client_read_clock, n_samples)
+        data = np.minimum(data, 127)
+        data = np.maximum(data, -128)
+        data = np.array(data, dtype=np.int8)
 
         # Validate the first queue worth of writes from the first client
         """
@@ -171,7 +203,7 @@ class OurHandler(BaseHTTPRequestHandler):
         if query_params.get("loopback", [None])[0] == "true":
             data = in_data_raw
         else:
-            data = struct.pack(str(n_samples) + client_encoding, *data)
+            data = data.tobytes()
 
         self.send_response(200)
         self.send_header("Access-Control-Allow-Origin", "*")
