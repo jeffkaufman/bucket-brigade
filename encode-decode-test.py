@@ -60,10 +60,10 @@ obj.setsampwidth(2)
 obj.setframerate(fs)
 
 
-for i in range(len(signal_bytes) // (opus_frame_size*channels)):
+for i in range(len(signal_bytes) // (opus_frame_size*channels*2)):
     packet_bytes_in = signal_bytes[
-        i*opus_frame_size*channels :
-        (i+1)*opus_frame_size*channels]
+        i*opus_frame_size*channels*2 :
+        (i+1)*opus_frame_size*channels*2]
     
     if skip_codec:
         decoded = packet_bytes_in
@@ -80,10 +80,6 @@ for i in range(len(signal_bytes) // (opus_frame_size*channels)):
             decoded = opuslib.api.decoder.decode(
                 dec, encoded, len(encoded), opus_frame_size, False, channels)
 
-        # for some reason, "decoded" here is twice as long as it should be:
-        # when channel==1, len(packet_bytes_in) == opus_frame_size.  But
-        # len(decoded) == opus_frame_size*2.
-            
     obj.writeframesraw(decoded)
     
 obj.close()
