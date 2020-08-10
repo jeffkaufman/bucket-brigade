@@ -1,0 +1,6 @@
+Derived from https://github.com/kazuki/opus.js-sample
+
+It was old enough that I couldn't easily get it to build, so instead I took the
+built binaries from https://kazuki.github.io/opus.js-sample/index.html
+
+I've removed the pieces that aren't needed for our demo.
