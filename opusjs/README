@@ -4,3 +4,9 @@ It was old enough that I couldn't easily get it to build, so instead I took the
 built binaries from https://kazuki.github.io/opus.js-sample/index.html
 
 I've removed the pieces that aren't needed for our demo.
+
+Run the demo:
+
+    $ cd opusjs/
+    $ python3 -m http.server 8123
+    $ visit http://localhost:8123/index.html in Chrome or Firefox
