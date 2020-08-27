@@ -245,7 +245,7 @@ start_button.addEventListener("click", ()=>{
           input_opts: { click_bpm: click_bpm.value },
           audio_offset: audio_offset_text.value,
           loopback: loopback_mode_select.value,
-          server_url: "http://localhost:8081/"
+          server_url: server_path_text.value,
         });
 });
 
