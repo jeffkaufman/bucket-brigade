@@ -115,8 +115,9 @@ class Player extends AudioWorkletProcessor {
     // State related to peak detection processing:
     // clicks
     this.click_index = 0;
+    const bpm = 105;
     this.click_frame_interval =
-      Math.round(sampleRate / FRAME_SIZE / 1); // 60 bpm
+      Math.round(sampleRate / FRAME_SIZE * 60 / bpm);
     this.click_volume = 0;
 
     // peak detection
@@ -307,8 +308,16 @@ class Player extends AudioWorkletProcessor {
     } else {
       this.frames_since_last_beat++;
     }
+
+    const freq = 1024;
+    const period = sampleRate / freq;
+
     for (var k = 0; k < output.length; k++) {
-      output[k] = is_beat ? this.click_volume : 0;
+      if (is_beat) {
+        output[k] = this.click_volume * Math.sin(Math.PI * 2 * k / period);
+      } else {
+        output[k] = 0;
+      }
     }
 
     var now = Date.now();
