@@ -54,6 +54,8 @@ def wrap_assign(start, vals):
 
 
 def queue_summary():
+    return []  # TODO: Make this more efficient or remove it
+
     result = []
     zero = True
     for i in range(len(queue)//FRAME_SIZE):
