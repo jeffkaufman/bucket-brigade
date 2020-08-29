@@ -611,6 +611,30 @@ if (isNaN(peak_out)) {
   peak_out = 0.0;
 }
 
+function update_active_users(user_summary) {
+  // Delete previous users.
+  while (window.activeUsers.firstChild) {
+    window.activeUsers.removeChild(window.activeUsers.lastChild);
+  }
+
+  for (var i = 0; i < user_summary.length; i++) {
+    const offset_s = Math.round(user_summary[i][0] / sample_rate);
+    const name = user_summary[i][1];
+    const tr = document.createElement('tr');
+
+    const td1 = document.createElement('td');
+    td1.textContent = offset_s;
+    tr.appendChild(td1);
+
+    const td2 = document.createElement('td');
+    td2.textContent = name;
+    tr.appendChild(td2);
+
+    window.activeUsers.appendChild(tr);
+  }
+}
+
+
 // Only called when readystate is 4 (done)
 function handle_xhr_result(xhr) {
   if (!running) {
@@ -637,11 +661,16 @@ function handle_xhr_result(xhr) {
       return;
     }
     samples_to_worklet(play_samples, metadata["client_read_clock"]);
+
     var queue_summary = metadata["queue_summary"];
     var queue_size = metadata["queue_size"];
+    var user_summary = metadata["user_summary"];
+
 
     // Defer touching the DOM, just to be safe.
     requestAnimationFrame(() => {
+      update_active_users(user_summary);
+
       peak_out_text.value = peak_out;
 
       client_total_time.value = (metadata["client_read_clock"] - metadata["client_write_clock"] + play_samples.length) / sample_rate;
