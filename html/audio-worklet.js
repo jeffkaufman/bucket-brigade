@@ -134,6 +134,7 @@ class Player extends AudioWorkletProcessor {
     this.click_interval_samples = 3000;
 
     this.latencies = [];
+    this.local_latency = 150;  // rough initial guess
   }
 
   handle_message(event) {
@@ -287,16 +288,19 @@ class Player extends AudioWorkletProcessor {
       }
 
       this.latencies.push(latency_ms);
-      this.latencies.sort();
-      lib.log(LOG_DEBUG,
-        "latency: " + latency_ms +
-          " (median " + this.latencies[Math.trunc(this.latencies.length/2)] + ")");
-      this.port.postMessage({
+      const msg = {
         "type": "latency_estimate",
         "samples": this.latencies.length,
-        "latency": this.latencies[Math.trunc(this.latencies.length/2)],
-      })
-
+      }
+      
+      if (this.latencies.length > 5) {
+        this.latencies.sort((a, b) => a-b);
+        msg.p40 = this.latencies[Math.round(this.latencies.length * 0.4)];
+        msg.p50 = this.latencies[Math.round(this.latencies.length * 0.5)];
+        msg.p60 = this.latencies[Math.round(this.latencies.length * 0.6)];
+      }
+      
+      this.port.postMessage(msg);
     }
   }
 

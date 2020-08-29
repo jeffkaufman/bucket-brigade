@@ -62,6 +62,9 @@ var in_select = document.getElementById('inSelect');
 var out_select = document.getElementById('outSelect');
 var click_bpm = document.getElementById('clickBPM');
 
+in_select.addEventListener("change", reset_if_running);
+out_select.addEventListener("change", reset_if_running);
+
 async function enumerate_devices() {
   navigator.mediaDevices.enumerateDevices().then((devices) => {
     // Clear existing entries
@@ -133,15 +136,12 @@ async function enumerate_devices() {
 var audioCtx;
 
 var start_button = document.getElementById('startButton');
-var reload_settings_button = document.getElementById('reloadSettingsButton');
 var mute_button = document.getElementById('muteButton');
-var estimate_latency_button = document.getElementById('estimateLatencyButton');
 var click_volume_slider = document.getElementById('clickVolumeSlider');
 var loopback_mode_select = document.getElementById('loopbackMode');
 var server_path_text = document.getElementById('serverPath');
 var audio_offset_text = document.getElementById('audioOffset');
 var web_audio_output_latency_text = document.getElementById('webAudioOutputLatency');
-var latency_compensation_text = document.getElementById('latencyCompensationText');
 var latency_compensation_label = document.getElementById('latencyCompensationLabel');
 var latency_compensation_apply_button = document.getElementById('latencyCompensationApply');
 var sample_rate_text = document.getElementById('sampleRate');
@@ -157,27 +157,18 @@ var running = false;
 function set_controls() {
   start_button.textContent = running ? "Stop" : "Start";
 
-  reload_settings_button.disabled = !running;
-  estimate_latency_button.disabled = !running;
   mute_button.disabled = !running;
   loopback_mode_select.disabled = !running;
-  in_select.disabled = running;
   click_bpm.disabled = running;
-  out_select.disabled = running;
+
+  in_select.disabled = false;
+  out_select.disabled = false;
 }
 
 async function initialize() {
   await wait_for_mic_permissions();
   await enumerate_devices();
   set_controls(running);
-
-  var saved_local_latency = window.localStorage.getItem("local_latency");
-  if (saved_local_latency) {
-    saved_local_latency = parseInt(saved_local_latency, 10);
-    if (saved_local_latency > 0 && saved_local_latency < 500) {
-      latency_compensation_text.value = saved_local_latency;
-    }
-  }
 
   if (document.location.hostname == "localhost" ||
       document.location.hostname == "www.jefftk.com") {
@@ -328,15 +319,11 @@ async function query_server_clock() {
   }
 }
 
-var estimate_latency_mode = false;
-estimate_latency_button.value = "Start latency estimation";
-function estimate_latency_toggle() {
-  estimate_latency_mode = !estimate_latency_mode;
+function set_estimate_latency_mode(mode) {
   playerNode.port.postMessage({
     "type": "latency_estimation_mode",
-    "enabled": estimate_latency_mode
+    "enabled": mode
   });
-  estimate_latency_button.innerText = (estimate_latency_mode?"Stop":"Start") + " latency estimation";
 }
 
 function click_volume_change() {
@@ -354,6 +341,19 @@ function toggle_mute() {
     "type": "mute_mode",
     "enabled": muted
   });
+}
+
+async function reset_if_running() {
+  if (running) {
+    await start_stop();
+    await start_stop();
+  }
+}
+
+async function audio_offset_change() {
+  if (running) {
+    await reload_settings();
+  }
 }
 
 async function start_stop() {
@@ -392,6 +392,10 @@ async function start() {
   // playerNode.connect(audioCtx.destination);
 
   await reload_settings();
+
+  window.clapAlong.style.display = "block";
+
+  set_estimate_latency_mode(true);
 }
 
 async function reload_settings() {
@@ -410,7 +414,6 @@ async function reload_settings() {
   read_clock = server_clock - audio_offset;
 
   // Send this before we set audio params, which declares us to be ready for audio
-  send_local_latency();
   click_volume_change();
   var audio_params = {
     type: "audio_params",
@@ -423,10 +426,7 @@ async function reload_settings() {
 }
 
 function send_local_latency() {
-  var local_latency_ms = parseFloat(latency_compensation_text.value);
-  if (local_latency_ms > 0) {
-    window.localStorage.setItem("local_latency", Math.round(local_latency_ms));
-  }
+  var local_latency_ms = parseFloat(estLatency.innerText);
 
   // Convert from ms to samples.
   var local_latency = Math.round(local_latency_ms * sample_rate / 1000);
@@ -478,9 +478,23 @@ function handle_message(event) {
     stop();
     return;
   } else if (msg.type == "latency_estimate") {
-    latency_compensation_text.value = msg.latency;
-    latency_compensation_label.innerText = "(Median of " + msg.samples + " samples.)"
-    send_local_latency();
+    window.estSamples.innerText = msg.samples;
+    if (msg.p50 !== undefined) {
+      const latency_range = msg.p60 - msg.p40;
+      window.est40to60.innerText = Math.round(latency_range) + "ms";
+      window.estLatency.innerText = Math.round(msg.p50) + "ms";
+
+      if (latency_range < msg.samples / 2) {
+        // Stop trying to estimate latency once were close enough. The
+        // more claps the person has done, the more we lower our
+        // standards for close enough, figuring that they're having
+        // trouble clapping on the beat.
+        send_local_latency();
+        window.clapAlong.style.display = "none";
+        window.runningInstructions.style.display = "block";
+        set_estimate_latency_mode(false);
+      }
+    }
   } else if (msg.type != "samples_out") {
     lib.log(LOG_ERROR, "Got message of unknown type:", msg);
     stop();
@@ -661,6 +675,17 @@ function handle_xhr_result(xhr) {
 }
 
 async function stop() {
+  window.clapAlong.style.display = "none";
+  window.runningInstructions.style.display = "none";
+
+  window.estSamples.innerText = "...";
+  window.est40to60.innerText = "...";
+  window.estLatency.innerText = "...";
+
+  if (muted) {
+    toggle_mute();
+  }
+
   lib.log(LOG_INFO, "Closing audio context and mic stream...");
   if (audioCtx) {
     await audioCtx.close();
@@ -673,12 +698,10 @@ async function stop() {
   lib.log(LOG_INFO, "...closed.");
 }
 
-latency_compensation_apply_button.addEventListener("click", send_local_latency);
 start_button.addEventListener("click", start_stop);
-reload_settings_button.addEventListener("click", reload_settings);
 mute_button.addEventListener("click", toggle_mute);
-estimate_latency_button.addEventListener("click", estimate_latency_toggle);
 click_volume_slider.addEventListener("change", click_volume_change);
+audio_offset_text.addEventListener("change", audio_offset_change);
 
 log_level_select.addEventListener("change", () => {
   lib.set_log_level(parseInt(log_level_select.value));

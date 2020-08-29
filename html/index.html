@@ -10,6 +10,29 @@ body {
   margin: 1em;
   padding: 1em;
 }
+#clapAlong {
+  display: none;
+}
+#runningInstructions {
+  display: none;
+}
+#estQuality {
+  background: #eee;
+  border-radius: 1em;
+  padding: 5em;
+  margin: 1em;
+  width: calc(100vw - 4em);
+  box-sizing: border-box;
+}
+#est40to60 {
+  font-size: 400%;
+}
+#estLatency {
+  font-size: 200%;
+}
+#startButton, #muteButton {
+  font-size: 200%;
+}
 </style>
 <h1>"Bucket Brigade" Audio Demo</h1>
 
@@ -22,125 +45,82 @@ so you can see if there are any interesting console messages.
 
 </div>
 
+Input device:
+  <select id=inSelect disabled=true>
+    <option>Loading...</option>
+  </select>
+<br>
+  Output device:
+  <select id=outSelect disabled=true>
+    <option>Loading...</option>
+  </select>
+
+<p>
+
 <button id=startButton></button>
-<button id=reloadSettingsButton disabled=true>Reload Settings</button>
-
-
-
-
-
-
-<h3>V2 Instructions</h3>
-
-This is a program (<a
-href="https://github.com/gwillen/solstice-audio-test">source code</a>)
-that allows multiple people to make music together over the
-internet. You can think of it like one person recording their voice
-onto a cassette tape, mailing it to the next person who adds their voice,
-mailing it to the next person who adds their voice, etc. Except it's
-much faster than using the post!
+<button id=muteButton disabled=true>Mute</button>
 
 <p>
 
-The audio offset controls where you are in the series of people. The
-larger your offset, the farther along you are in the chain, the more
-people will be ahead for you to hear, and the fewer people will be
-behind to hear you.  If you're with a group of people, figure out now
-who will be at which position. A good place to start is people at 0,
-10, 20, 30, 40, etc.  Numbers over 100 generally won't work because
-the server buffer isn't large enough.  Eventually, we're planning to
-tune this so delays can be much smaller.
+<div id=clapAlong>
+
+You should be hearing some clicks. Clap along, on the beat. This will
+let the system estimate your latency.  If you don't hear anything, try
+changing your output device above.  If the system is not registering
+your clamps, try to change your input device.
 
 <p>
 
-Audio offset (seconds):
-<input type=text id=audioOffset value="0">
+  <div id=estQuality>
+    <center>
+    <span id=est40to60>...</span><br>
+    variance<br>
+    <br>
 
-<p>
+    <span id=estLatency>...</span><br>
+    latency<br>
+    <br>
 
-Once everyone has an audio offset dialed in, if you're using a video
-call everyone should mute yourselves and switch to using chat.  Press
-and then <button
-id=estimateLatencyButton disabled=true>Run latency
-estimation</button>.  You should hear some clicks, once per second.
-
-<p>
-
-If you're not using headphones, the system should be able to hear the
-clicks it is producing and get a good estimate of your latency.  If
-you're using headphones, try to position the earpiece as close as
-possible to the mouthpiece:
-
-<p>
-
-<a href="https://www.jefftk.com/headphones-mic-to-earpiece-big.jpg"><img width=550 height=436 src="https://www.jefftk.com/headphones-mic-to-earpiece.jpg" srcset="https://www.jefftk.com/headphones-mic-to-earpiece-2x.jpg 2x"></a>
-
-<p>
-
-If that's working you should see "median
-of N samples" for progressively larger N:
-
-<p>
-
-Client latency compensation (ms):
-<input type=text id=latencyCompensationText value="0">
-<span id=latencyCompensationLabel></span>
-<button id=latencyCompensationApply>Set</button>
-
-<p>
-
-If it doesn't work, try turning up the click
-volume:
+    <span id=estSamples>...</span><br>
+    #claps
+    </center>
+  </div>
 
 <p>
 
 Click volume: <input id=clickVolumeSlider type=range min=0 max=100
 value=85>
 
-<p>
+</div>
 
-You can also try turning up the overall volume on your computer.
+<div id=runningInstructions>
 
-<p>
-
-If it still doesn't work, you can calibrate it manually. Each time you
-hear a click, clap your hands. This won't be as accurate, but it's
-still pretty good. Try to clap right on the click, and it should be
-able to make a good estimate for your latency.
-
-<p>
-
-Once you have a good latency estimate, scroll back up and click "Stop
-Latency Estimation".  Post in chat that you're calibrated and ready.
+You're calibrated now!  Everyone is in one big long chain, and your
+audio offset chooses where you are in that chain. If you use a smaller
+number, more people will be able to hear you, well if you use a larger
+number you will be able to hear more people.  We recommend using
+multiples of 10 seconds to space people out.  Discuss over chat to
+figure out what offsets people should use.
 
 <p>
 
-At this point the system is running, and if someone with a smaller
-audio offset than you says something, you should hear it several
-seconds later.  Try having a person at position zero saying something,
-and have everyone else sing along.
+Audio offset (seconds):
+<input type=text id=audioOffset value="0">
 
-<p>
+</div>
 
-To stop the demo, press <button id=stopButton
-disabled=true>Stop</button>.
-
-<h3>Settings:</h3>
-  Input device:
-  <select id=inSelect disabled=true>
-    <option>Loading...</option>
-  </select>
-  <div id=clickParams>(Clicks BPM if selected: <input type=text id=clickBPM value=60>)</div>
-<br>
-  Output device:
-  <select id=outSelect disabled=true>
-    <option>Loading...</option>
-  </select>
 <br>
 <br>
-<h3>Controls:</h3>
+<br>
+<br>
+<br>
+<br>
 
-<button id=muteButton disabled=true>Mute</button>
+<hr>
+
+<h3>
+
+(<a href="full-instructions.html">background</a>)
 
 <br>
 
@@ -159,6 +139,7 @@ disabled=true>Stop</button>.
   <br>
     Console log level:
     <select id=logLevel></select>
+  <div id=clickParams>(Clicks BPM if selected: <input type=text id=clickBPM value=60>)</div>
 </div>
 <h3>Debug info:</h3>
   Sample rate:
