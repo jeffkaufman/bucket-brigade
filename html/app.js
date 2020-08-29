@@ -261,7 +261,11 @@ function configure_output_node(audioCtx) {
   } else {
     var audio_out = new Audio();
     audio_out.srcObject = dest.stream;
-    audio_out.setSinkId(deviceId);
+    // Android Chromedoes not have setSinkId:
+    // https://bugs.chromium.org/p/chromium/issues/detail?id=648286
+    if (audio_out.setSinkId) {
+      audio_out.setSinkId(deviceId);
+    }
     audio_out.play();
   }
 
