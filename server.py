@@ -106,8 +106,8 @@ def handle_post(in_data_raw, query_params):
     usernames = query_params.get("username", None)
     if usernames:
         username, = usernames
-    if username:
-        update_users(username, server_clock, client_read_clock)
+        if username:
+            update_users(username, server_clock, client_read_clock)
 
     in_data = np.frombuffer(in_data_raw, dtype=np.int8)
 
