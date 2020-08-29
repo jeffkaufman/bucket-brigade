@@ -170,15 +170,6 @@ Audio offset (seconds):
   <input type=text id=clientReadSlippage value="(not available yet)" disabled>
 <br>
 <br>
-  Server audio buffer visualization:
-  <ul>
-    <li>Black bars: server's clearing window (leading bar represents "now", trailing bar is mostly meaningless except for debugging)</li>
-    <li>Green bars: This client's reading window (source of our audio during previous network request)</li>
-    <li>Blue bars: This client's writing window (where our audio was written during previous network request)
-    <li>The buffer is circular (it wraps around). Other clients' windows are not visible here.
-  </ul>
-  <canvas id=audioGraph style="width:100%" height=100>
-<br>
 
 <div id="secretCrap" style="display:none">
   <!--<span id=hamiltonAudioSpan><audio src="hamilton.mp3" preload=true></audio></span>-->

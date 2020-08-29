@@ -58,24 +58,6 @@ def wrap_assign(start, vals):
         queue[start_in_queue:(start_in_queue+first_section_size)] = vals[:first_section_size]
         queue[0:second_section_size] = vals[first_section_size:]
 
-
-def queue_summary():
-    return []  # TODO: Make this more efficient or remove it
-
-    result = []
-    zero = True
-    for i in range(len(queue)//FRAME_SIZE):
-        # not technically correct but close enough for debugging
-        # numpy computation doesn't short circuit so is faster than loop in worst case but often slower
-        all_zero = np.sum(queue[(FRAME_SIZE*i):(FRAME_SIZE*(i+1))]) == 0
-        if zero and (not all_zero):
-            zero = False
-            result.append(i)
-        elif (not zero) and all_zero:
-            zero = True
-            result.append(i)
-    return result
-
 def update_users(username, server_clock, client_read_clock):
     users[username] = (server_clock, server_clock - client_read_clock)
     clean_users(server_clock)
@@ -197,8 +179,7 @@ def handle_post(in_data_raw, query_params):
         "client_read_clock": client_read_clock,
         "client_write_clock": client_write_clock,
         "user_summary": user_summary(),
-        # Both of the following use units of 128-sample frames
-        "queue_summary": queue_summary(),
+        # Both the following uses units of 128-sample frames
         "queue_size": len(queue) / FRAME_SIZE,
         "kill_client": kill_client,
     })

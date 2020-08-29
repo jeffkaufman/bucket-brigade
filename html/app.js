@@ -149,7 +149,6 @@ var peak_in_text = document.getElementById('peakIn');
 var peak_out_text = document.getElementById('peakOut');
 var hamilton_audio_span = document.getElementById('hamiltonAudioSpan');
 var output_audio_span = document.getElementById('outputAudioSpan');
-var audio_graph_canvas = document.getElementById('audioGraph');
 var client_total_time = document.getElementById('clientTotalTime');
 var client_read_slippage = document.getElementById('clientReadSlippage');
 var running = false;
@@ -662,10 +661,8 @@ function handle_xhr_result(xhr) {
     }
     samples_to_worklet(play_samples, metadata["client_read_clock"]);
 
-    var queue_summary = metadata["queue_summary"];
     var queue_size = metadata["queue_size"];
     var user_summary = metadata["user_summary"];
-
 
     // Defer touching the DOM, just to be safe.
     requestAnimationFrame(() => {
@@ -675,31 +672,6 @@ function handle_xhr_result(xhr) {
 
       client_total_time.value = (metadata["client_read_clock"] - metadata["client_write_clock"] + play_samples.length) / sample_rate;
       client_read_slippage.value = (metadata["server_clock"] - metadata["client_read_clock"] - audio_offset) / sample_rate;
-
-      // Don't touch the DOM unless we have to
-      if (audio_graph_canvas.width != audio_graph_canvas.clientWidth) {
-        audio_graph_canvas.width = audio_graph_canvas.clientWidth;
-      }
-      var ctx = audio_graph_canvas.getContext('2d');
-      var horz_mult = audio_graph_canvas.clientWidth / queue_size;
-      ctx.setTransform(horz_mult, 0, 0, 1, 0, 0);
-      ctx.clearRect(0, 0, queue_size, 100);
-      ctx.fillStyle = 'rgb(255, 0, 0)';
-      if (queue_summary.length % 2 != 0) {
-        queue_summary.push(queue_size);
-      }
-      for (var i = 0; i < queue_summary.length; i += 2) {
-        ctx.fillRect(queue_summary[i], 0, queue_summary[i+1] - queue_summary[i], 50);
-      }
-      ctx.fillStyle = 'rgb(0, 0, 0)';
-      ctx.fillRect(Math.round(metadata["server_clock"] / 128) % queue_size, 0, 1 / horz_mult, 100);
-      ctx.fillRect(Math.round(metadata["last_request_clock"] / 128) % queue_size, 0, 1 / horz_mult, 100);
-      ctx.fillStyle = 'rgb(0, 255, 0)';
-      ctx.fillRect(Math.round(metadata["client_read_clock"] / 128) % queue_size, 0, 1 / horz_mult, 100);
-      ctx.fillRect(Math.round((metadata["client_read_clock"] - play_samples.length) / 128) % queue_size, 0, 1 / horz_mult, 100);
-      ctx.fillStyle = 'rgb(0, 0, 255)';
-      ctx.fillRect(Math.round(metadata["client_write_clock"] / 128) % queue_size, 0, 1 / horz_mult, 100);
-      ctx.fillRect(Math.round((metadata["client_write_clock"] - play_samples.length) / 128) % queue_size, 0, 1 / horz_mult, 100);
     });
   } else {
     lib.log(LOG_ERROR, "XHR failed w/ ID:", xhr.debug_id, "stopping:", xhr, " -- still in flight:", --xhrs_inflight);
