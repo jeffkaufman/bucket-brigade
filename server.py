@@ -17,9 +17,15 @@ first_client_value = None
 QUEUE_SECONDS = 120
 SAMPLE_RATE = 11025
 
+# If we have not heard from a user in N seconds, assume they are no longer
+# active.
+USER_LIFETIME_SAMPLES = SAMPLE_RATE * 5
+
 # Force rounding to multiple of FRAME_SIZE
 queue = np.zeros((QUEUE_SECONDS * SAMPLE_RATE // FRAME_SIZE * FRAME_SIZE),
                  np.int16)
+
+users = {}
 
 def wrap_get(start, len_vals):
     start_in_queue = start % len(queue)
@@ -70,6 +76,25 @@ def queue_summary():
             result.append(i)
     return result
 
+def update_users(username, server_clock, client_read_clock):
+    users[username] = (server_clock, server_clock - client_read_clock)
+    clean_users(server_clock)
+
+def clean_users(server_clock):
+    to_delete = []
+    for username, (last_heard_server_clock, _) in users.items():
+        if server_clock - last_heard_server_clock > USER_LIFETIME_SAMPLES:
+            to_delete.append(username)
+    for username in to_delete:
+        del users[username]
+
+def user_summary():
+    summary = []
+    for username, (_, delay) in users.items():
+        summary.append((delay, username))
+    summary.sort()
+    return summary
+
 def handle_post(in_data_raw, query_params):
     global last_request_clock
     global first_client_write_clock
@@ -83,8 +108,8 @@ def handle_post(in_data_raw, query_params):
     #   consistent, and trust me that it's slightly nicer this way.
 
     # Note: This will eventually create a precision problem for the JS
-    #   clients, which are using floats. Specifically, it will fail on
-    #   February 17, 5206.
+    #   clients, which are using floats. Specifically, at 44100 Hz, it will
+    #   fail on February 17, 5206.
     server_clock = int(time.time() * SAMPLE_RATE)
 
     client_write_clock = query_params.get("write_clock", None)
@@ -95,6 +120,12 @@ def handle_post(in_data_raw, query_params):
         client_read_clock = int(client_read_clock[0])
     else:
         raise ValueError("no client read clock")
+
+    usernames = query_params.get("username", None)
+    if usernames:
+        username, = usernames
+    if username:
+        update_users(username, server_clock, client_read_clock)
 
     in_data = np.frombuffer(in_data_raw, dtype=np.int8)
 
@@ -165,6 +196,7 @@ def handle_post(in_data_raw, query_params):
         "last_request_clock": saved_last_request_clock,
         "client_read_clock": client_read_clock,
         "client_write_clock": client_write_clock,
+        "user_summary": user_summary(),
         # Both of the following use units of 128-sample frames
         "queue_summary": queue_summary(),
         "queue_size": len(queue) / FRAME_SIZE,
