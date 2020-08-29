@@ -573,6 +573,11 @@ function handle_message(event) {
         params.set('loopback', true);
         lib.log(LOG_DEBUG, "looping back samples at server");
       }
+      const username = window.userName.value;
+      if (username) {
+        params.set('username', username);
+      }
+
       target_url.search = params.toString();
 
       // Arbitrary cap; browser cap is 8(?) after which they queue
