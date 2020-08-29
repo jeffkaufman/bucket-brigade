@@ -101,7 +101,8 @@ def handle_post(in_data_raw, query_params):
     #   future" as of the last request, and we never touch the future,
     #   so nothing has touched it yet "this time around".
     if last_request_clock is not None:
-        zeros = np.zeros(server_clock - last_request_clock, np.int16)
+        n_zeros = min(server_clock - last_request_clock, len(queue))
+        zeros = np.zeros(n_zeros, np.int16)
         wrap_assign(last_request_clock, zeros)
 
     saved_last_request_clock = last_request_clock
