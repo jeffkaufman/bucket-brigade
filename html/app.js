@@ -65,7 +65,6 @@ function persist(textFieldId) {
     textField.value = prevVal;
   }
 
-
   textField.addEventListener("change", () => {
     localStorage.setItem(textFieldId, textField.value);
   });
@@ -73,6 +72,15 @@ function persist(textFieldId) {
 
 persist("userName");
 persist("audioOffset");
+
+function setMainAppVisibility() {
+  if (window.userName.value) {
+    window.mainApp.style.display = "block";
+  }
+}
+
+setMainAppVisibility();
+window.userName.addEventListener("change", setMainAppVisibility);
 
 var in_select = document.getElementById('inSelect');
 var out_select = document.getElementById('outSelect');

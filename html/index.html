@@ -16,6 +16,9 @@ body {
 #runningInstructions {
   display: none;
 }
+#mainApp {
+  display: none;
+}
 #estQuality {
   background: #eee;
   border-radius: 1em;
@@ -48,8 +51,10 @@ so you can see if there are any interesting console messages.
 
 </div>
 
-Enter your name:
+Enter your name and press enter:
   <input id=userName></input>
+
+<div id=mainApp>
 
 <p>
 
@@ -170,6 +175,8 @@ Audio offset (seconds):
   <input type=text id=clientReadSlippage value="(not available yet)" disabled>
 <br>
 <br>
+
+</div>
 
 <div id="secretCrap" style="display:none">
   <!--<span id=hamiltonAudioSpan><audio src="hamilton.mp3" preload=true></audio></span>-->
