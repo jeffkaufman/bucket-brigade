@@ -121,7 +121,9 @@ def handle_post(in_data_raw, query_params):
                 if other_username != username:
                     if other_username not in chats:
                         chats[other_username] = []
-                    chats[other_username].extend(msg_chats)
+                    for msg_chat in msg_chats:
+                        chats[other_username].append((
+                            username, msg_chat))
 
     in_data = np.frombuffer(in_data_raw, dtype=np.int8)
 
