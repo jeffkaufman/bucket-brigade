@@ -39,15 +39,33 @@ body {
 #activeUsers {
   margin-left: 1em;
 }
+#chatWindow {
+  margin: 1em;
+  background: #eee;
+}
+#chatDisplay {
+  padding: 0.25em;
+  height: 15em;
+  overflow-y: scroll;
+}
+#chatPost {
+  width: 3em;
+}
+.chatName {
+  font-style: italic;
+}
+#chatEntry {
+  width: calc(100% - 3em);
+}
 </style>
 <h1>"Bucket Brigade" Audio Demo</h1>
 
 <div class=warning>
 
-This is a prototype, and there is only one active instance. Please
-don't mess around with this unless you're working with Jeff or
-Glenn. If you're a programmer, I would recommend opening up devtools
-so you can see if there are any interesting console messages.
+This is a prototype, currently only works in Chrome, and there is only
+one active instance. Please be kind! If you're a programmer, I would
+recommend opening up devtools so you can see if there are any
+interesting console messages.
 
 </div>
 
@@ -55,6 +73,13 @@ Enter your name and press enter:
   <input id=userName></input>
 
 <div id=mainApp>
+
+
+<div id=chatWindow>
+<div id=chatDisplay></div>
+<input id=chatEntry></input><button id=chatPost>Post</button>
+</div>
+
 
 <p>
 

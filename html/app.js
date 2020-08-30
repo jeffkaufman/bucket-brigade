@@ -58,6 +58,30 @@ async function wait_for_mic_permissions() {
   });
 }
 
+function receiveChatMessage(username, message) {
+  const msg = document.createElement("div");
+  const name_element = document.createElement("span");
+  name_element.className = "chatName";
+  name_element.innerText = username;
+  const msg_body_element = document.createElement("span");
+  msg_body_element.innerText = ": " + message;
+  msg.appendChild(name_element);
+  msg.appendChild(msg_body_element);
+  window.chatDisplay.appendChild(msg);
+  window.chatDisplay.scrollTop = window.chatDisplay.scrollHeight;
+}
+
+let chatsToSend = [];
+function sendChatMessage() {
+  if (!window.chatEntry.value) return;
+  receiveChatMessage(window.userName.value, window.chatEntry.value);
+  chatsToSend.push(window.chatEntry.value);
+  window.chatEntry.value = "";
+}
+
+window.chatEntry.addEventListener("change", sendChatMessage);
+window.chatPost.addEventListener("click", sendChatMessage);
+
 function persist(textFieldId) {
   const textField = document.getElementById(textFieldId);
   const prevVal = localStorage.getItem(textFieldId);
@@ -603,6 +627,10 @@ function handle_message(event) {
       const username = window.userName.value;
       if (username) {
         params.set('username', username);
+      }
+      if (chatsToSend.length) {
+        params.set('chat', JSON.stringify(chatsToSend));
+        chatsToSend = [];
       }
 
       target_url.search = params.toString();
