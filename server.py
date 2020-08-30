@@ -25,7 +25,8 @@ USER_LIFETIME_SAMPLES = SAMPLE_RATE * 5
 queue = np.zeros((QUEUE_SECONDS * SAMPLE_RATE // FRAME_SIZE * FRAME_SIZE),
                  np.int16)
 
-users = {}
+users = {}  # username -> (last_heard_server_clock, delay_samples)
+chats = {}  # username -> [chats they have not yet received]
 
 def wrap_get(start, len_vals):
     start_in_queue = start % len(queue)
@@ -69,6 +70,8 @@ def clean_users(server_clock):
             to_delete.append(username)
     for username in to_delete:
         del users[username]
+        if username in chats:
+            del chats[username]
 
 def user_summary():
     summary = []
@@ -103,11 +106,22 @@ def handle_post(in_data_raw, query_params):
     else:
         raise ValueError("no client read clock")
 
+    username = None
     usernames = query_params.get("username", None)
     if usernames:
         username, = usernames
         if username:
             update_users(username, server_clock, client_read_clock)
+
+        msg_chats = query_params.get("chats", None)
+        if msg_chats:
+            msg_chats, = chats
+            msg_chats = json.loads(msg_chats)
+            for other_username in users:
+                if other_username != username:
+                    if other_username not in chats:
+                        chats[other_username] = []
+                    chats[other_username].extend(msg_chats)
 
     in_data = np.frombuffer(in_data_raw, dtype=np.int8)
 
@@ -173,12 +187,18 @@ def handle_post(in_data_raw, query_params):
     else:
         data = data.tobytes()
 
+    user_chats = [];
+    if username and username in chats:
+        user_chats = chats[username]
+        del chats[username]
+
     x_audio_metadata = json.dumps({
         "server_clock": server_clock,
         "last_request_clock": saved_last_request_clock,
         "client_read_clock": client_read_clock,
         "client_write_clock": client_write_clock,
         "user_summary": user_summary(),
+        "chats": user_chats,
         # Both the following uses units of 128-sample frames
         "queue_size": len(queue) / FRAME_SIZE,
         "kill_client": kill_client,
