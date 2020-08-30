@@ -58,6 +58,22 @@ async function wait_for_mic_permissions() {
   });
 }
 
+function persist(textFieldId) {
+  const textField = document.getElementById(textFieldId);
+  const prevVal = localStorage.getItem(textFieldId);
+  if (prevVal !== null) {
+    textField.value = prevVal;
+  }
+
+
+  textField.addEventListener("change", () => {
+    localStorage.setItem(textFieldId, textField.value);
+  });
+}
+
+persist("userName");
+persist("audioOffset");
+
 var in_select = document.getElementById('inSelect');
 var out_select = document.getElementById('outSelect');
 var click_bpm = document.getElementById('clickBPM');
