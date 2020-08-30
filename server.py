@@ -113,9 +113,9 @@ def handle_post(in_data_raw, query_params):
         if username:
             update_users(username, server_clock, client_read_clock)
 
-        msg_chats = query_params.get("chats", None)
+        msg_chats = query_params.get("chat", None)
         if msg_chats:
-            msg_chats, = chats
+            msg_chats, = msg_chats
             msg_chats = json.loads(msg_chats)
             for other_username in users:
                 if other_username != username:
