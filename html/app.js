@@ -719,10 +719,13 @@ function handle_xhr_result(xhr) {
 
     var queue_size = metadata["queue_size"];
     var user_summary = metadata["user_summary"];
+    var chats = metadata["chats"];
 
     // Defer touching the DOM, just to be safe.
     requestAnimationFrame(() => {
       update_active_users(user_summary);
+
+      chats.forEach((msg) => receiveChatMessage(msg[0], msg[1]));
 
       peak_out_text.value = peak_out;
 
