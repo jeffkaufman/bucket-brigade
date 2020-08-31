@@ -73,6 +73,8 @@ class ClockedRingBuffer {
     }
     var val = this.buf[this.real_offset(this.read_clock)];
     if (isNaN(val)) {
+      // TODO: Seeing an underflow should make us allocate more client slack
+
       // XXX: hardcoded interval matches size of our net requests
       lib.log_every(12800, LOG_ERROR, "Buffer underflow :-( leadin_samples:", this.leadin_samples, "read_clock:", this.read_clock, "buffered_data:", this.buffered_data, "space_left:", this.space_left());
       this.read_clock++;
@@ -294,14 +296,14 @@ class Player extends AudioWorkletProcessor {
         "type": "latency_estimate",
         "samples": this.latencies.length,
       }
-      
+
       if (this.latencies.length > 5) {
         this.latencies.sort((a, b) => a-b);
         msg.p40 = this.latencies[Math.round(this.latencies.length * 0.4)];
         msg.p50 = this.latencies[Math.round(this.latencies.length * 0.5)];
         msg.p60 = this.latencies[Math.round(this.latencies.length * 0.6)];
       }
-      
+
       this.port.postMessage(msg);
     }
   }
