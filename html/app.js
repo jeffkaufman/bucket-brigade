@@ -565,7 +565,7 @@ function handle_message(event) {
 
   if (msg.type == "exception") {
     lib.log(LOG_ERROR, "Exception thrown in audioworklet:", msg.exception);
-    stop();
+    reset_settings();
     return;
   } else if (msg.type == "latency_estimate") {
     window.estSamples.innerText = msg.samples;
