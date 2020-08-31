@@ -760,6 +760,12 @@ function handle_xhr_result(xhr) {
     var chats = metadata["chats"];
     var delay_samples = metadata["delay_samples"];
 
+    if (!user_summary) {
+      console.log(metadata);
+      console.log(xhr);
+      stop();
+    }
+
     // Defer touching the DOM, just to be safe.
     requestAnimationFrame(() => {
       if (delay_samples) {
