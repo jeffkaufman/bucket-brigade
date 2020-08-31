@@ -18,10 +18,10 @@ first_client_value = None
 QUEUE_SECONDS = 120
 SAMPLE_RATE = 11025
 
-# Leave this much space between users. Ideally this would be very short, but
-# were using large enough buffers that it needs to be at least 5.? seconds,
-# probably a bit more.
-DELAY_INTERVAL = SAMPLE_RATE * 7
+# Leave this much space between users. Ideally this would be very
+# short, but it needs to be long enough to cover "client total time
+# consumed" or else people won't all hear each other.
+DELAY_INTERVAL = SAMPLE_RATE * 3
 
 # If we have not heard from a user in N seconds, assume they are no longer
 # active.
