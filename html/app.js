@@ -790,7 +790,7 @@ function handle_xhr_result(xhr) {
 function try_increase_batch_size_and_reload() {
   if (sample_batch_size < max_sample_batch_size) {
     // Try increasing the batch size and restarting.
-    sample_batch_size *= 2;
+    sample_batch_size *= 1.3;
     window.msBatchSize.value = batches_to_ms(sample_batch_size);
     reload_settings();
     return;
