@@ -71,10 +71,11 @@ def assign_delays(username_lead):
     delays[username_lead] = DELAY_INTERVAL
 
     positions = [x*DELAY_INTERVAL
-                 for x in range(2, 7)]    
+                 for x in range(2, 15)]
 
     # Randomly shuffle the remaining users, and assign them to positions. If we
     # have more users then positions, then double up.
+    # TODO: perhaps we should prefer to double up from the end?
     for i, (_, username) in enumerate(sorted(
             [(random.random(), username)
              for username in users
