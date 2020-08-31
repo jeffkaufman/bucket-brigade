@@ -21,7 +21,7 @@ SAMPLE_RATE = 11025
 # Leave this much space between users. Ideally this would be very
 # short, but it needs to be long enough to cover "client total time
 # consumed" or else people won't all hear each other.
-DELAY_INTERVAL = SAMPLE_RATE * 3
+DELAY_INTERVAL = SAMPLE_RATE * 1  # 1s
 
 # If we have not heard from a user in N seconds, assume they are no longer
 # active.
