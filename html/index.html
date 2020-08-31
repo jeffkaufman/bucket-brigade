@@ -57,6 +57,9 @@ body {
 #chatEntry {
   width: calc(100% - 3em);
 }
+#errorBox {
+  display: none;
+}
 </style>
 <h1>"Bucket Brigade" Audio Demo</h1>
 
@@ -85,6 +88,8 @@ Input device:
   </select>
 
 <p>
+
+<div class=warning id=errorBox></div>
 
 <button id=startButton></button>
 <button id=muteButton disabled=true>Mute</button>
@@ -197,6 +202,9 @@ Audio offset (seconds):
 <br>
   This client read slippage (s):
   <input type=text id=clientReadSlippage value="(not available yet)" disabled>
+<br>
+  Batch size (ms):
+  <input type=text id=msBatchSize value="(not available yet)" disabled>
 <br>
 <br>
 

@@ -22,9 +22,23 @@ LOG_LEVELS.forEach((level) => {
   log_level_select.appendChild(el);
 });
 
-const SAMPLE_BATCH_SIZE = 150;
+// We fall back exponentially until we find a good size, but we need a
+// place to start that should be reasonably fair.
+const INITIAL_MS_PER_BATCH = 30;
+// If we have fallen back so much that we are now taking this long,
+// then give up and let the user know things are broken.
+const MAX_MS_PER_BATCH = 1000;
 
 lib.log(LOG_INFO, "Starting up");
+
+function set_error(msg) {
+  window.errorBox.innerText = msg;
+  window.errorBox.style.display = msg ? "block" : "none";
+}
+
+function clear_error() {
+  set_error("");
+}
 
 function close_stream(stream) {
   stream.getTracks().forEach((track) => track.stop());
@@ -348,6 +362,19 @@ var synthetic_audio_sink;
 var synthetic_click_interval;
 var sample_rate = 11025;  // Firefox may get upset if we use a weird value here?
 
+function ms_to_batches(ms) {
+  return Math.round(sample_rate / 128 / 1000 * ms);
+}
+
+function batches_to_ms(batches) {
+  return Math.round(batches * 128 * 1000 / sample_rate);
+}
+
+// How many samples should we accumulate before sending to the server?
+// In units of 128 samples.
+var sample_batch_size = null;  // set by start()
+var max_sample_batch_size = ms_to_batches(MAX_MS_PER_BATCH);
+
 async function query_server_clock() {
   if (loopback_mode == "main") {
     // I got yer server right here!
@@ -422,6 +449,11 @@ async function start_stop() {
 }
 
 async function start() {
+  clear_error();
+
+  sample_batch_size = ms_to_batches(INITIAL_MS_PER_BATCH);
+  window.msBatchSize.value = batches_to_ms(sample_batch_size);
+
   var AudioContext = window.AudioContext || window.webkitAudioContext;
   audioCtx = new AudioContext({ sampleRate: sample_rate });
   lib.log(LOG_DEBUG, "Audio Context:", audioCtx);
@@ -568,7 +600,7 @@ function handle_message(event) {
     peak_in = 0.0;
   }
 
-  if (mic_buf.length == SAMPLE_BATCH_SIZE) {
+  if (mic_buf.length >= sample_batch_size) {
     // Resampling here works automatically for now since we're copying sample-by-sample
     var outdata = new sample_encoding["client"](mic_buf.length * mic_samples.length);
     if (msg.clock !== null) {
@@ -649,12 +681,7 @@ function handle_message(event) {
       // Arbitrary cap; browser cap is 8(?) after which they queue
       if (xhrs_inflight >= 4) {
         lib.log(LOG_WARNING, "NOT SENDING XHR w/ ID:", xhr.debug_id, " due to limit -- already in flight:", xhrs_inflight);
-        // XXX: This is a disaster probably
-        // Discard outgoing data.
-
-        // Incoming data should take care of itself -- our outgoing
-        //   request clocks are tied to the isochronous audioworklet
-        //   process() cycle.
+        try_increase_batch_size_and_reload();
         return
       }
 
@@ -754,8 +781,22 @@ function handle_xhr_result(xhr) {
     });
   } else {
     lib.log(LOG_ERROR, "XHR failed w/ ID:", xhr.debug_id, "stopping:", xhr, " -- still in flight:", --xhrs_inflight);
-    stop();
+
+    try_increase_batch_size_and_reload();
     return;
+  }
+}
+
+function try_increase_batch_size_and_reload() {
+  if (sample_batch_size < max_sample_batch_size) {
+    // Try increasing the batch size and restarting.
+    sample_batch_size *= 2;
+    window.msBatchSize.value = batches_to_ms(sample_batch_size);
+    reload_settings();
+    return;
+  } else {
+    set_error("Failed to communicate with the server at a reasonable latency");
+    stop();
   }
 }
 
