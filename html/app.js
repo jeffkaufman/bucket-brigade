@@ -82,6 +82,13 @@ function sendChatMessage() {
 window.chatEntry.addEventListener("change", sendChatMessage);
 window.chatPost.addEventListener("click", sendChatMessage);
 
+let requestedLeadPosition = false;
+function takeLeadPosition() {
+  requestedLeadPosition = true;
+}
+
+window.takeLead.addEventListener("click", takeLeadPosition);
+
 function persist(textFieldId) {
   const textField = document.getElementById(textFieldId);
   const prevVal = localStorage.getItem(textFieldId);
@@ -632,6 +639,10 @@ function handle_message(event) {
         params.set('chat', JSON.stringify(chatsToSend));
         chatsToSend = [];
       }
+      if (requestedLeadPosition) {
+        params.set('request_lead', '1');
+        requestedLeadPosition = false;
+      }
 
       target_url.search = params.toString();
 
@@ -720,9 +731,18 @@ function handle_xhr_result(xhr) {
     var queue_size = metadata["queue_size"];
     var user_summary = metadata["user_summary"];
     var chats = metadata["chats"];
+    var delay_samples = metadata["delay_samples"];
 
     // Defer touching the DOM, just to be safe.
     requestAnimationFrame(() => {
+      if (delay_samples) {
+        delay_samples = parseInt(delay_samples, 10);
+        if (delay_samples > 0) {
+          audio_offset_text.value = Math.round(delay_samples / sample_rate);
+          audio_offset_change();
+        }
+      }
+
       update_active_users(user_summary);
 
       chats.forEach((msg) => receiveChatMessage(msg[0], msg[1]));
