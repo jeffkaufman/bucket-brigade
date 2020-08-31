@@ -750,7 +750,7 @@ function handle_xhr_result(xhr) {
     lib.log(LOG_SPAM, "Got XHR response w/ ID:", xhr.debug_id, "result:", result, " -- still in flight:", --xhrs_inflight);
     if (metadata["kill_client"]) {
       lib.log(LOG_ERROR, "Received kill from server");
-      stop()
+      reload_settings();
       return;
     }
     samples_to_worklet(play_samples, metadata["client_read_clock"]);
