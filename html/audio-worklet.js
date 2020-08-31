@@ -138,7 +138,7 @@ class Player extends AudioWorkletProcessor {
   }
 
   handle_message(event) {
-    try {
+//    try {
       var msg = event.data;
       lib.log(LOG_VERYSPAM, "handle_message in audioworklet:", msg);
 
@@ -195,13 +195,13 @@ class Player extends AudioWorkletProcessor {
         this.play_buffer.write(play_samples[i], msg.clock - play_samples.length + i);
       }
       lib.log(LOG_VERYSPAM, "new play buffer:", this.play_buffer);
-    } catch (ex) {
+/*    } catch (ex) {
       this.port.postMessage({
         type: "exception",
         exception: ex
       });
       throw ex;
-    }
+    }*/
   }
 
   set_click_volume(linear_volume) {
