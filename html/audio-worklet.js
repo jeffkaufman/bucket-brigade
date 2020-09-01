@@ -1,4 +1,3 @@
-
 import * as lib from './lib.js';
 import {LOG_VERYSPAM, LOG_SPAM, LOG_DEBUG, LOG_INFO, LOG_WARNING, LOG_ERROR} from './lib.js';
 
@@ -10,10 +9,7 @@ if (typeof AudioWorkletProcessor === "undefined") {
   // If we are loaded as a regular module, skip the entire rest of the file
   //   (which will not be valid outside the audio worklet context).
 } else {
-
-lib.set_logging_context_id("audioworklet");
-lib.log(LOG_INFO, "Audio worklet module loading");
-
+  
 const FRAME_SIZE = 128;  // by Web Audio API spec
 
 class ClockedRingBuffer {
@@ -426,3 +422,5 @@ class Player extends AudioWorkletProcessor {
 registerProcessor('player', Player);
 
 }
+
+

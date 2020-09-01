@@ -6,6 +6,7 @@ import json
 import urllib.parse
 import struct
 import time
+import sys
 
 FRAME_SIZE = 128
 
@@ -218,5 +219,12 @@ class OurHandler(BaseHTTPRequestHandler):
 
         self.wfile.write(data)
 
-server = http.server.HTTPServer(('', 8081), OurHandler)
+if len(sys.argv)>1:
+    port = int(sys.argv[1])
+else:
+    port = 8081
+
+print("Serving Bucket Brigade Singing on port %d"%port)
+    
+server = http.server.HTTPServer(('', port), OurHandler)
 server.serve_forever()

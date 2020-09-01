@@ -151,7 +151,6 @@ var mic_buf;
 var mic_buf_clock;
 var loopback_mode;
 var server_path;
-var audio_offset;
 var xhrs_inflight;
 var override_gain = 1.0;
 var synthetic_audio_source;
@@ -166,9 +165,8 @@ async function query_server_clock() {
     // I got yer server right here!
     server_clock = Math.round(Date.now() * sample_rate / 1000.0);
   } else {
-    var target_url = new URL(server_path);
     var request_time_ms = Date.now();
-    var fetch_result = await fetch(target_url, {
+    var fetch_result = await fetch(server_path, {
       method: "get",  // default
       cache: "no-store",
     });
@@ -206,6 +204,7 @@ export function register_click_volume_getter(cvg) {
 }
 
 export function click_volume_change() {
+  lib.log(LOG_DEBUG, 'setting new volume '+click_volume_getter());
   playerNode.port.postMessage({
     "type": "click_volume_change",
     "value": click_volume_getter()
@@ -225,7 +224,7 @@ export function toggle_mute() {
 export async function start({input_device_id, output_device_id, input_opts, audio_offset, loopback, server_url}) {
   running = true;
   audio_offset = parseInt(audio_offset) * sample_rate;
-
+  
   read_clock = null;
   mic_buf = [];
   mic_buf_clock = null;
@@ -243,7 +242,12 @@ export async function start({input_device_id, output_device_id, input_opts, audi
 
   server_path = server_url;
 
-  await audioCtx.audioWorklet.addModule('audio-worklet.js');
+  try {
+    await audioCtx.audioWorklet.addModule('/widgets/BucketSinging/audio-worklet.js'); // FIXME: This only works with RE!
+  } catch (e) {
+    lib.log(LOG_ERROR, "Exception c/n/m", e.code, e.name, e.message, Object.keys(e), e.lineNumber, e.stack);
+    throw e;
+  }
   playerNode = new AudioWorkletNode(audioCtx, 'player');
   // Stop if there is an exception inside the worklet.
   playerNode.addEventListener("processorerror", stop);
@@ -255,7 +259,6 @@ export async function start({input_device_id, output_device_id, input_opts, audi
 
   await query_server_clock();
   read_clock = server_clock - audio_offset;
-//  lib.log(LOG_DEBUG,{when:'just_set',read_clock,server_clock,audio_offset,sample_rate});
 
   // Send this before we set audio params, which declares us to be ready for audio
   send_local_latency();
@@ -281,13 +284,12 @@ export async function start({input_device_id, output_device_id, input_opts, audi
     hook();
   }
 
-//  lib.log(LOG_DEBUG,{when:'finished start',read_clock});
   // To use the default output device, which should be supported on all browsers, instead use:
   // playerNode.connect(audioCtx.destination);
 }
 
 export function init_events() {
-  let target_url = server_path + "reset_events";
+  let target_url = server_path + "/reset_events";
   lib.log(LOG_DEBUG,{server_path,target_url,where:'init_events'});
   let xhr = new XMLHttpRequest();
   xhr.open("POST", target_url, true);
@@ -339,8 +341,6 @@ var sample_encoding = {
 function handle_message(event) {
   var msg = event.data;
   lib.log(LOG_VERYSPAM, "onmessage in main thread received ", msg);
-
-//  lib.log(LOG_DEBUG,{when:'got msg',read_clock,msgt:msg.type});
   
   if (!running) {
     lib.log(LOG_WARNING, "Got message when done running");
@@ -360,7 +360,7 @@ function handle_message(event) {
   } else if (msg.type == "alarm") {
     if ((msg.time in alarms) && ! (msg.time in alarms_fired)) {
       alarms[msg.time]();
-      alarms_fired[msg.time] = True;
+      alarms_fired[msg.time] = true;
     }
     return;
   } else if (msg.type == "cur_clock") {
@@ -431,7 +431,7 @@ function handle_message(event) {
     xhr.debug_id = Date.now();
 
     try {
-      var target_url = new URL(server_path);
+      var target_url = new URL(server_path, window.location);
       var params = new URLSearchParams();
       // Response size always equals request size.
       // Clocks are at the _end_ of intervals; the longer we've been
