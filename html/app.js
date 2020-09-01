@@ -157,6 +157,7 @@ var synthetic_audio_source;
 var synthetic_audio_sink;
 var synthetic_click_interval;
 export var sample_rate = 11025;  // Firefox may get upset if we use a weird value here?
+export var minimum_safe_offset_delta_s = 5; // audio_offset's must be at least this many seconds apart
 var local_latency_ms = 0;
 
 
@@ -221,7 +222,7 @@ export function toggle_mute() {
   return muted;
 }
 
-export async function start({input_device_id, output_device_id, input_opts, audio_offset, loopback, server_url}) {
+export async function start({input_device_id, output_device_id, input_opts, audio_offset, loopback, server_url, script_prefix}) {
   running = true;
   audio_offset = parseInt(audio_offset) * sample_rate;
   
@@ -243,7 +244,7 @@ export async function start({input_device_id, output_device_id, input_opts, audi
   server_path = server_url;
 
   try {
-    await audioCtx.audioWorklet.addModule('/widgets/BucketSinging/audio-worklet.js'); // FIXME: This only works with RE!
+    await audioCtx.audioWorklet.addModule((script_prefix||'') + 'audio-worklet.js');
   } catch (e) {
     lib.log(LOG_ERROR, "Exception c/n/m", e.code, e.name, e.message, Object.keys(e), e.lineNumber, e.stack);
     throw e;
