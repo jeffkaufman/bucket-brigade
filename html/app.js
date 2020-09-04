@@ -24,7 +24,7 @@ LOG_LEVELS.forEach((level) => {
 
 // We fall back exponentially until we find a good size, but we need a
 // place to start that should be reasonably fair.
-const INITIAL_MS_PER_BATCH = 100;
+const INITIAL_MS_PER_BATCH = 200;
 // If we have fallen back so much that we are now taking this long,
 // then give up and let the user know things are broken.
 const MAX_MS_PER_BATCH = 1000;

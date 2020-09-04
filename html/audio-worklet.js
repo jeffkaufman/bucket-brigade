@@ -160,7 +160,7 @@ class Player extends AudioWorkletProcessor {
         this.loopback_mode = msg.loopback_mode;
 
         // This is _extra_ slack on top of the size of the server request.
-        this.client_slack = sampleRate * .1;  // 100ms
+        this.client_slack = sampleRate * .3;  // 300ms
 
         // 15 seconds of total buffer, `this.slack` seconds of leadin, force things to round to FRAME_SIZE
         this.play_buffer = new ClockedRingBuffer(
