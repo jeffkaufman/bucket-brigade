@@ -127,7 +127,8 @@ class Player extends AudioWorkletProcessor {
     this.window = [];
     this.last_peak = Date.now();
     this.background_noise = 0;
-    this.sample_index = 0;
+    this.background_samples = [];
+    this.max_background_samples = sampleRate * 3 / FRAME_SIZE;  // 3s
     this.frames_since_last_beat = 0;
 
     // tuning params
@@ -286,7 +287,7 @@ class Player extends AudioWorkletProcessor {
     }
 
     if (abs_sum / this.window.length >
-        this.background_noise / this.sample_index * this.peak_ratio &&
+        this.background_noise / (this.background_samples.length*FRAME_SIZE) * this.peak_ratio &&
         now - this.last_peak > this.min_peak_interval_ms) {
       this.last_peak = now;
       var latency_samples = index + 128*this.frames_since_last_beat;
@@ -334,16 +335,25 @@ class Player extends AudioWorkletProcessor {
     }
 
     var now = Date.now();
+    var noise = 0;
     for (var i = 0 ; i < input.length; i++) {
-      this.sample_index++;
-      this.background_noise += Math.abs(input[i]);
+      noise += Math.abs(input[i]);
 
       this.window.push(input[i]);
       if (this.window.length > this.window_size_samples) {
         this.window.shift();
       }
 
-      this.detect_peak(i, now);
+      if (this.background_noise > 0) {
+        this.detect_peak(i, now);
+      }
+    }
+
+    this.background_samples.push(noise);
+    this.background_noise += noise;
+    if (this.background_samples.length > this.max_background_samples) {
+      // Note: if this ends up using too much CPU we can use a circular buffer.
+      this.background_noise -= Math.abs(this.background_samples.shift());
     }
 
     if (this.beat_index > 1 && this.background_noise == 0) {
