@@ -567,8 +567,14 @@ function handle_message(event) {
     lib.log(LOG_ERROR, "Exception thrown in audioworklet:", msg.exception);
     reload_settings();
     return;
+  } else if (msg.type == "no_mic_input") {
+    window.noAudioInputInstructions.style.display = "block";
+    return;
   } else if (msg.type == "latency_estimate") {
     window.estSamples.innerText = msg.samples;
+
+    window.noAudioInputInstructions.style.display = "none";
+
     if (msg.p50 !== undefined) {
       const latency_range = msg.p60 - msg.p40;
       window.est40to60.innerText = Math.round(latency_range) + "ms";
@@ -585,6 +591,7 @@ function handle_message(event) {
         set_estimate_latency_mode(false);
       }
     }
+    return;
   } else if (msg.type != "samples_out") {
     lib.log(LOG_ERROR, "Got message of unknown type:", msg);
     stop();
@@ -803,6 +810,7 @@ function try_increase_batch_size_and_reload() {
 async function stop() {
   window.clapAlong.style.display = "none";
   window.runningInstructions.style.display = "none";
+  window.noAudioInputInstructions.style.display = "none";
 
   window.estSamples.innerText = "...";
   window.est40to60.innerText = "...";

@@ -117,6 +117,7 @@ class Player extends AudioWorkletProcessor {
     // State related to peak detection processing:
     // clicks
     this.click_index = 0;
+    this.beat_index = 0;
     const bpm = 105;
     this.click_frame_interval =
       Math.round(sampleRate / FRAME_SIZE * 60 / bpm);
@@ -175,6 +176,8 @@ class Player extends AudioWorkletProcessor {
         return;
       } else if (msg.type == "latency_estimation_mode") {
         this.latency_measurement_mode = msg.enabled;
+        this.click_index = 0;
+        this.beat_index = 0;
         return;
       } else if (msg.type == "mute_mode") {
         this.mute_mode = msg.enabled;
@@ -281,6 +284,7 @@ class Player extends AudioWorkletProcessor {
     for (var i = 0; i < this.window.length; i++) {
       abs_sum += Math.abs(this.window[i]);
     }
+
     if (abs_sum / this.window.length >
         this.background_noise / this.sample_index * this.peak_ratio &&
         now - this.last_peak > this.min_peak_interval_ms) {
@@ -313,6 +317,7 @@ class Player extends AudioWorkletProcessor {
     var is_beat = this.click_index % this.click_frame_interval == 0;
     if (is_beat) {
       this.frames_since_last_beat = 0;
+      this.beat_index++;
     } else {
       this.frames_since_last_beat++;
     }
@@ -337,7 +342,12 @@ class Player extends AudioWorkletProcessor {
       if (this.window.length > this.window_size_samples) {
         this.window.shift();
       }
+
       this.detect_peak(i, now);
+    }
+
+    if (this.beat_index > 1 && this.background_noise == 0) {
+      this.port.postMessage({type: "no_mic_input"});
     }
   }
 
