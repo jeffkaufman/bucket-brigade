@@ -1,5 +1,3 @@
-/// <reference path="typings/es6-promise.d.ts" />
-;
 var RingBuffer = (function () {
     function RingBuffer(buffer) {
         this.wpos = 0;
@@ -8,13 +6,8 @@ var RingBuffer = (function () {
         this.buf = buffer;
     }
     RingBuffer.prototype.append = function (data) {
-        /*if (this.rpos >= RingBuffer.MAX_POS && this.wpos >= RingBuffer.MAX_POS) {
-            this.wpos -= RingBuffer.MAX_POS;
-            this.rpos -= RingBuffer.MAX_POS;
-        }*/
         var _this = this;
         return new Promise(function (resolve, reject) {
-            // 書き込み処理が実施中の場合は常にrejectする
             if (_this.remaining_write_data) {
                 reject();
                 return;
@@ -24,7 +17,6 @@ var RingBuffer = (function () {
                 resolve();
                 return;
             }
-            // 空き容量がないので，読み込み処理が実施時に書き込むようにする
             _this.remaining_write_data = [data.subarray(size), resolve];
         });
     };
@@ -41,12 +33,9 @@ var RingBuffer = (function () {
         var total_size = Math.min(data.length, this.available());
         if (total_size == 0)
             return 0;
-        // 書き込み位置からバッファの終端まで書き込む
         var pos = this.wpos % this.buf.length;
         var size = Math.min(total_size, this.buf.length - pos);
         this.buf.set(data.subarray(0, size), pos);
-        // バッファの終端に達したが，書き込むデータがまだあるため
-        // バッファの先頭から書き込みを継続する
         if (size < total_size) {
             this.buf.set(data.subarray(size, total_size), 0);
         }
@@ -67,14 +56,11 @@ var RingBuffer = (function () {
     };
     RingBuffer.prototype._read_some = function (output) {
         var total_size = Math.min(output.length, this.size());
-       if (total_size == 0)
+        if (total_size == 0)
             return 0;
-        // 読み込み位置からバッファ終端方向に読み込む
         var pos = this.rpos % this.buf.length;
         var size = Math.min(total_size, this.buf.length - pos);
         output.set(this.buf.subarray(pos, pos + size), 0);
-        // バッファの終端に達したが読み込むデータがまだあるため
-        // バッファの先頭から読み込みを継続する
         if (size < total_size) {
             output.set(this.buf.subarray(0, total_size - size), size);
         }
@@ -97,9 +83,7 @@ var RingBuffer = (function () {
     RingBuffer.MAX_POS = (1 << 16);
     return RingBuffer;
 })();
-/// <reference path="api.d.ts" />
-/// <reference path="typings/MediaStream.d.ts" />
-/// <reference path="ring_buffer.ts" />
+
 var MicrophoneReader = (function () {
     function MicrophoneReader() {
     }
@@ -108,7 +92,9 @@ var MicrophoneReader = (function () {
         this.context = new AudioContext();
         return new Promise(function (resolve, reject) {
             var callback = function (strm) {
+                console.log("stream is", strm);
                 _this.src_node = _this.context.createMediaStreamSource(strm);
+                console.log("source is", _this.src_node);
                 _this.ringbuf = new RingBuffer(new Float32Array(buffer_samples_per_ch * _this.src_node.channelCount * 8));
                 _this.proc_node = _this.context.createScriptProcessor(0, 1, _this.src_node.channelCount);
                 _this.proc_node.onaudioprocess = function (ev) {
@@ -124,7 +110,8 @@ var MicrophoneReader = (function () {
             };
             if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
                 navigator.mediaDevices.getUserMedia({
-                    audio: true,
+                    // explicitly request mono (this may not be compatible with older browsers? and doesn't seem to work anyway.)
+                    audio: { channelCount: {exact: 1} },
                     video: false
                 }).then(callback, reject);
             }
@@ -134,7 +121,7 @@ var MicrophoneReader = (function () {
                     navigator.mozGetUserMedia ||
                     navigator.msGetUserMedia);
                 navigator.getUserMedia({
-                    audio: true,
+                    audio: { channelCount: {exact: 1} },
                     video: false
                 }, callback, reject);
             }
@@ -178,8 +165,7 @@ var MicrophoneReader = (function () {
     };
     return MicrophoneReader;
 })();
-/// <reference path="api.d.ts" />
-/// <reference path="ring_buffer.ts" />
+
 var WebAudioPlayer = (function () {
     function WebAudioPlayer() {
         this.in_writing = false;
@@ -190,7 +176,9 @@ var WebAudioPlayer = (function () {
     WebAudioPlayer.prototype.init = function (sampling_rate, num_of_channels, period_samples, delay_periods, buffer_periods) {
         var _this = this;
         return new Promise(function (resolve, reject) {
-            _this.context = new AudioContext();
+            // Request the sample rate we want (but we may not get it)
+            _this.context = new AudioContext({ sampleRate: sampling_rate });
+            console.log("Got context:", _this.context);
             _this.node = _this.context.createScriptProcessor(period_samples, 0, num_of_channels);
             _this.node.onaudioprocess = function (ev) {
                 _this._onaudioprocess(ev);
@@ -336,82 +324,86 @@ var WebAudioPlayer = (function () {
     };
     return WebAudioPlayer;
 })();
-/// <reference path="api.d.ts" />
-var AudioEncoder = (function () {
-    function AudioEncoder(path) {
+
+async function send_and_wait(port, msg, transfer) {
+    return new Promise(function (resolve, _) {
+        // XXX: I don't really trust this dynamic setting of onmessage business, but the example code does it so I'm leaving it for now... :-\
+        port.onmessage = function (ev) {
+            resolve(ev);
+        }
+        port.postMessage(msg, transfer);
+    });
+}
+
+var expected_bogus_header = [
+    79, 112, 117, 115, 72, 101, 97, 100, // "OpusHead"
+    1, // version
+    2, // channels -- XXX should be 1, probably?
+    0, 0, // pre-skip frames
+    128, 187, 0, 0, // sample rate (48,000)
+    0, 0, // output gain
+    0 // channel mapping mode
+];
+
+class AudioEncoder {
+    constructor(path) {
+        this.worker = new Worker(path);
+
+        this.encode = this.worker_rpc;
+    }
+
+    async worker_rpc(msg) {
+        var ev = await send_and_wait(this.worker, msg);
+        if (ev.data.status != 0) {
+            throw ev.data;
+        }
+        return ev.data.packets;
+    };
+
+    async setup(cfg) {
+        var packets = await this.worker_rpc(cfg);
+        // This opus wrapper library adds a bogus header, which we validate and then strip for our sanity.
+        if (packets.length != 1 || packets[0].data.byteLength != expected_bogus_header.length) {
+            throw { err: "Bad header packet", data: packets };
+        }
+        var bogus_header = new Uint8Array(packets[0].data);
+        for (var i = 0; i < expected_bogus_header.length; i++) {
+            if (bogus_header[i] != expected_bogus_header[i]) {
+                throw { err: "Bad header packet", data: packets };
+            }
+        }
+        // return nothing.
+    }
+}
+
+class AudioDecoder {
+    constructor(path) {
         this.worker = new Worker(path);
     }
-    AudioEncoder.prototype.setup = function (cfg) {
-        var _this = this;
-        return new Promise(function (resolve, reject) {
-            _this.worker.onmessage = function (ev) {
-                if (ev.data.status != 0) {
-                    reject(ev.data);
-                    return;
-                }
-                resolve(ev.data.packets);
-            };
-            _this.worker.postMessage(cfg);
-        });
+
+    async worker_rpc(msg, transfer) {
+        var ev = await send_and_wait(this.worker, msg, transfer);
+        if (ev.data.status != 0) {
+            throw ev.data;
+        }
+        return ev.data;
     };
-    AudioEncoder.prototype.encode = function (data) {
-        var _this = this;
-        return new Promise(function (resolve, reject) {
-            _this.worker.onmessage = function (ev) {
-                if (ev.data.status != 0) {
-                    reject(ev.data);
-                    return;
-                }
-                resolve(ev.data.packets);
-            };
-            _this.worker.postMessage(data);
+
+    async setup() {
+        var bogus_header_packet = {
+            data: Uint8Array.from(expected_bogus_header).buffer
+        };
+        return await this.worker_rpc({
+            config: {},  // not used
+            packets: [bogus_header_packet],
         });
-    };
-    return AudioEncoder;
-})();
-var AudioDecoder = (function () {
-    function AudioDecoder(path) {
-        this.worker = new Worker(path);
     }
-    AudioDecoder.prototype.setup = function (cfg, packets) {
-        var _this = this;
-        var transfer_list = [];
-        for (var i = 0; i < packets.length; ++i)
-            transfer_list.push(packets[i].data);
-        return new Promise(function (resolve, reject) {
-            _this.worker.onmessage = function (ev) {
-                if (ev.data.status != 0) {
-                    reject(ev.data);
-                    return;
-                }
-                resolve(ev.data);
-            };
-            _this.worker.postMessage({
-                config: cfg,
-                packets: packets
-            }, transfer_list);
-        });
-    };
-    AudioDecoder.prototype.decode = function (packet) {
-        var _this = this;
-        return new Promise(function (resolve, reject) {
-            _this.worker.onmessage = function (ev) {
-                if (ev.data.status != 0) {
-                    reject(ev.data);
-                    return;
-                }
-                resolve(ev.data);
-            };
-            _this.worker.postMessage(packet, [packet.data]);
-        });
-    };
-    return AudioDecoder;
-})();
-/// <reference path="api.d.ts" />
-/// <reference path="riff_pcm_wave.ts" />
-/// <reference path="microphone.ts" />
-/// <reference path="player.ts" />
-/// <reference path="impl.ts" />
+
+    async decode(packet) {
+        return await this.worker_rpc(packet, [packet.data]);
+    }
+}
+
 var Test = (function () {
     function Test() {
         this.player = null;
@@ -422,7 +414,7 @@ var Test = (function () {
             _this.encode_decode_play();
         });
     };
-    Test.prototype.encode_decode_play = function () {
+    Test.prototype.encode_decode_play = async function () {
         var _this = this;
         this.init_player();
         var _a = this.get_reader(), reader = _a[0], open_params = _a[1];
@@ -432,56 +424,53 @@ var Test = (function () {
         var packet_queue = [];
         var encoder = new AudioEncoder('encoder.js');
         var decoder = new AudioDecoder('decoder.js');
-        reader.open(Test.period_size, open_params).then(function (info) {
-            var enc_cfg = {
-                sampling_rate: info.sampling_rate,
-                num_of_channels: info.num_of_channels,
-                params: {
-                    application: parseInt(document.getElementById('opus_app').value, 10),
-                    sampling_rate: parseInt(document.getElementById('opus_sampling_rate').value, 10) * 1000,
-                    frame_duration: parseFloat(document.getElementById('opus_frame_duration').value)
-                }
-            };
-            encoder.setup(enc_cfg).then(function (packets) {
-                decoder.setup({}, packets).then(function (info) {
-                    _this.player.init(info.sampling_rate, info.num_of_channels, Test.period_size, Test.delay_period_count, Test.ringbuffer_period_count).then(function () {
-                        _this.player.start();
-                        window.setInterval(function () {
-                            console.log(_this.player.getBufferStatus());
-                        }, 1000);
-                    }, _this.output_reject_log('player.init error'));
-                }, _this.output_reject_log('decoder.setup error'));
-            }, _this.output_reject_log('encoder.setup error'));
-        }, this.output_reject_log('open error'));
-        this.player.onneedbuffer = function () {
-            if (reader.in_flight || working)
+        var reader_info = await reader.open(Test.period_size, open_params)
+
+        var enc_cfg = {
+            sampling_rate: reader_info.sampling_rate,
+            num_of_channels: reader_info.num_of_channels,
+            params: {
+                application: 2049,  // AUDIO
+                sampling_rate: 48000,
+                // this will be 2.5, 5, 10, 20, 40, or 60 (ms).
+                frame_duration: parseFloat(document.getElementById('opus_frame_duration').value)
+            }
+        };
+        await encoder.setup(enc_cfg);
+        var info = await decoder.setup();
+        await _this.player.init(info.sampling_rate, info.num_of_channels, Test.period_size, Test.delay_period_count, Test.ringbuffer_period_count);
+        _this.player.start();
+        window.setInterval(function () {
+            console.log(_this.player.getBufferStatus());
+        }, 1000);
+
+        this.player.onneedbuffer = async function () {
+            if (reader.in_flight || working) {
                 return;
+            }
             working = true;
             if (packet_queue.length > 0) {
                 var packet = packet_queue.shift();
-                decoder.decode(packet).then(function (buf) {
-                    _this.player.enqueue(buf).catch(_this.output_reject_log('ringbuf enqueue error?'));
-                    working = false;
-                }, _this.output_reject_log('decoder.decode error'));
+                var buf = await decoder.decode(packet);
+                _this.player.enqueue(buf);
+                working = false;
             }
             else {
-                reader.read().then(function (buf) {
-                    encoder.encode(buf).then(function (packets) {
-                        if (packets.length == 0) {
-                            working = false;
-                            return;
-                        }
-                        for (var i = 1; i < packets.length; ++i)
-                            packet_queue.push(packets[i]);
-                        decoder.decode(packets[0]).then(function (buf) {
-                            _this.player.enqueue(buf).catch(_this.output_reject_log('ringbuf enqueue error?'));
-                            working = false;
-                        }, _this.output_reject_log('decoder.decode error'));
-                    }, _this.output_reject_log('encoder.encode error'));
-                }, _this.output_reject_log('reader.read error'));
+                var buf = await reader.read();
+                var packets = await encoder.encode(buf);
+                if (packets.length == 0) {
+                    working = false;
+                    return;
+                }
+                for (var i = 1; i < packets.length; ++i)
+                    packet_queue.push(packets[i]);
+                var decoded_buf = await decoder.decode(packets[0]);
+                _this.player.enqueue(decoded_buf);
+                working = false;
             }
-        };
-    };
+        }
+    }
+
     Test.prototype.init_player = function () {
         if (this.player)
             this.player.close();
@@ -512,3 +501,5 @@ document.addEventListener('DOMContentLoaded', function () {
     var app = new Test();
     app.setup();
 });
+
+//import('./encoder.js').then((x) => { console.log(x.default); });
