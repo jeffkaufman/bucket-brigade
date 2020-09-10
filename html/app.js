@@ -24,10 +24,13 @@ LOG_LEVELS.forEach((level) => {
 
 // We fall back exponentially until we find a good size, but we need a
 // place to start that should be reasonably fair.
-const INITIAL_MS_PER_BATCH = 200;
+const INITIAL_MS_PER_BATCH = 180;  // XXX: probably make sure this is a multiple of our opus frame size (60ms)
 // If we have fallen back so much that we are now taking this long,
 // then give up and let the user know things are broken.
-const MAX_MS_PER_BATCH = 1000;
+const MAX_MS_PER_BATCH = 900;
+
+// this must be 2.5, 5, 10, 20, 40, or 60.
+const OPUS_FRAME_MS = 60;
 
 lib.log(LOG_INFO, "Starting up");
 
@@ -362,7 +365,9 @@ var override_gain = 1.0;
 var synthetic_audio_source;
 var synthetic_audio_sink;
 var synthetic_click_interval;
-var sample_rate = 11025;  // Firefox may get upset if we use a weird value here?
+var sample_rate = 11025;  // Firefox may get upset if we use a weird value here? Also, we may not want to force this to a specific value?
+var encoder;
+var decoder;
 
 function ms_to_batches(ms) {
   return Math.round(sample_rate / 128 / 1000 * ms);
@@ -450,6 +455,85 @@ async function start_stop() {
   was_running ? stop() : start();
 }
 
+async function send_and_wait(port, msg, transfer) {
+    return new Promise(function (resolve, _) {
+        // XXX: I don't really trust this dynamic setting of onmessage business, but the example code does it so I'm leaving it for now... :-\
+        port.onmessage = function (ev) {
+            resolve(ev);
+        }
+        port.postMessage(msg, transfer);
+    });
+}
+
+var expected_bogus_header = [
+    79, 112, 117, 115, 72, 101, 97, 100, // "OpusHead"
+    1, // version
+    1, // channels
+    0, 0, // pre-skip frames
+    128, 187, 0, 0, // sample rate (48,000)
+    0, 0, // output gain
+    0 // channel mapping mode
+];
+
+class AudioEncoder {
+    constructor(path) {
+        this.worker = new Worker(path);
+
+        this.encode = this.worker_rpc;
+    }
+
+    async worker_rpc(msg) {
+        var ev = await send_and_wait(this.worker, msg);
+        if (ev.data.status != 0) {
+            throw ev.data;
+        }
+        return ev.data.packets;
+    };
+
+    async setup(cfg) {
+        var packets = await this.worker_rpc(cfg);
+        // This opus wrapper library adds a bogus header, which we validate and then strip for our sanity.
+        if (packets.length != 1 || packets[0].data.byteLength != expected_bogus_header.length) {
+            throw { err: "Bad header packet", data: packets };
+        }
+        var bogus_header = new Uint8Array(packets[0].data);
+        for (var i = 0; i < expected_bogus_header.length; i++) {
+            if (bogus_header[i] != expected_bogus_header[i]) {
+                throw { err: "Bad header packet", data: packets };
+            }
+        }
+        // return nothing.
+    }
+}
+
+class AudioDecoder {
+    constructor(path) {
+        this.worker = new Worker(path);
+    }
+
+    async worker_rpc(msg, transfer) {
+        var ev = await send_and_wait(this.worker, msg, transfer);
+        if (ev.data.status != 0) {
+            throw ev.data;
+        }
+        return ev.data;
+    };
+
+    async setup() {
+        var bogus_header_packet = {
+            data: Uint8Array.from(expected_bogus_header).buffer
+        };
+        return await this.worker_rpc({
+            config: {},  // not used
+            packets: [bogus_header_packet],
+        });
+    }
+
+    async decode(packet) {
+        return await this.worker_rpc(packet, [packet.data]);
+    }
+}
+
 async function start() {
   clear_error();
 
@@ -473,6 +557,24 @@ async function start() {
     session_id: session_id,
     log_level: lib.log_level
   });
+
+  encoder = new AudioEncoder('opusjs/encoder.js');
+  decoder = new AudioDecoder('opusjs/decoder.js')
+
+  var enc_cfg = {
+      sampling_rate: audioCtx.sampleRate,
+      num_of_channels: 1,
+      params: {
+          application: 2049,  // AUDIO
+          sampling_rate: 48000,
+          frame_duration: OPUS_FRAME_MS,
+      }
+  };
+  lib.log(LOG_DEBUG, "Setting up opus encoder and decoder. Encoder params:", enc_cfg);
+  await encoder.setup(enc_cfg);
+  var info = await decoder.setup();
+  lib.log(LOG_DEBUG, "Opus decoder returned parameters:", info);
+  // The encoder stuff absolutely has to finish getting initialized before we start getting messages for it, or shit will get regrettably real. (It is designed in a non-threadsafe way, which is remarkable since javascript has no threads.)
 
   playerNode.port.onmessage = handle_message;
   micNode.connect(playerNode);
@@ -801,7 +903,7 @@ function handle_xhr_result(xhr) {
 function try_increase_batch_size_and_reload() {
   if (sample_batch_size < max_sample_batch_size) {
     // Try increasing the batch size and restarting.
-    sample_batch_size *= 1.3;
+    sample_batch_size *= 1.3;  // XXX: do we care that this may not be integral??
     window.msBatchSize.value = batches_to_ms(sample_batch_size);
     reload_settings();
     return;
