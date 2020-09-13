@@ -25,7 +25,7 @@ LOG_LEVELS.forEach((level) => {
 
 // We fall back exponentially until we find a good size, but we need a
 // place to start that should be reasonably fair.
-const INITIAL_MS_PER_BATCH = 600; // XXX 180;  // XXX: probably make sure this is a multiple of our opus frame size (60ms)
+const INITIAL_MS_PER_BATCH = 600; // XXX 180;  // XXX: probably make sure this is a multiple of our opus frame size (60ms), but it should in theory work without
 // If we have fallen back so much that we are now taking this long,
 // then give up and let the user know things are broken.
 const MAX_MS_PER_BATCH = 900;
@@ -853,7 +853,7 @@ async function handle_message(event) {
     } else {
       var target_url = new URL(server_path, document.location);
       var send_metadata = {
-        read_clock: orig_read_clock,
+        read_clock: read_clock,  // ???
         write_clock: send_write_clock,
         username: window.userName.value,
         userid,
