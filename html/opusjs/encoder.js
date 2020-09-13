@@ -308,6 +308,19 @@ var OpusEncoder = (function() {
       _this.setup(ev.data)
     })
   }
+  OpusEncoder.prototype.reset = (function() {
+    _opus_encoder_destroy(this.handle);
+    var err = Module._malloc(4);
+    this.handle = _opus_encoder_create(this.sampling_rate, this.channels, this.app, err);
+    var err_num = Module.getValue(err, "i32");
+    Module._free(err);
+    if (err_num != 0) {
+      this.worker.postMessage({
+        status: err_num
+      });
+      return
+    }
+  });
   OpusEncoder.prototype.setup = (function(config) {
     var _this = this;
     var err = Module._malloc(4);
@@ -323,10 +336,14 @@ var OpusEncoder = (function() {
     }
     this.frame_size = sampling_rate * frame_duration / 1e3;
     this.channels = config.num_of_channels;
-    this.handle = _opus_encoder_create(sampling_rate, config.num_of_channels, app, err);
-    if (Module.getValue(err, "i32") != 0) {
+    this.sampling_rate = sampling_rate;
+    this.app = app;
+    this.handle = _opus_encoder_create(this.sampling_rate, this.channels, this.app, err);
+    var err_num = Module.getValue(err, "i32");
+    Module._free(err);
+    if (err_num != 0) {
       this.worker.postMessage({
-        status: Module.getValue(err, "i32")
+        status: err_num
       });
       return
     }
@@ -369,6 +386,14 @@ var OpusEncoder = (function() {
     }, [opus_header_buf])
   });
   OpusEncoder.prototype.encode = (function(data) {
+    if (data.reset) {
+        this.reset();
+        this.worker.postMessage({
+          status: 0,
+          message: "reset ok"
+        });
+        return;
+    }
     var samples = data.samples;
     if (this.resampler) {
       try {
