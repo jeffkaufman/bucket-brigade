@@ -864,6 +864,7 @@ async function handle_message(event) {
       if (requestedLeadPosition) {
         requestedLeadPosition = false;
       }
+      chatsToSend = [];
 
       var response = await samples_to_server(outdata, target_url, send_metadata);
       var result = new Uint8Array(response.data);
