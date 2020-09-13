@@ -474,6 +474,12 @@ class AudioEncoder {
         }
         // return nothing.
     }
+
+    async reset() {
+        return this.worker_rpc({
+          reset: true
+        });
+    }
 }
 
 class AudioDecoder {
@@ -496,6 +502,12 @@ class AudioDecoder {
         return await this.worker_rpc({
             config: {},  // not used
             packets: [bogus_header_packet],
+        });
+    }
+
+    async reset() {
+        return this.worker_rpc({
+          reset: true
         });
     }
 
@@ -765,6 +777,8 @@ async function handle_message(event) {
     var samples = concat_typed_arrays(mic_buf);
     lib.log(LOG_SPAM, "Encoding samples:", mic_buf);
     mic_buf = [];
+    // XXX: terrible.
+    await encoder.reset();
     var encoded_samples = await encoder.encode({ samples });
     var enc_buf = [];
     lib.log(LOG_SPAM, "Got encoded packets:", encoded_samples);
@@ -781,6 +795,11 @@ async function handle_message(event) {
 
     if (loopback_mode == "main") {
       var packets = unpack_multi(outdata);
+      // XXX: terrible.
+      lib.log(LOG_VERYSPAM, "resetting decoder...");
+      var reset_result = await decoder.reset();
+      lib.log(LOG_SPAM, "decoder reset:", reset_result);
+
       var decoded_packets = [];
       for (var i = 0; i < packets.length; ++i) {
         var samples = await decoder.decode({
@@ -819,9 +838,15 @@ async function handle_message(event) {
       }
       */
 
+      // XXX: terrible.
+      var reset_result = await decoder.reset();
+      lib.log(LOG_DEBUG, "decoder reset:", reset_result);
+
       var decoded_packets = [];
       for (var i = 0; i < packets.length; ++i) {
-        var samples = await decoder.decode(packets[i]);
+        var samples = await decoder.decode({
+          data: packets[i].buffer
+        });
         decoded_packets.push(new Float32Array(samples.samples));
       }
       var play_samples = concat_typed_arrays(decoded_packets, Float32Array);

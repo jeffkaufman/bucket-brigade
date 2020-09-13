@@ -245,6 +245,19 @@ var OpusDecoder = (function() {
       _this.setup(ev.data.config, ev.data.packets)
     })
   }
+  OpusDecoder.prototype.reset = (function() {
+    _opus_decoder_destroy(this.handle);
+    var err = Module._malloc(4);
+    this.handle = _opus_decoder_create(this.sampling_rate, this.channels, err);
+    var err_num = Module.getValue(err, "i32");
+    Module._free(err);
+    if (err_num != 0) {
+      this.worker.postMessage({
+        status: err_num
+      });
+      return
+    }
+  });
   OpusDecoder.prototype.setup = (function(config, packets) {
     var _this = this;
     if (packets.length != 1 || packets[0].data.byteLength != 19) {
@@ -274,7 +287,8 @@ var OpusDecoder = (function() {
       return
     }
     var err = Module._malloc(4);
-    this.handle = _opus_decoder_create(sampling_rate, this.channels, err);
+    this.sampling_rate = sampling_rate;
+    this.handle = _opus_decoder_create(this.sampling_rate, this.channels, err);
     var err_num = Module.getValue(err, "i32");
     Module._free(err);
     if (err_num != 0) {
@@ -300,6 +314,15 @@ var OpusDecoder = (function() {
     })
   });
   OpusDecoder.prototype.decode = (function(packet) {
+    console.log("pkt:", packet);
+    if (packet.reset) {
+        this.reset();
+        this.worker.postMessage({
+          status: 0,
+          message: "reset ok"
+        });
+        return;
+    }
     this.buf.set(new Uint8Array(packet.data));
     var ret = _opus_decode_float(this.handle, this.buf_ptr, packet.data.byteLength, this.pcm_ptr, this.frame_size, 0);
     if (ret < 0) {
