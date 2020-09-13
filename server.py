@@ -28,7 +28,7 @@ OPUS_FRAME_BYTES = OPUS_FRAME_SAMPLES * CHANNELS * OPUS_BYTES_PER_SAMPLE
 # Leave this much space between users. Ideally this would be very
 # short, but it needs to be long enough to cover "client total time
 # consumed" or else people won't all hear each other.
-DELAY_INTERVAL = SAMPLE_RATE * 2  # 2s
+DELAY_INTERVAL = SAMPLE_RATE * 3  # 3s
 
 # If we have not heard from a user in N seconds, assume they are no longer
 # active.
