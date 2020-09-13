@@ -222,9 +222,12 @@ def handle_post(in_data_raw, query_params):
 
     if not user.opus_state:
         # initialize
-        pass
+        user.opus_state = (
+            opuslib.Encoder(SAMPLE_RATE, CHANNELS, opuslib.APPLICATION_AUDIO),
+            opuslib.Decoder(SAMPLE_RATE, CHANNELS)
+        )
+    (enc, dec) = user.opus_state
 
-    dec = opuslib.Decoder(SAMPLE_RATE, CHANNELS)
     packets = unpack_multi(in_data)
     decoded = []
     for p in packets:
@@ -267,7 +270,6 @@ def handle_post(in_data_raw, query_params):
     else:
         data = wrap_get(client_read_clock, len(in_data))
 
-    enc = opuslib.Encoder(SAMPLE_RATE, CHANNELS, opuslib.APPLICATION_AUDIO)
     packets = data.reshape([-1, OPUS_FRAME_SAMPLES])
     encoded = []
     for p in packets:
