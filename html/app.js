@@ -861,6 +861,9 @@ async function handle_message(event) {
         requestedLeadPosition,
         loopback_mode
       };
+      if (requestedLeadPosition) {
+        requestedLeadPosition = false;
+      }
 
       var response = await samples_to_server(outdata, target_url, send_metadata);
       var result = new Uint8Array(response.data);
