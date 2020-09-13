@@ -121,8 +121,21 @@ function persist(textFieldId) {
   });
 }
 
+function persist_checkbox(checkboxId) {
+  const checkbox = document.getElementById(checkboxId);
+  const prevVal = localStorage.getItem(checkboxId);
+  if (prevVal !== null) {
+    checkbox.checked = prevVal;
+  }
+
+  checkbox.addEventListener("change", () => {
+    localStorage.setItem(checkboxId, checkbox.checked);
+  });
+}
+
 persist("userName");
 persist("audioOffset");
+persist_checkbox("disableLatencyMeasurement");
 
 function setMainAppVisibility() {
   if (window.userName.value) {
@@ -213,6 +226,7 @@ var audioCtx;
 var start_button = document.getElementById('startButton');
 var mute_button = document.getElementById('muteButton');
 var click_volume_slider = document.getElementById('clickVolumeSlider');
+var disable_latency_measurement_checkbox = document.getElementById('disableLatencyMeasurement');
 var loopback_mode_select = document.getElementById('loopbackMode');
 var server_path_text = document.getElementById('serverPath');
 var audio_offset_text = document.getElementById('audioOffset');
@@ -580,7 +594,17 @@ async function start() {
 
   window.calibration.style.display = "block";
 
-  set_estimate_latency_mode(true);
+  if (!disable_latency_measurement_checkbox.checked) {
+    set_estimate_latency_mode(true);
+  } else {
+    window.est40to60.innerText = "0ms";
+    window.estLatency.innerText = "0ms";
+    window.msClietLatency.value = "0ms";
+    send_local_latency();
+    window.initialInstructions.style.display = "none";
+    window.calibration.style.display = "none";
+    window.runningInstructions.style.display = "block";
+  }
 }
 
 async function reload_settings() {
