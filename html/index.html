@@ -10,13 +10,7 @@ body {
   margin: 1em;
   padding: 1em;
 }
-#clapAlong {
-  display: none;
-}
-#runningInstructions {
-  display: none;
-}
-#mainApp {
+#calibration, #runningInstructions, #mainApp {
   display: none;
 }
 #estQuality {
@@ -95,17 +89,43 @@ Input device:
 
 <div class=warning id=errorBox></div>
 
+<div id=initialInstructions>
+  <ul>
+    <li>If you're using Bluetooth headphones, please disconnect them and
+      refresh the page.
+
+    <li>If you're using other headphones, take them off your head and
+      arrange them so that the microphone is near the ear piece
+
+    <li>When you press start, the system will make some loud beeps,
+      because it needs to hear itself.  If the noises are not loud,
+      turn up your computer's volume until they are.
+  </ul>
+</div>
+<p>
 <button id=startButton></button>
 <button id=muteButton disabled=true>Mute</button>
 
 <p>
 
-<div id=clapAlong>
+<div id=calibration>
 
-You should be hearing some clicks. Clap along, on the beat. This will
-let the system estimate your latency.  If you don't hear anything, try
-changing your output device above.  If the system is not registering
-your claps, try to change your input device.
+<div id=autoCalibrate1>
+  You should be hearing some beeps.
+
+  <ul>
+    <li>If you don't hear anything, is your speaker unmuted?
+    <li>If you still don't hear anything, try changing your output device above.
+    <li>If you do hear beeps but <tt>#beeps detected</tt> is not counting up,
+      turn up the volume.
+    <li>If the beeps are very loud but it's still not counting up,
+      try changing your input device.
+    <li>If this is really not working, try clapping along on the beat.
+    <li>If the system is still not registering your
+      claps, try restarting your browser, or, if that fails,
+      restarting your computer.
+  </ul>
+</div>
 
 <div id=noAudioInputInstructions class=warning>
 Mic producing any audio. Is your input device set correctly?
@@ -125,14 +145,16 @@ Mic producing any audio. Is your input device set correctly?
     <br>
 
     <span id=estSamples>...</span><br>
-    #claps
+    #beeps detected
     </center>
   </div>
 
 <p>
 
 Click volume: <input id=clickVolumeSlider type=range min=0 max=100
-value=85>
+value=100>
+
+</div>
 
 </div>
 

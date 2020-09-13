@@ -485,7 +485,7 @@ async function start() {
 
   await reload_settings();
 
-  window.clapAlong.style.display = "block";
+  window.calibration.style.display = "block";
 
   set_estimate_latency_mode(true);
 }
@@ -589,7 +589,8 @@ function handle_message(event) {
         // standards for close enough, figuring that they're having
         // trouble clapping on the beat.
         send_local_latency();
-        window.clapAlong.style.display = "none";
+        window.initialInstructions.style.display = "none";
+        window.calibration.style.display = "none";
         window.runningInstructions.style.display = "block";
         set_estimate_latency_mode(false);
       }
@@ -811,7 +812,8 @@ function try_increase_batch_size_and_reload() {
 }
 
 async function stop() {
-  window.clapAlong.style.display = "none";
+  window.initialInstructions.style.display = "block";
+  window.calibration.style.display = "none";
   window.runningInstructions.style.display = "none";
   window.noAudioInputInstructions.style.display = "none";
 
