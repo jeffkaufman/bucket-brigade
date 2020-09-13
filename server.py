@@ -22,7 +22,7 @@ SAMPLE_RATE = 48000
 CHANNELS = 1
 OPUS_FRAME_MS = 60
 OPUS_FRAME_SAMPLES = SAMPLE_RATE // 1000 * OPUS_FRAME_MS
-OPUS_BYTES_PER_SAMPLE = 2  # uint16
+OPUS_BYTES_PER_SAMPLE = 4  # float32
 OPUS_FRAME_BYTES = OPUS_FRAME_SAMPLES * CHANNELS * OPUS_BYTES_PER_SAMPLE
 
 # Leave this much space between users. Ideally this would be very
@@ -36,7 +36,7 @@ USER_LIFETIME_SAMPLES = SAMPLE_RATE * 5
 
 # Force rounding to multiple of FRAME_SIZE
 queue = np.zeros((QUEUE_SECONDS * SAMPLE_RATE // FRAME_SIZE * FRAME_SIZE),
-                 np.int16)
+                 np.float32)
 
 class User:
     def __init__(self, userid, name, last_heard_server_clock, delay_samples):
@@ -214,7 +214,7 @@ def handle_post(in_data_raw, query_params):
     #   so nothing has touched it yet "this time around".
     if last_request_clock is not None:
         n_zeros = min(server_clock - last_request_clock, len(queue))
-        zeros = np.zeros(n_zeros, np.int16)
+        zeros = np.zeros(n_zeros, np.float32)
         wrap_assign(last_request_clock, zeros)
 
     saved_last_request_clock = last_request_clock
@@ -231,10 +231,10 @@ def handle_post(in_data_raw, query_params):
     packets = unpack_multi(in_data)
     decoded = []
     for p in packets:
-        d = dec.decode(p.tobytes(), OPUS_FRAME_SAMPLES, decode_fec=False)
-        decoded.append(np.frombuffer(d, np.int16))
+        d = dec.decode_float(p.tobytes(), OPUS_FRAME_SAMPLES, decode_fec=False)
+        decoded.append(np.frombuffer(d, np.float32))
     # decoded_len = sum([len(x) for x in decoded])
-    # in_data = np.array([decoded_len], np.int16)
+    # in_data = np.array([decoded_len], np.float32)
     in_data = np.concatenate(decoded)
     """
     idx = 0
@@ -273,7 +273,7 @@ def handle_post(in_data_raw, query_params):
     packets = data.reshape([-1, OPUS_FRAME_SAMPLES])
     encoded = []
     for p in packets:
-        e = np.frombuffer(enc.encode(p.tobytes(), OPUS_FRAME_SAMPLES), np.uint8)
+        e = np.frombuffer(enc.encode_float(p.tobytes(), OPUS_FRAME_SAMPLES), np.uint8)
         encoded.append(e)
     data = pack_multi(encoded).tobytes()
 
