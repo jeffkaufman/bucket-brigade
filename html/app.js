@@ -25,7 +25,7 @@ LOG_LEVELS.forEach((level) => {
 
 // We fall back exponentially until we find a good size, but we need a
 // place to start that should be reasonably fair.
-const INITIAL_MS_PER_BATCH = 180;  // XXX: probably make sure this is a multiple of our opus frame size (60ms)
+const INITIAL_MS_PER_BATCH = 600; // XXX 180;  // XXX: probably make sure this is a multiple of our opus frame size (60ms)
 // If we have fallen back so much that we are now taking this long,
 // then give up and let the user know things are broken.
 const MAX_MS_PER_BATCH = 900;
@@ -448,8 +448,6 @@ var expected_bogus_header = [
 class AudioEncoder {
     constructor(path) {
         this.worker = new Worker(path);
-
-        this.encode = this.worker_rpc;
     }
 
     async worker_rpc(msg) {
@@ -457,11 +455,12 @@ class AudioEncoder {
         if (ev.data.status != 0) {
             throw ev.data;
         }
-        return ev.data.packets;
+        return ev.data;
     }
 
     async setup(cfg) {
-        var packets = await this.worker_rpc(cfg);
+        var data = await this.worker_rpc(cfg);
+        var packets = data.packets;
         // This opus wrapper library adds a bogus header, which we validate and then strip for our sanity.
         if (packets.length != 1 || packets[0].data.byteLength != expected_bogus_header.length) {
             throw { err: "Bad header packet", data: packets };
@@ -473,6 +472,14 @@ class AudioEncoder {
             }
         }
         // return nothing.
+    }
+
+    async encode(in_data) {
+        var data = await this.worker_rpc(in_data);
+        if (data.packets === undefined) {
+            throw data;
+        }
+        return data.packets;
     }
 
     async reset() {
@@ -688,11 +695,11 @@ function unpack_multi(data) {
   return result;
 }
 
-function concat_typed_arrays(arrays) {
-  if (arrays.length == 0) {
-    throw "cannot concat zero arrays (don't know result type)";
+function concat_typed_arrays(arrays, _constructor) {
+  if (arrays.length == 0 && _constructor === undefined) {
+    throw "cannot concat zero arrays without constructor provided";
   }
-  var constructor = arrays[0].constructor;
+  var constructor = _constructor || arrays[0].constructor;
   var total_len = 0;
   arrays.forEach((a) => {
     if (a.constructor !== constructor) {
@@ -774,7 +781,7 @@ async function handle_message(event) {
   */
 
   if (mic_buf.length >= sample_batch_size) {
-    var samples = concat_typed_arrays(mic_buf);
+    var samples = concat_typed_arrays(mic_buf, Float32Array);
     lib.log(LOG_SPAM, "Encoding samples:", mic_buf);
     mic_buf = [];
     // XXX: terrible.

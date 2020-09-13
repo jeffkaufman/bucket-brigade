@@ -7,6 +7,7 @@ import urllib.parse
 import time
 import numpy as np
 import random
+import opuslib
 
 FRAME_SIZE = 128
 
@@ -16,7 +17,13 @@ first_client_total_samples = None
 first_client_value = None
 
 QUEUE_SECONDS = 120
-SAMPLE_RATE = 11025
+
+SAMPLE_RATE = 48000
+CHANNELS = 1
+OPUS_FRAME_MS = 60
+OPUS_FRAME_SAMPLES = SAMPLE_RATE // 1000 * OPUS_FRAME_MS
+OPUS_BYTES_PER_SAMPLE = 2  # uint16
+OPUS_FRAME_BYTES = OPUS_FRAME_SAMPLES * CHANNELS * OPUS_BYTES_PER_SAMPLE
 
 # Leave this much space between users. Ideally this would be very
 # short, but it needs to be long enough to cover "client total time
@@ -34,6 +41,7 @@ queue = np.zeros((QUEUE_SECONDS * SAMPLE_RATE // FRAME_SIZE * FRAME_SIZE),
 users = {}  # username -> (last_heard_server_clock, delay_samples)
 chats = {}  # username -> [chats they have not yet received]
 delays = {} # username -> delay they haven't been told about yet
+opus_state = {}  # usermame -> (encoder, decoder) -- not used yet
 
 def wrap_get(start, len_vals):
     start_in_queue = start % len(queue)
@@ -81,7 +89,7 @@ def assign_delays(username_lead):
              for username in users
              if username != username_lead])):
         delays[username] = positions[i % len(positions)]
-        
+
 def update_users(username, server_clock, client_read_clock):
     users[username] = (server_clock, server_clock - client_read_clock)
     clean_users(server_clock)
@@ -104,6 +112,37 @@ def user_summary():
         summary.append((delay, username))
     summary.sort()
     return summary
+
+def pack_multi(packets):
+    encoded_length = 1
+    for p in packets:
+        encoded_length += 2 + len(p)
+    outdata = np.zeros(encoded_length, np.uint8)
+    outdata[0] = len(packets)
+    idx = 1
+    for p in packets:
+        if p.dtype != np.uint8:
+            raise Exception("pack_multi only accepts uint8")
+        outdata[idx] = len(p) >> 8
+        outdata[idx + 1] = len(p) % 256
+        idx += 2
+        outdata[idx:idx+len(p)] = p
+        idx += len(p)
+    return outdata
+
+def unpack_multi(data):
+    if data.dtype != np.uint8:
+        raise Exception("unpack_multi only accepts uint8")
+    packet_count = data[0]
+    data_idx = 1
+    result = []
+    for i in range(packet_count):
+        length = (data[data_idx] << 8) + data[data_idx + 1]
+        data_idx += 2
+        packet = data[data_idx:data_idx+length]
+        data_idx += length
+        result.append(packet)
+    return result
 
 def handle_post(in_data_raw, query_params):
     global last_request_clock
@@ -153,7 +192,7 @@ def handle_post(in_data_raw, query_params):
         if query_params.get("request_lead", None):
             assign_delays(username)
 
-    in_data = np.frombuffer(in_data_raw, dtype=np.int8)
+    in_data = np.frombuffer(in_data_raw, dtype=np.uint8)
 
     # Audio from clients is summed, so we need to clear the circular
     #   buffer ahead of them. The range we are clearing was "in the
@@ -167,6 +206,26 @@ def handle_post(in_data_raw, query_params):
     saved_last_request_clock = last_request_clock
     last_request_clock = server_clock
 
+    if not username in opus_state:
+        # initialize
+        pass
+
+    dec = opuslib.Decoder(SAMPLE_RATE, CHANNELS)
+    packets = unpack_multi(in_data)
+    decoded = []
+    for p in packets:
+        d = dec.decode(p.tobytes(), OPUS_FRAME_SAMPLES, decode_fec=False)
+        decoded.append(np.frombuffer(d, np.int16))
+    # decoded_len = sum([len(x) for x in decoded])
+    # in_data = np.array([decoded_len], np.int16)
+    in_data = np.concatenate(decoded)
+    """
+    idx = 0
+    for d in decoded:
+        in_data[idx:idx+len(d)] = d[:]
+        idx += len(d)
+    """
+
     kill_client = False
     # Note: If we get a write that is "too far" in the past, we need to throw it away.
     if client_write_clock is None:
@@ -175,16 +234,9 @@ def handle_post(in_data_raw, query_params):
         # Client is too far behind and going to wrap the buffer. :-(
         kill_client = True
     else:
-        # XXX: debugging hackery
-        #if first_client_write_clock is None:
-        #    first_client_write_clock = client_write_clock
-        #    first_client_total_samples = 0
-        #    first_client_value = in_data[0]
-        #    print("First client value is:", first_client_value)
-        #first_client_total_samples += len(in_data)
         wrap_assign(client_write_clock,
                     wrap_get(client_write_clock, len(in_data)) +
-                    np.array(in_data, dtype=np.int16))
+                    in_data)
 
     # Why subtract len(in_data) above and below? Because the future is to the
     #   right. So when a client asks for n samples at time t, what they
@@ -196,26 +248,18 @@ def handle_post(in_data_raw, query_params):
     #   len(in_data), but it matters if len(in_data) changes, and it matters for
     #   the server's zeroing.
 
-    data = wrap_get(client_read_clock, len(in_data))
-    data = np.minimum(data, 127)
-    data = np.maximum(data, -128)
-    data = np.array(data, dtype=np.int8)
-
-    # Validate the first queue worth of writes from the first client
-    """
-    if first_client_total_samples is not None and first_client_total_samples <= len(queue):
-        validation_offset = first_client_write_clock
-        for i in range(len(queue)):
-            if queue[(validation_offset + i) % len(queue)] not in (0, first_client_value + i):
-                print("Validation failed?!")
-                import code
-                code.interact(local=dict(globals(), **locals()))
-    """
-
     if query_params.get("loopback", [None])[0] == "true":
-        data = in_data_raw
+        data = in_data
     else:
-        data = data.tobytes()
+        data = wrap_get(client_read_clock, len(in_data))
+
+    enc = opuslib.Encoder(SAMPLE_RATE, CHANNELS, opuslib.APPLICATION_AUDIO)
+    packets = data.reshape([-1, OPUS_FRAME_SAMPLES])
+    encoded = []
+    for p in packets:
+        e = np.frombuffer(enc.encode(p.tobytes(), OPUS_FRAME_SAMPLES), np.uint8)
+        encoded.append(e)
+    data = pack_multi(encoded).tobytes()
 
     user_chats = [];
     if username and username in chats:
