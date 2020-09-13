@@ -232,7 +232,7 @@ function set_controls() {
   start_button.textContent = running ? "Stop" : "Start";
 
   mute_button.disabled = !running;
-  loopback_mode_select.disabled = !running;
+  loopback_mode_select.disabled = running;
   click_bpm.disabled = running;
 
   in_select.disabled = false;
@@ -365,22 +365,22 @@ var override_gain = 1.0;
 var synthetic_audio_source;
 var synthetic_audio_sink;
 var synthetic_click_interval;
-var sample_rate = 11025;  // Firefox may get upset if we use a weird value here? Also, we may not want to force this to a specific value?
+var sample_rate = 48000;  // Firefox may get upset if we use a weird value here? Also, we may not want to force this to a specific value?
 var encoder;
 var decoder;
 
-function ms_to_batches(ms) {
+function ms_to_batch_size(ms) {
   return Math.round(sample_rate / 128 / 1000 * ms);
 }
 
-function batches_to_ms(batches) {
-  return Math.round(batches * 128 * 1000 / sample_rate);
+function batch_size_to_ms(batch_size) {
+  return Math.round(batch_size * 128 * 1000 / sample_rate);
 }
 
 // How many samples should we accumulate before sending to the server?
 // In units of 128 samples.
 var sample_batch_size = null;  // set by start()
-var max_sample_batch_size = ms_to_batches(MAX_MS_PER_BATCH);
+var max_sample_batch_size = ms_to_batch_size(MAX_MS_PER_BATCH);
 
 function set_estimate_latency_mode(mode) {
   playerNode.port.postMessage({
@@ -432,6 +432,7 @@ async function send_and_wait(port, msg, transfer) {
         port.onmessage = function (ev) {
             resolve(ev);
         }
+        lib.log(LOG_VERYSPAM, "Posting to port", port, "msg", msg, "transfer", transfer);
         port.postMessage(msg, transfer);
     });
 }
@@ -459,7 +460,7 @@ class AudioEncoder {
             throw ev.data;
         }
         return ev.data.packets;
-    };
+    }
 
     async setup(cfg) {
         var packets = await this.worker_rpc(cfg);
@@ -508,8 +509,8 @@ class AudioDecoder {
 async function start() {
   clear_error();
 
-  sample_batch_size = ms_to_batches(INITIAL_MS_PER_BATCH);
-  window.msBatchSize.value = batches_to_ms(sample_batch_size);
+  sample_batch_size = ms_to_batch_size(INITIAL_MS_PER_BATCH);
+  window.msBatchSize.value = batch_size_to_ms(sample_batch_size);
 
   var AudioContext = window.AudioContext || window.webkitAudioContext;
   audioCtx = new AudioContext({ sampleRate: sample_rate });
@@ -617,20 +618,80 @@ function samples_to_worklet(samples, clock) {
   playerNode.port.postMessage(message);
 }
 
-// XXX
-var sample_encoding = {
-  client: Int8Array,
-  server: "b",
-  // Translate from/to Float32
-  send: (x) => {
-    x = x * override_gain * 128;
-    x = Math.max(Math.min(x, 127), -128);
-    return x;
-  },
-  recv: (x) => x / 127.0
-};
+// Pack multiple subpackets into an encoded blob to send the server
+// - Packet count: 1 byte
+// - Each packet:
+//   - Packet length (bytes): 2 bytes, big endian
+//   - Packet data
+function pack_multi(packets) {
+  lib.log(LOG_SPAM, "Encoding packet for transmission to server! input:", packets);
+  var encoded_length = 1; // space for packet count
+  packets.forEach((p) => {
+    encoded_length += 2; // space for packet length
+    encoded_length += p.length;
+  });
 
-function handle_message(event) {
+  var outdata = new Uint8Array(encoded_length);
+  outdata[0] = packets.length;
+  var outdata_idx = 1;
+  packets.forEach((p) => {
+    if (p.constructor !== Uint8Array) {
+      throw "must be Uint8Array";
+    }
+    var len = p.length;  // will never exceed 2**16
+    var len_b = [len >> 8, len % 256];
+    outdata[outdata_idx] = len_b[0];
+    outdata[outdata_idx + 1] = len_b[1];
+    outdata.set(p, outdata_idx + 2);
+    outdata_idx += len + 2;
+  });
+  lib.log(LOG_SPAM, "Encoded packet for transmission to server! Final outdata_idx:", outdata_idx, ", encoded_length:", encoded_length, ", num. subpackets:", packets.length, ", output:", outdata);
+  return outdata;
+}
+
+function unpack_multi(data) {
+  lib.log(LOG_SPAM, "Decoding packet from server, data:", data);
+  if (data.constructor !== Uint8Array) {
+    throw "must be Uint8Array";
+  }
+  var packet_count = data[0];
+  var data_idx = 1;
+  var result = [];
+  for (var i = 0; i < packet_count; ++i) {
+    var len = (data[data_idx] << 8) + data[data_idx + 1];
+    lib.log(LOG_VERYSPAM, "Decoding subpacket", i, "at offset", data_idx, "with len", len);
+    var packet = new Uint8Array(len);
+    data_idx += 2;
+    packet.set(data.slice(data_idx, data_idx + len));
+    data_idx += len;
+    result.push(packet);
+  }
+  lib.log(LOG_SPAM, "Decoded packet from server! Final data_idx:", data_idx, ", total length:", data.length, ", num. subpackets:", packet_count, "final output:", result);
+  return result;
+}
+
+function concat_typed_arrays(arrays) {
+  if (arrays.length == 0) {
+    throw "cannot concat zero arrays (don't know result type)";
+  }
+  var constructor = arrays[0].constructor;
+  var total_len = 0;
+  arrays.forEach((a) => {
+    if (a.constructor !== constructor) {
+      throw "must concat arrays of same type";
+    }
+    total_len += a.length;
+  });
+  var result = new constructor(total_len);
+  var result_idx = 0;
+  arrays.forEach((a) => {
+    result.set(a, result_idx);
+    result_idx += a.length;
+  });
+  return result;
+}
+
+async function handle_message(event) {
   var msg = event.data;
   lib.log(LOG_VERYSPAM, "onmessage in main thread received ", msg);
 
@@ -676,11 +737,12 @@ function handle_message(event) {
     return;
   }
 
-  //XXX lib.log_every(10, "audioCtx", LOG_DEBUG, "audioCtx:", audioCtx);
   var mic_samples = msg.samples;
   var send_write_clock = msg.clock;
   mic_buf.push(mic_samples);
+  lib.log(LOG_VERYSPAM, "added", mic_samples.length, "samples, for total of", mic_buf.length * 128, "with threshold", sample_batch_size);
 
+  /*
   // Update the peak meter
   var peak_in = parseFloat(peak_in_text.value);
   if (isNaN(peak_in)) {
@@ -693,73 +755,98 @@ function handle_message(event) {
   }
   // XXX: touching the DOM
   peak_in_text.value = peak_in;
+  */
 
   if (mic_buf.length >= sample_batch_size) {
-    // Resampling here works automatically for now since we're copying sample-by-sample
-    var outdata = new sample_encoding["client"](mic_buf.length * mic_samples.length);
-    if (msg.clock !== null) {
-      for (var i = 0; i < mic_buf.length; i++) {
-        for (var j = 0; j < mic_buf[i].length; j++) {
-          outdata[i * mic_buf[0].length + j] = sample_encoding["send"](mic_buf[i][j]);
-        }
-      }
-    }
+    var samples = concat_typed_arrays(mic_buf);
+    lib.log(LOG_SPAM, "Encoding samples:", mic_buf);
     mic_buf = [];
+    var encoded_samples = await encoder.encode({ samples });
+    var enc_buf = [];
+    lib.log(LOG_SPAM, "Got encoded packets:", encoded_samples);
+    encoded_samples.forEach((packet) => {
+      enc_buf.push(new Uint8Array(packet.data));
+    });
+    var outdata = pack_multi(enc_buf);
 
     // Clocks are at the _end_ of intervals; the longer we've been
     //   accumulating data, the more we have to read. (Trust me.)
     var orig_read_clock = read_clock;
-    read_clock += outdata.length;
+    read_clock += enc_buf.length * ms_to_batch_size(OPUS_FRAME_MS) * 128;
+    //XXX this seems more correct than what I had before?? A little janky perhaps.
 
     if (loopback_mode == "main") {
-      lib.log(LOG_DEBUG, "looping back samples in main thread");
-      var result = new Float32Array(outdata.length);
-      for (var i = 0; i < outdata.length; i++) {
-        result[i] = sample_encoding["recv"](outdata[i]);
+      var packets = unpack_multi(outdata);
+      var decoded_packets = [];
+      for (var i = 0; i < packets.length; ++i) {
+        var samples = await decoder.decode({
+          data: packets[i].buffer
+        });
+        lib.log(LOG_VERYSPAM, "Decoded samples:", samples);
+        decoded_packets.push(new Float32Array(samples.samples));
       }
-      samples_to_worklet(result, read_clock);
+      lib.log(LOG_VERYSPAM, "Decoded packets looped back:", decoded_packets);
+      var play_samples = concat_typed_arrays(decoded_packets, Float32Array);
+      lib.log(LOG_SPAM, "Playing looped-back samples:", play_samples);
+      samples_to_worklet(play_samples, read_clock);
       return;
     } else {
       var target_url = new URL(server_path, document.location);
+      var send_metadata = {
+        read_clock: orig_read_clock,
+        write_clock: send_write_clock,
+        username: window.userName.value,
+        userid,
+        chatsToSend,
+        requestedLeadPosition,
+        loopback_mode
+      };
 
-      // This has a few too many arguments, but I think it's still an improvement to factor it out.
-      samples_to_server(outdata, orig_read_clock, send_write_clock, window.userName.value, userid, chatsToSend, requestedLeadPosition, target_url, loopback_mode).then((response) => {
-        var result = new sample_encoding["client"](response.data);
-        var metadata = response.metadata;
+      var response = await samples_to_server(outdata, target_url, send_metadata);
+      var result = new Uint8Array(response.data);
+      var packets = unpack_multi(result);
+      var metadata = response.metadata;
 
-        var play_samples = new Float32Array(result.length);
-        for (var i = 0; i < result.length; i++) {
-          play_samples[i] = sample_encoding["recv"](result[i]);
-          if (Math.abs(play_samples[i]) > peak_out) {
-            peak_out = Math.abs(play_samples[i]);
+      /*
+      // Update the peak meter
+      for (var i = 0; i < result.length; i++) {
+        if (Math.abs(play_samples[i]) > peak_out) {
+          peak_out = Math.abs(play_samples[i]);
+        }
+      }
+      */
+
+      var decoded_packets = [];
+      for (var i = 0; i < packets.length; ++i) {
+        var samples = await decoder.decode(packets[i]);
+        decoded_packets.push(new Float32Array(samples.samples));
+      }
+      var play_samples = concat_typed_arrays(decoded_packets, Float32Array);
+      samples_to_worklet(play_samples, metadata["client_read_clock"]);
+
+      var queue_size = metadata["queue_size"];
+      var user_summary = metadata["user_summary"];
+      var chats = metadata["chats"];
+      var delay_samples = metadata["delay_samples"];
+
+      // Defer touching the DOM, just to be safe.
+      requestAnimationFrame(() => {
+        if (delay_samples) {
+          delay_samples = parseInt(delay_samples, 10);
+          if (delay_samples > 0) {
+            audio_offset_text.value = Math.round(delay_samples / sample_rate);
+            audio_offset_change();
           }
         }
-        samples_to_worklet(play_samples, metadata["client_read_clock"]);
 
-        var queue_size = metadata["queue_size"];
-        var user_summary = metadata["user_summary"];
-        var chats = metadata["chats"];
-        var delay_samples = metadata["delay_samples"];
+        update_active_users(user_summary);
 
-        // Defer touching the DOM, just to be safe.
-        requestAnimationFrame(() => {
-          if (delay_samples) {
-            delay_samples = parseInt(delay_samples, 10);
-            if (delay_samples > 0) {
-              audio_offset_text.value = Math.round(delay_samples / sample_rate);
-              audio_offset_change();
-            }
-          }
+        chats.forEach((msg) => receiveChatMessage(msg[0], msg[1]));
 
-          update_active_users(user_summary);
+        peak_out_text.value = peak_out;
 
-          chats.forEach((msg) => receiveChatMessage(msg[0], msg[1]));
-
-          peak_out_text.value = peak_out;
-
-          client_total_time.value = (metadata["client_read_clock"] - metadata["client_write_clock"] + play_samples.length) / sample_rate;
-          client_read_slippage.value = (metadata["server_clock"] - metadata["client_read_clock"] - audio_offset) / sample_rate;
-        });
+        client_total_time.value = (metadata["client_read_clock"] - metadata["client_write_clock"] + play_samples.length) / sample_rate;
+        client_read_slippage.value = (metadata["server_clock"] - metadata["client_read_clock"] - audio_offset) / sample_rate;
       });
     }
   }
@@ -797,7 +884,7 @@ function try_increase_batch_size_and_reload() {
   if (sample_batch_size < max_sample_batch_size) {
     // Try increasing the batch size and restarting.
     sample_batch_size *= 1.3;  // XXX: do we care that this may not be integral??
-    window.msBatchSize.value = batches_to_ms(sample_batch_size);
+    window.msBatchSize.value = batch_size_to_ms(sample_batch_size);
     reload_settings();
     return;
   } else {

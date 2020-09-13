@@ -31,7 +31,11 @@ export async function query_server_clock(loopback_mode, target_url, sample_rate)
 }
 
 var xhrs_inflight = 0;
-export async function samples_to_server(outdata, read_clock, write_clock, username, userid, chatsToSend, requestedLeadPosition, target_url, loopback_mode) {
+export async function samples_to_server(outdata, target_url, send_metadata) {
+  // Not a tremendous improvement over having too many parameters, but a bit.
+  var { read_clock, write_clock, username, userid, chatsToSend, requestedLeadPosition,
+    loopback_mode } = send_metadata;
+
   return new Promise((resolve, reject) => {
     var xhr = new XMLHttpRequest();
     xhr.onreadystatechange = () => {
