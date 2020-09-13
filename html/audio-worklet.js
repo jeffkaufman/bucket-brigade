@@ -382,7 +382,7 @@ class Player extends AudioWorkletProcessor {
       lib.log(LOG_VERYSPAM, "about to output samples from", this.play_buffer, "with length", this.play_buffer.length);
 
       for (var i = 0; i < output.length; i++) {
-        var val = this.play_buffer.read() * 0.1;
+        var val = this.play_buffer.read();
         output[i] = val;
         // This is the "opposite" of local loopback: There, we take whatever
         //   we hear on the mic and send to the speaker, whereas here we take
