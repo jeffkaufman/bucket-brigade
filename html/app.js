@@ -578,15 +578,7 @@ async function start() {
 
   window.clapAlong.style.display = "block";
 
-  // XXX
-  //set_estimate_latency_mode(true);
-  window.est40to60.innerText = "0ms";
-  window.estLatency.innerText = "0ms";
-  send_local_latency();
-  window.clapAlong.style.display = "none";
-  window.runningInstructions.style.display = "block";
-  //set_estimate_latency_mode(false);
-  // XXX
+  set_estimate_latency_mode(true);
 }
 
 async function reload_settings() {
