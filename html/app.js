@@ -383,12 +383,20 @@ var sample_rate = 48000;  // Firefox may get upset if we use a weird value here?
 var encoder;
 var decoder;
 
+function ms_to_samples(ms) {
+  return sample_rate * ms / 1000;
+}
+
+function samples_to_ms(samples) {
+  return samples * 1000 / sample_rate;
+}
+
 function ms_to_batch_size(ms) {
-  return Math.round(sample_rate / 128 / 1000 * ms);
+  return Math.round(ms_to_samples(ms) / 128);
 }
 
 function batch_size_to_ms(batch_size) {
-  return Math.round(batch_size * 128 * 1000 / sample_rate);
+  return Math.round(samples_to_ms(batch_size * 128));
 }
 
 // How many samples should we accumulate before sending to the server?
@@ -817,8 +825,10 @@ async function handle_message(event) {
     // Clocks are at the _end_ of intervals; the longer we've been
     //   accumulating data, the more we have to read. (Trust me.)
     var orig_read_clock = read_clock;
-    read_clock += enc_buf.length * ms_to_batch_size(OPUS_FRAME_MS) * 128;
-    //XXX this seems more correct than what I had before?? A little janky perhaps.
+    var packet_contents_length = enc_buf.length * ms_to_samples(OPUS_FRAME_MS)
+    // These SHOULD be equal IF we have managed to make our sample_back_size correctly a multiple of our OPUS_FRAME_MS. Otherwise they will be different, but hopefully still correct...
+    lib.log(LOG_SPAM, "Calculated packet contents length:", packet_contents_length, "; amount of stuff fed to encoder:", samples.length);
+    read_clock += packet_contents_length;
 
     if (loopback_mode == "main") {
       var packets = unpack_multi(outdata);
@@ -829,11 +839,11 @@ async function handle_message(event) {
 
       var decoded_packets = [];
       for (var i = 0; i < packets.length; ++i) {
-        var samples = await decoder.decode({
+        var p_samples = await decoder.decode({
           data: packets[i].buffer
         });
-        lib.log(LOG_VERYSPAM, "Decoded samples:", samples);
-        decoded_packets.push(new Float32Array(samples.samples));
+        lib.log(LOG_VERYSPAM, "Decoded samples:", p_samples);
+        decoded_packets.push(new Float32Array(p_samples.samples));
       }
       lib.log(LOG_VERYSPAM, "Decoded packets looped back:", decoded_packets);
       var play_samples = concat_typed_arrays(decoded_packets, Float32Array);
