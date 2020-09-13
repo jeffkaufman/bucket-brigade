@@ -314,7 +314,6 @@ var OpusDecoder = (function() {
     })
   });
   OpusDecoder.prototype.decode = (function(packet) {
-    console.log("pkt:", packet);
     if (packet.reset) {
         this.reset();
         this.worker.postMessage({

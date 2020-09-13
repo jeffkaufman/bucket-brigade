@@ -785,7 +785,7 @@ async function handle_message(event) {
     lib.log(LOG_SPAM, "Encoding samples:", mic_buf);
     mic_buf = [];
     // XXX: terrible.
-    await encoder.reset();
+    // await encoder.reset();
     var encoded_samples = await encoder.encode({ samples });
     var enc_buf = [];
     lib.log(LOG_SPAM, "Got encoded packets:", encoded_samples);
@@ -803,9 +803,9 @@ async function handle_message(event) {
     if (loopback_mode == "main") {
       var packets = unpack_multi(outdata);
       // XXX: terrible.
-      lib.log(LOG_VERYSPAM, "resetting decoder...");
-      var reset_result = await decoder.reset();
-      lib.log(LOG_SPAM, "decoder reset:", reset_result);
+      //lib.log(LOG_VERYSPAM, "resetting decoder...");
+      //var reset_result = await decoder.reset();
+      //lib.log(LOG_SPAM, "decoder reset:", reset_result);
 
       var decoded_packets = [];
       for (var i = 0; i < packets.length; ++i) {
@@ -846,8 +846,8 @@ async function handle_message(event) {
       */
 
       // XXX: terrible.
-      var reset_result = await decoder.reset();
-      lib.log(LOG_DEBUG, "decoder reset:", reset_result);
+      //var reset_result = await decoder.reset();
+      //lib.log(LOG_DEBUG, "decoder reset:", reset_result);
 
       var decoded_packets = [];
       for (var i = 0; i < packets.length; ++i) {

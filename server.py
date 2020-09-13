@@ -41,7 +41,7 @@ queue = np.zeros((QUEUE_SECONDS * SAMPLE_RATE // FRAME_SIZE * FRAME_SIZE),
 users = {}  # username -> (last_heard_server_clock, delay_samples)
 chats = {}  # username -> [chats they have not yet received]
 delays = {} # username -> delay they haven't been told about yet
-opus_state = {}  # usermame -> (encoder, decoder) -- not used yet
+opus_state = {}  # usermame -> (encoder, decoder)
 
 def wrap_get(start, len_vals):
     start_in_queue = start % len(queue)
@@ -208,9 +208,12 @@ def handle_post(in_data_raw, query_params):
 
     if not username in opus_state:
         # initialize
-        pass
+        opus_state[username] = (
+            opuslib.Encoder(SAMPLE_RATE, CHANNELS, opuslib.APPLICATION_AUDIO),
+            opuslib.Decoder(SAMPLE_RATE, CHANNELS)
+        )
+    (enc, dec) = opus_state[username]
 
-    dec = opuslib.Decoder(SAMPLE_RATE, CHANNELS)
     packets = unpack_multi(in_data)
     decoded = []
     for p in packets:
@@ -253,7 +256,6 @@ def handle_post(in_data_raw, query_params):
     else:
         data = wrap_get(client_read_clock, len(in_data))
 
-    enc = opuslib.Encoder(SAMPLE_RATE, CHANNELS, opuslib.APPLICATION_AUDIO)
     packets = data.reshape([-1, OPUS_FRAME_SAMPLES])
     encoded = []
     for p in packets:
