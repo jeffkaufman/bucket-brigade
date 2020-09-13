@@ -31,9 +31,16 @@ USER_LIFETIME_SAMPLES = SAMPLE_RATE * 5
 queue = np.zeros((QUEUE_SECONDS * SAMPLE_RATE // FRAME_SIZE * FRAME_SIZE),
                  np.int16)
 
-users = {}  # username -> (last_heard_server_clock, delay_samples)
-chats = {}  # username -> [chats they have not yet received]
-delays = {} # username -> delay they haven't been told about yet
+class User:
+    def __init__(self, userid, name, last_heard_server_clock, delay_samples):
+        self.userid = userid
+        self.name = name
+        self.last_heard_server_clock = last_heard_server_clock
+        self.delay_samples = delay_samples
+        self.chats_to_send = []
+        self.delay_to_send = None
+
+users = {} # userid -> User
 
 def wrap_get(start, len_vals):
     start_in_queue = start % len(queue)
@@ -66,9 +73,8 @@ def wrap_assign(start, vals):
         queue[start_in_queue:(start_in_queue+first_section_size)] = vals[:first_section_size]
         queue[0:second_section_size] = vals[first_section_size:]
 
-def assign_delays(username_lead):
-    delays.clear()
-    delays[username_lead] = DELAY_INTERVAL
+def assign_delays(userid_lead):
+    users[userid_lead].delay_to_send = DELAY_INTERVAL
 
     positions = [x*DELAY_INTERVAL
                  for x in range(2, 15)]
@@ -76,32 +82,34 @@ def assign_delays(username_lead):
     # Randomly shuffle the remaining users, and assign them to positions. If we
     # have more users then positions, then double up.
     # TODO: perhaps we should prefer to double up from the end?
-    for i, (_, username) in enumerate(sorted(
-            [(random.random(), username)
-             for username in users
-             if username != username_lead])):
-        delays[username] = positions[i % len(positions)]
-        
-def update_users(username, server_clock, client_read_clock):
-    users[username] = (server_clock, server_clock - client_read_clock)
+    for i, (_, userid) in enumerate(sorted(
+            [(random.random(), userid)
+             for userid in users
+             if userid != userid_lead])):
+        users[userid].delay_to_send = positions[i % len(positions)]
+
+def update_users(userid, username, server_clock, client_read_clock):
+    delay_samples = server_clock - client_read_clock
+    if userid not in users:
+        users[userid] = User(userid, username, server_clock, delay_samples)
+    users[userid].last_heard_server_clock = server_clock
+    users[userid].delay_samples = delay_samples
+
     clean_users(server_clock)
 
 def clean_users(server_clock):
     to_delete = []
-    for username, (last_heard_server_clock, _) in users.items():
-        if server_clock - last_heard_server_clock > USER_LIFETIME_SAMPLES:
-            to_delete.append(username)
-    for username in to_delete:
-        del users[username]
-        if username in chats:
-            del chats[username]
-        if username in delays:
-            del delays[username]
+    for userid, user in users.items():
+        age_samples = server_clock - user.last_heard_server_clock
+        if age_samples > USER_LIFETIME_SAMPLES:
+            to_delete.append(userid)
+    for userid in to_delete:
+        del users[userid]
 
 def user_summary():
     summary = []
-    for username, (_, delay) in users.items():
-        summary.append((delay, username))
+    for user in users.values():
+        summary.append((user.delay_samples, user.name))
     summary.sort()
     return summary
 
@@ -131,27 +139,33 @@ def handle_post(in_data_raw, query_params):
     else:
         raise ValueError("no client read clock")
 
+    userid = None
+    userids = query_params.get("userid", None)
+
     username = None
     usernames = query_params.get("username", None)
-    if usernames:
-        username, = usernames
-        if username:
-            update_users(username, server_clock, client_read_clock)
+    if not userids or not usernames:
+        raise ValueError("missing username/id")
 
-        msg_chats = query_params.get("chat", None)
-        if msg_chats:
-            msg_chats, = msg_chats
-            msg_chats = json.loads(msg_chats)
-            for other_username in users:
-                if other_username != username:
-                    if other_username not in chats:
-                        chats[other_username] = []
-                    for msg_chat in msg_chats:
-                        chats[other_username].append((
-                            username, msg_chat))
+    userid, = userids
+    username, = usernames
+    if not userid or not username:
+        raise ValueError("missing username/id")
 
-        if query_params.get("request_lead", None):
-            assign_delays(username)
+    update_users(userid, username, server_clock, client_read_clock)
+    user = users[userid]
+
+    msg_chats = query_params.get("chat", None)
+    if msg_chats:
+        msg_chats, = msg_chats
+        msg_chats = json.loads(msg_chats)
+        for other_userid, other_user in users.items():
+            if other_userid != userid:
+                for msg_chat in msg_chats:
+                    other_user.chats_to_send.append((username, msg_chat))
+
+    if query_params.get("request_lead", None):
+        assign_delays(userid)
 
     in_data = np.frombuffer(in_data_raw, dtype=np.int8)
 
@@ -217,28 +231,21 @@ def handle_post(in_data_raw, query_params):
     else:
         data = data.tobytes()
 
-    user_chats = [];
-    if username and username in chats:
-        user_chats = chats[username]
-        del chats[username]
-
-    user_delay = None
-    if username and username in delays:
-        user_delay = delays[username]
-        del delays[username]
-
     x_audio_metadata = json.dumps({
         "server_clock": server_clock,
         "last_request_clock": saved_last_request_clock,
         "client_read_clock": client_read_clock,
         "client_write_clock": client_write_clock,
         "user_summary": user_summary(),
-        "chats": user_chats,
-        "delay_samples": user_delay,
+        "chats": user.chats_to_send,
+        "delay_samples": user.delay_to_send,
         # Both the following uses units of 128-sample frames
         "queue_size": len(queue) / FRAME_SIZE,
         "kill_client": kill_client,
     })
+
+    user.chats_to_send.clear()
+    user.delay_to_send = None
 
     return data, x_audio_metadata
 

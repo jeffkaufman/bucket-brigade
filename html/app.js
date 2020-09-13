@@ -31,6 +31,8 @@ const MAX_MS_PER_BATCH = 1000;
 
 lib.log(LOG_INFO, "Starting up");
 
+const userid = Math.round(Math.random()*100000000000)
+
 function set_error(msg) {
   window.errorBox.innerText = msg;
   window.errorBox.style.display = msg ? "block" : "none";
@@ -672,9 +674,9 @@ function handle_message(event) {
         lib.log(LOG_DEBUG, "looping back samples at server");
       }
       const username = window.userName.value;
-      if (username) {
-        params.set('username', username);
-      }
+      params.set('username', username);
+      params.set('userid', userid);
+
       if (chatsToSend.length) {
         params.set('chat', JSON.stringify(chatsToSend));
         chatsToSend = [];
