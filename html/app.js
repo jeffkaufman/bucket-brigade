@@ -579,6 +579,7 @@ function handle_message(event) {
       const latency_range = msg.p60 - msg.p40;
       window.est40to60.innerText = Math.round(latency_range) + "ms";
       window.estLatency.innerText = Math.round(msg.p50) + "ms";
+      window.msClietLatency.value = Math.round(msg.p50) + "ms";
 
       if (latency_range < msg.samples / 2) {
         // Stop trying to estimate latency once were close enough. The
