@@ -62,7 +62,7 @@ class ClockedRingBuffer {
   }
 
   read() {
-    lib.log_every(12800, "buf_read", LOG_DEBUG, "leadin_samples:", this.leadin_samples, "read_clock:", this.read_clock, "buffered_data:", this.buffered_data, "space_left:", this.space_left());
+    lib.log_every(12800, "buf_read", LOG_SPAM, "leadin_samples:", this.leadin_samples, "read_clock:", this.read_clock, "buffered_data:", this.buffered_data, "space_left:", this.space_left());
     if (this.read_clock === null) {
       return 0;
     }
@@ -74,8 +74,6 @@ class ClockedRingBuffer {
     var val = this.buf[this.real_offset(this.read_clock)];
     if (isNaN(val)) {
       // TODO: Seeing an underflow should make us allocate more client slack
-
-      // XXX: hardcoded interval matches size of our net requests
       lib.log_every(12800, LOG_ERROR, "Buffer underflow :-( leadin_samples:", this.leadin_samples, "read_clock:", this.read_clock, "buffered_data:", this.buffered_data, "space_left:", this.space_left());
       this.read_clock++;
       return 0;
@@ -91,7 +89,7 @@ class ClockedRingBuffer {
       lib.log(LOG_ERROR, "write_clock not an integer?!");
       throw "write_clock not an integer?!";
     }
-    lib.log_every(12800, "buf_write", LOG_DEBUG, "write_clock:", write_clock, "read_clock:", this.read_clock, "buffered_data:", this.buffered_data, "space_left:", this.space_left());
+    lib.log_every(12800, "buf_write", LOG_SPAM, "write_clock:", write_clock, "read_clock:", this.read_clock, "buffered_data:", this.buffered_data, "space_left:", this.space_left());
     if (this.read_clock === null) {
       // It should be acceptable for this to end up negative
       this.read_clock = write_clock - this.leadin_samples;
@@ -411,9 +409,53 @@ class Player extends AudioWorkletProcessor {
     }
   }
 
+  profile_web_audio() {
+    var now_ms = Date.now();
+    const process_history_len = 100;
+    if (this.process_history_ms === undefined) {
+      this.bad_sample_rate = 0;
+      this.acc_err = 0;
+      this.process_history_ms = new Array(process_history_len).fill(NaN);
+    } else if (!isNaN(this.process_history_ms[0])) {
+      var interval = now_ms - this.process_history_ms[0];
+      var target_interval = process_history_len * 128 * 1000 / sampleRate;
+      var err = interval - target_interval;
+      var eff_rate = process_history_len * 128 * 1000 / interval;
+      this.acc_err += err / process_history_len;
+      lib.log(LOG_VERYSPAM, eff_rate, this.process_history_ms[0], now_ms, interval, target_interval, err, this.acc_err);
+
+      // other parameters of interesst
+      lib.log(LOG_VERYSPAM, currentTime, currentFrame, /* getOutputTimestamp(), performanceTime, contextTime*/);
+
+      if (eff_rate < 0.75 * sampleRate) {
+        if (this.bad_sample_rate == 0) {
+          lib.log(LOG_WARNING, "BAD SAMPLE RATE, WEB AUDIO BUG? Should be", sampleRate, "but seeing", eff_rate, ". Will try restarting momentarily if this persists.");
+        }
+        this.bad_sample_rate += 1;
+        if (this.bad_sample_rate > 1000) {
+          lib.log(LOG_WARNING, "SAMPLE RATE STILL BAD. Should be", sampleRate, "but seeing", eff_rate, ". Restarting app.");
+          // Ask the main app to reload the audio input device
+          this.killed = true;
+          this.port.postMessage({
+            type: "bluetooth_bug_restart"
+          });
+        }
+      }
+    }
+    this.process_history_ms.push(now_ms);
+    this.process_history_ms.shift();
+  }
+
   process(inputs, outputs) {
+    if (this.killed) {
+      return false;
+    }
+
     var input = inputs[0][0];
     var output = outputs[0][0];
+
+    // Gather some stats, and restart if things look wonky for too long.
+    this.profile_web_audio()
 
     if (!this.ready) {
       lib.log_every(100, "process_before_ready", LOG_ERROR, "tried to process before ready");

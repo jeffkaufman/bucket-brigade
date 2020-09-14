@@ -251,8 +251,8 @@ def handle_post(in_data_raw, query_params):
         # Client is too far behind and going to wrap the buffer. :-(
         kill_client = True
     else:
-        wrap_assign(client_write_clock,
-                    wrap_get(client_write_clock, len(in_data)) +
+        wrap_assign(client_write_clock - len(in_data),
+                    wrap_get(client_write_clock - len(in_data), len(in_data)) +
                     in_data)
 
     # Why subtract len(in_data) above and below? Because the future is to the
@@ -268,7 +268,7 @@ def handle_post(in_data_raw, query_params):
     if query_params.get("loopback", [None])[0] == "true":
         data = in_data
     else:
-        data = wrap_get(client_read_clock, len(in_data))
+        data = wrap_get(client_read_clock - len(in_data), len(in_data))
 
     packets = data.reshape([-1, OPUS_FRAME_SAMPLES])
     encoded = []

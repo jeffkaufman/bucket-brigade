@@ -547,18 +547,27 @@ class AudioDecoder {
     }
 }
 
+var running_internal;
 async function start() {
+  if (running_internal) {
+    lib.log(LOG_ERROR, "CANNOT START WHILE ALREADY RUNNING");
+    return;
+  }
+  running_internal = true;
   clear_error();
 
   sample_batch_size = ms_to_batch_size(INITIAL_MS_PER_BATCH);
   window.msBatchSize.value = batch_size_to_ms(sample_batch_size);
 
   var AudioContext = window.AudioContext || window.webkitAudioContext;
+
   audioCtx = new AudioContext({ sampleRate: sample_rate });
   lib.log(LOG_DEBUG, "Audio Context:", audioCtx);
   debug_check_sample_rate(audioCtx.sampleRate);
 
   var micNode = await configure_input_node(audioCtx);
+  lib.log(LOG_DEBUG, "Input node sample rate (track 0):", micNode.mediaStream.getAudioTracks()[0].getSettings().sampleRate);
+
   var spkrNode = configure_output_node(audioCtx);
 
   await audioCtx.audioWorklet.addModule('audio-worklet.js');
@@ -742,6 +751,10 @@ function concat_typed_arrays(arrays, _constructor) {
   return result;
 }
 
+function wait(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 async function handle_message(event) {
   var msg = event.data;
   lib.log(LOG_VERYSPAM, "onmessage in main thread received ", msg);
@@ -782,6 +795,22 @@ async function handle_message(event) {
       }
     }
     return;
+  } else if (msg.type == "bluetooth_bug_restart") {
+    // God help us, the following is a workaround for an issue we see on gwillen's machine:
+    // * Google Chrome Version 86.0.4240.22 (Official Build) beta (x86_64)
+    // * macOS 10.14.6 (18G103)
+    // * MacBook Pro (15-inch, 2017)
+    // * Bose QC35 Bluetooth headset
+    //
+    // After opening the mic, the headset takes a few seconds to switch codecs/profiles/something.
+    // When it switches, it seems to change sample rate in a way that Chrome does not detect, causing
+    // the entire AudioContext to start sampling at the wrong rate. We can work around this by
+    // restarting the context and reopening the device once we see the wrong rate (which means that
+    // the profile switch has happened.)
+    window.bluetoothWarning.style.display = "block";
+    await stop();
+    await start();
+    return;
   } else if (msg.type != "samples_out") {
     lib.log(LOG_ERROR, "Got message of unknown type:", msg);
     stop();
@@ -789,6 +818,7 @@ async function handle_message(event) {
   }
 
   var mic_samples = msg.samples;
+  // XXX: next line is wrong if the batch size is not a multiple of the opus frame size, I think.
   var send_write_clock = msg.clock;
   mic_buf.push(mic_samples);
   lib.log(LOG_VERYSPAM, "added", mic_samples.length, "samples, for total of", mic_buf.length * 128, "with threshold", sample_batch_size);
@@ -812,8 +842,6 @@ async function handle_message(event) {
     var samples = concat_typed_arrays(mic_buf, Float32Array);
     lib.log(LOG_SPAM, "Encoding samples:", mic_buf);
     mic_buf = [];
-    // XXX: terrible.
-    // await encoder.reset();
     var encoded_samples = await encoder.encode({ samples });
     var enc_buf = [];
     lib.log(LOG_SPAM, "Got encoded packets:", encoded_samples);
@@ -832,11 +860,6 @@ async function handle_message(event) {
 
     if (loopback_mode == "main") {
       var packets = unpack_multi(outdata);
-      // XXX: terrible.
-      //lib.log(LOG_VERYSPAM, "resetting decoder...");
-      //var reset_result = await decoder.reset();
-      //lib.log(LOG_SPAM, "decoder reset:", reset_result);
-
       var decoded_packets = [];
       for (var i = 0; i < packets.length; ++i) {
         var p_samples = await decoder.decode({
@@ -853,7 +876,7 @@ async function handle_message(event) {
     } else {
       var target_url = new URL(server_path, document.location);
       var send_metadata = {
-        read_clock: read_clock,  // ???
+        read_clock: orig_read_clock,
         write_clock: send_write_clock,
         username: window.userName.value,
         userid,
@@ -987,6 +1010,7 @@ async function stop() {
     micStream = undefined;
   }
   lib.log(LOG_INFO, "...closed.");
+  running_internal = false;
 }
 
 start_button.addEventListener("click", start_stop);

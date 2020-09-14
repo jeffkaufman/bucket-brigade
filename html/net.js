@@ -101,8 +101,7 @@ function handle_xhr_result(xhr, resolve, reject) {
 
   if (xhr.status == 200) {
     var metadata = JSON.parse(xhr.getResponseHeader("X-Audio-Metadata"));
-    lib.log(LOG_DEBUG, "metadata:", metadata);
-
+    lib.log(LOG_SPAM, "metadata:", metadata);
     lib.log(LOG_SPAM, "Got XHR response w/ ID:", xhr.debug_id, "result:", xhr.response, " -- still in flight:", --xhrs_inflight);
     if (metadata["kill_client"]) {
       lib.log(LOG_ERROR, "Received kill from server");
