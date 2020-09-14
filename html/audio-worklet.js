@@ -397,9 +397,6 @@ class Player extends AudioWorkletProcessor {
       if (end_clock !== null) {
         server_write_clock = end_clock - this.local_latency;
       }
-      for (var i = 0; i < input.length; i++) {
-        input[i] *= 0.1;
-      }
       this.port.postMessage({
         type: "samples_out",
         samples: input,
