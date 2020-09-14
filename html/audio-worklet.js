@@ -122,6 +122,8 @@ class Player extends AudioWorkletProcessor {
     this.click_frame_interval =
       Math.round(sampleRate / FRAME_SIZE * 60 / bpm);
     this.click_volume = 0;
+    this.click_index_samples = 0;
+    this.click_length_samples = sampleRate / 64;
 
     // peak detection
     this.window = [];
@@ -318,14 +320,19 @@ class Player extends AudioWorkletProcessor {
     var is_beat = this.click_index % this.click_frame_interval == 0;
     if (is_beat) {
       this.frames_since_last_beat = 0;
+      this.click_index_samples = 0;
       this.beat_index++;
     } else {
       this.frames_since_last_beat++;
     }
 
+    const freq = 1024;
+    const period = sampleRate / freq;
+
     for (var k = 0; k < output.length; k++) {
-      if (is_beat) {
-        output[k] = 1;
+      if (this.click_index_samples < this.click_length_samples) {
+        output[k] = this.click_volume * Math.sin(Math.PI * 2 * this.click_index_samples / period);
+        this.click_index_samples++;
       } else {
         output[k] = 0;
       }
