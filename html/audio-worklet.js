@@ -84,12 +84,13 @@ class ClockedRingBuffer {
     return val;
   }
 
+  // XXX: fix performance (take an entire slice at once)
   write(value, write_clock) {
     if (write_clock != Math.round(write_clock)) {
       lib.log(LOG_ERROR, "write_clock not an integer?!");
       throw "write_clock not an integer?!";
     }
-    lib.log_every(12800, "buf_write", LOG_SPAM, "write_clock:", write_clock, "read_clock:", this.read_clock, "buffered_data:", this.buffered_data, "space_left:", this.space_left());
+    // XXX(slow): lib.log_every(12800, "buf_write", LOG_SPAM, "write_clock:", write_clock, "read_clock:", this.read_clock, "buffered_data:", this.buffered_data, "space_left:", this.space_left());
     if (this.read_clock === null) {
       // It should be acceptable for this to end up negative
       this.read_clock = write_clock - this.leadin_samples;
@@ -198,6 +199,8 @@ class Player extends AudioWorkletProcessor {
       lib.log_every(10, "new_samples", LOG_DEBUG, "new input (samples): ", play_samples.length, "; current play buffer:", this.play_buffer);
 
       for (var i = 0; i < play_samples.length; i++) {
+        // XXX: Profiling shows that this is slow. Fix this so it only does a single call to typedarray "set".
+        // XXX: also, profiling shows lots of GC pauses. Figure out where we're allocating (clicks?) and stop it.
         this.play_buffer.write(play_samples[i], msg.clock - play_samples.length + i);
       }
     lib.log(LOG_VERYSPAM, "new play buffer:", this.play_buffer);

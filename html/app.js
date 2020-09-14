@@ -566,10 +566,11 @@ async function start() {
   debug_check_sample_rate(audioCtx.sampleRate);
 
   var micNode = await configure_input_node(audioCtx);
-  lib.log(LOG_DEBUG, "Input node sample rate (track 0):", micNode.mediaStream.getAudioTracks()[0].getSettings().sampleRate);
+  //lib.log(LOG_DEBUG, "Input node sample rate (track 0):", micNode.mediaStream.getAudioTracks()[0].getSettings().sampleRate);
 
   var spkrNode = configure_output_node(audioCtx);
 
+  //XXX: the AudioWorkletProcessor just seems to get leaked here, every time we stop and restart. I'm not sure if there's a way to prevent that without reloading the page... (or avoiding reallocating it when we stop and start.)
   await audioCtx.audioWorklet.addModule('audio-worklet.js');
   playerNode = new AudioWorkletNode(audioCtx, 'player');
   // Stop if there is an exception inside the worklet.
@@ -580,22 +581,30 @@ async function start() {
     log_level: lib.log_level
   });
 
-  encoder = new AudioEncoder('opusjs/encoder.js');
-  decoder = new AudioDecoder('opusjs/decoder.js')
+  // Avoid starting more than one copy of the encoder/decoder workers.
+  if (!encoder) {
+    encoder = new AudioEncoder('opusjs/encoder.js');
+    var enc_cfg = {
+        sampling_rate: audioCtx.sampleRate,
+        num_of_channels: 1,
+        params: {
+            application: 2049,  // AUDIO
+            sampling_rate: 48000,
+            frame_duration: OPUS_FRAME_MS,
+        }
+    };
+    lib.log(LOG_DEBUG, "Setting up opus encoder. Encoder params:", enc_cfg);
+    await encoder.setup(enc_cfg);
+  }
+  encoder.reset();
 
-  var enc_cfg = {
-      sampling_rate: audioCtx.sampleRate,
-      num_of_channels: 1,
-      params: {
-          application: 2049,  // AUDIO
-          sampling_rate: 48000,
-          frame_duration: OPUS_FRAME_MS,
-      }
-  };
-  lib.log(LOG_DEBUG, "Setting up opus encoder and decoder. Encoder params:", enc_cfg);
-  await encoder.setup(enc_cfg);
-  var info = await decoder.setup();
-  lib.log(LOG_DEBUG, "Opus decoder returned parameters:", info);
+  if (!decoder) {
+    decoder = new AudioDecoder('opusjs/decoder.js')
+    var info = await decoder.setup();
+    lib.log(LOG_DEBUG, "Opus decoder returned parameters:", info);
+  }
+  decoder.reset();
+
   // The encoder stuff absolutely has to finish getting initialized before we start getting messages for it, or shit will get regrettably real. (It is designed in a non-threadsafe way, which is remarkable since javascript has no threads.)
 
   playerNode.port.onmessage = handle_message;
