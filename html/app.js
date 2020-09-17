@@ -99,8 +99,7 @@ function sendChatMessage() {
   window.chatEntry.value = "";
 }
 
-window.chatEntry.addEventListener("change", sendChatMessage);
-window.chatPost.addEventListener("click", sendChatMessage);
+window.chatForm.addEventListener("submit", (e) => { sendChatMessage(); e.preventDefault(); });
 
 let requestedLeadPosition = false;
 function takeLeadPosition() {
