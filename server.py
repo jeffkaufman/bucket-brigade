@@ -329,7 +329,7 @@ class OurHandler(BaseHTTPRequestHandler):
         except ValueError as e:
             self.send_response(500)
             self.end_headers()
-            return
+            raise  # re-raise exception so we can see it on the console
 
         self.send_response(200)
         self.send_header("Access-Control-Allow-Origin", "*")
