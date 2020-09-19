@@ -280,19 +280,6 @@ async function initialize() {
   }
 }
 
-function debug_check_sample_rate(rate) {
-  if (isNaN(parseInt(sample_rate_text.value)) /* warning text */) {
-    lib.log(LOG_DEBUG, "First setting sample rate:", rate);
-    sample_rate_text.value = rate;
-  } else if (sample_rate_text.value == rate.toString()) {
-    lib.log(LOG_DEBUG, "Sample rate is still", rate);
-  } else {
-    lib.log(LOG_ERROR, "SAMPLE RATE CHANGED from", sample_rate_text.value, "to", rate);
-    sample_rate_text.value = "ERROR: SAMPLE RATE CHANGED from " + sample_rate_text.value + " to " + rate + "!!";
-    stop();
-  }
-}
-
 async function configure_input_node(audioCtx) {
   synthetic_audio_source = null;
   var deviceId = in_select.value;
@@ -565,7 +552,6 @@ async function start() {
 
   audioCtx = new AudioContext({ sampleRate: sample_rate });
   lib.log(LOG_DEBUG, "Audio Context:", audioCtx);
-  debug_check_sample_rate(audioCtx.sampleRate);
 
   var micNode = await configure_input_node(audioCtx);
   //lib.log(LOG_DEBUG, "Input node sample rate (track 0):", micNode.mediaStream.getAudioTracks()[0].getSettings().sampleRate);
