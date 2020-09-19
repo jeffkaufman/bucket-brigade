@@ -165,8 +165,11 @@ async function enumerate_devices() {
         el.text = info.label || 'Unknown Input';
         in_select.appendChild(el);
       } else if (info.kind === 'audiooutput') {
+        /* The hack we use for supporting audio output selection seems to be a
+           bit janky, so let's disable it.
         el.text = info.label || 'Unknown Output';
         out_select.appendChild(el);
+        */
       }
     });
 
@@ -202,6 +205,11 @@ async function enumerate_devices() {
     el.value = "NUMERIC";
     el.text = "NUMERIC";
     in_select.appendChild(el);
+
+    el = document.createElement("option");
+    el.value = "";
+    el.text = "Default output device";
+    out_select.appendChild(el);
 
     el = document.createElement("option");
     el.text = "---";
@@ -339,22 +347,17 @@ async function configure_input_node(audioCtx) {
 function configure_output_node(audioCtx) {
   synthetic_audio_sink = false;
   var deviceId = out_select.value;
-  var dest = audioCtx.createMediaStreamDestination();
 
-  if (deviceId == "NUMERIC") {
-    // Leave the device empty, but signal the worklet for special handling
-    synthetic_audio_sink = true;
-  } else if (deviceId == "NOWHERE") {
-    // Leave the device empty
-  } else {
-    var audio_out = new Audio();
-    audio_out.srcObject = dest.stream;
-    // Android Chromedoes not have setSinkId:
-    // https://bugs.chromium.org/p/chromium/issues/detail?id=648286
-    if (audio_out.setSinkId) {
-      audio_out.setSinkId(deviceId);
+  if (deviceId == "NUMERIC" || deviceId == "NOWHERE") {
+    if (deviceId == "NUMERIC") {
+      // Signal the worklet for special handling
+      synthetic_audio_sink = true;
     }
-    audio_out.play();
+    // Send audio nowhere.
+    return audioCtx.createMediaStreamDestination();
+  } else {
+    // Default output device.
+    return audioCtx.destination;
   }
 
   return dest;
