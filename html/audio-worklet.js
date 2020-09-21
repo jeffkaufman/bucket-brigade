@@ -342,7 +342,7 @@ class Player extends AudioWorkletProcessor {
         this.loopback_mode = msg.loopback_mode;
 
         // This is _extra_ slack on top of the size of the server request.
-        this.client_slack = .500;  // 500ms
+        this.client_slack = 1; // XXX .500;  // 500ms
 
         // 15 seconds of total buffer, `this.client_slack` seconds of leadin
         this.play_buffer = new ClockedRingBuffer(15, this.client_slack, this.clock_reference);
@@ -504,6 +504,9 @@ class Player extends AudioWorkletProcessor {
   }
 
   process(inputs, outputs) {
+    // Gather some stats, and restart if things look wonky for too long.
+    this.profile_web_audio()
+
     if (this.killed) {
       return false;
     }
@@ -513,9 +516,6 @@ class Player extends AudioWorkletProcessor {
 
     var input = inputs[0][0];
     var output = outputs[0][0];
-
-    // Gather some stats, and restart if things look wonky for too long.
-    this.profile_web_audio()
 
     try {
       if (this.latency_measurement_mode) {
