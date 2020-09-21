@@ -461,7 +461,7 @@ class Player extends AudioWorkletProcessor {
         jank: this.acc_err,
         type: "samples_out",
         chunk: mic_chunk,
-      }, [mic_chunk.data.buffer]);
+      }); // XXX don't transfer , [mic_chunk.data.buffer]);
       // End normal handling
     }
   }
