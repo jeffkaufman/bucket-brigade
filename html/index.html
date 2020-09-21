@@ -243,15 +243,19 @@ Audio offset (seconds):
   <input type=text id=msBatchSize value="(not available yet)" disabled>
 <br>
   Client Latency (ms):
-  <input type=text id=msClietLatency value="(not available yet)" disabled>
+  <input type=text id=msClientLatency value="(not available yet)" disabled>
+<br>
+  Web Audio Jank (initial) (ms):
+  <input type=text id=msWebAudioJank value="(not available yet)" disabled>
+<br>
+  "True" (de-janked) Latency (ms):
+  <input type=text id=msTrueLatency value="(not available yet)" disabled>
+<br>
+  Web Audio Jank (current) (ms):
+  <input type=text id=msWebAudioJankCurrent value="(not available yet)" disabled>
 <br>
 <br>
 
-</div>
-
-<div id="secretCrap" style="display:none">
-  <!--<span id=hamiltonAudioSpan><audio src="hamilton.mp3" preload=true></audio></span>-->
-  <span id=outputAudioSpan><audio id=outputAudio></audio></span>
 </div>
 
 <script type="module" src="./app.js"></script>

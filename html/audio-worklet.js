@@ -1,6 +1,9 @@
 
 import * as lib from './lib.js';
 import {LOG_VERYSPAM, LOG_SPAM, LOG_DEBUG, LOG_INFO, LOG_WARNING, LOG_ERROR} from './lib.js';
+import {check} from './lib.js';
+
+import {AudioChunk, PlaceholderChunk, ClientClockReference, ClockInterval} from './audiochunk.js'
 
 // This trick allows us to load this file as a regular module, which in turn
 //   allows us to flush it from the cache when needed, as a workaround for
@@ -17,22 +20,32 @@ lib.log(LOG_INFO, "Audio worklet module loading");
 const FRAME_SIZE = 128;  // by Web Audio API spec
 
 class ClockedRingBuffer {
-  constructor(type, size, leadin_samples) {
-    if (leadin_samples > size) {
+  constructor(len_seconds, leadin_seconds, clock_reference) {
+    if (leadin_seconds > len_seconds) {
       // Note that even getting close is likely to result in failure.
-      lib.log(LOG_ERROR, "leadin samples must not exceed size");
-      throw "leadin samples must not exceed size";
+      lib.log(LOG_ERROR, "leadin time must not exceed size");
+      throw new Error("leadin time must not exceed size");
     }
     // Before the first write, all reads will be zero. After the first write,
     // the first leadin_samples read will be zero, then real reads will start.
     // (This allows a buffer to build up.)
-    this.leadin_samples = leadin_samples;
+
+    // Round both to FRAME_SIZE.
+    this.leadin_samples = Math.round(leadin_seconds * sampleRate / FRAME_SIZE) * FRAME_SIZE;
+    this.len = Math.round(len_seconds * sampleRate / FRAME_SIZE) * FRAME_SIZE;
+
     this.read_clock = null;
-    this.len = size;
-    this.buf = new type(size);
+    this.buf = new Float32Array(this.len);
     this.buf.fill(NaN);
+
+    if (clock_reference.sample_rate !== sampleRate) {
+      throw new Error("clock_reference has wrong sample rate in ClockedRingBuffer constructor");
+    }
+    this.clock_reference = clock_reference;
+
     // For debugging, mostly
     this.buffered_data = 0;
+    this.last_write_clock = null;
   }
 
   buffered_data() {
@@ -61,10 +74,44 @@ class ClockedRingBuffer {
     return this.read_clock;
   }
 
-  read() {
-    lib.log_every(12800, "buf_read", LOG_SPAM, "leadin_samples:", this.leadin_samples, "read_clock:", this.read_clock, "buffered_data:", this.buffered_data, "space_left:", this.space_left());
+  read_into(buf) {
+    //lib.log(LOG_DEBUG, "Reading chunk of size", buf.length);
     if (this.read_clock === null) {
-      return 0;
+      buf.fill(0);
+      return new PlaceholderChunk({
+        reference: this.clock_reference,
+        length: buf.length
+      });
+    }
+
+    var interval = new ClockInterval({
+      reference: this.clock_reference,
+      end: this.read_clock + buf.length,
+      length: buf.length
+    });
+    var chunk = new AudioChunk({ data: buf, interval });
+    var errors = [];
+    for (var i = 0; i < chunk.data.length; i++) {
+      var sample = this.read(chunk.interval.start + i);
+      if (typeof sample !== "number") {
+        chunk.data[i] = 0;
+        errors.push(sample);
+      } else {
+        chunk.data[i] = sample;
+      }
+    }
+    if (errors.length > 0) {
+      var err_uniq = Array.from(new Set(errors));
+      lib.log(LOG_ERROR, "Errors while reading chunk", interval, err_uniq);
+      throw new Error("Failed to read audio chunk from buffer in worklet because: " + JSON.stringify(err_uniq));
+    }
+    return chunk;
+  }
+
+  read() {
+    lib.log_every(128000, "buf_read", LOG_DEBUG, "leadin_samples:", this.leadin_samples, "read_clock:", this.read_clock, "buffered_data:", this.buffered_data, "space_left:", this.space_left());
+    if (this.read_clock === null) {
+      return "no read clock" ;
     }
     if (this.leadin_samples > 0) {
       this.read_clock++;
@@ -73,10 +120,12 @@ class ClockedRingBuffer {
     }
     var val = this.buf[this.real_offset(this.read_clock)];
     if (isNaN(val)) {
-      // TODO: Seeing an underflow should make us allocate more client slack
-      lib.log_every(12800, LOG_ERROR, "Buffer underflow :-( leadin_samples:", this.leadin_samples, "read_clock:", this.read_clock, "buffered_data:", this.buffered_data, "space_left:", this.space_left());
+      // XXX TODO: Seeing an underflow should make us allocate more client slack .... but that's tricky because it will cause a noticeable glitch on the server as our window expands (but at this point it's probably too late to prevent that)
+      // * It would also make sense to instead just try to drop some audio and recover. (Although audio trapped in the audiocontext pipeline buffers cannot be dropped without restarting the whole thing.)
+      lib.log_every(12800, "buf_read underflow", LOG_ERROR, "Buffer underflow :-( leadin_samples:", this.leadin_samples, "read_clock:", this.read_clock, "buffered_data:", this.buffered_data, "space_left:", this.space_left());
       this.read_clock++;
-      return 0;
+      this.buffered_data--;
+      return "underflow";
     }
     this.buf[this.real_offset(this.read_clock)] = NaN;  // Mostly for debugging
     this.read_clock++;
@@ -84,35 +133,56 @@ class ClockedRingBuffer {
     return val;
   }
 
+  write_chunk(chunk) {
+    lib.log(LOG_SPAM, "Writing chunk of size", chunk.length);
+    chunk.check_clock_reference(this.clock_reference);
+    for (var i = 0; i < chunk.data.length; i++) {
+      this.write(chunk.data[i], chunk.start + i);
+    }
+  }
+
   // XXX: fix performance (take an entire slice at once)
   write(value, write_clock) {
-    if (write_clock != Math.round(write_clock)) {
-      lib.log(LOG_ERROR, "write_clock not an integer?!");
-      throw "write_clock not an integer?!";
+    check(write_clock == Math.round(write_clock), "write_clock not an integer?!", write_clock);
+    if (this.last_write_clock !== null) {
+      if (write_clock != this.last_write_clock + 1) {
+        // Ostensibly we allow this, but I think it should never happen and is always a bug...
+        lib.log(LOG_ERROR, "Write clock not incrementing?! Last write clock:", this.last_write_clock, ", new write clock:", write_clock, ", difference from expected:", write_clock - (this.last_write_clock + 1));
+        throw new Exception("Write clock skipped or went backwards");
+      }
     }
+    this.last_write_clock = write_clock;
     // XXX(slow): lib.log_every(12800, "buf_write", LOG_SPAM, "write_clock:", write_clock, "read_clock:", this.read_clock, "buffered_data:", this.buffered_data, "space_left:", this.space_left());
     if (this.read_clock === null) {
       // It should be acceptable for this to end up negative
       this.read_clock = write_clock - this.leadin_samples;
     }
-    if (!isNaN(this.buf[this.real_offset(write_clock)])) {
+    if (this.space_left() == 0) {
+      // This is a "true" buffer overflow, we have actually run completely out of buffer.
       lib.log(LOG_ERROR, "Buffer overflow :-( write_clock:", write_clock, "read_clock:", this.read_clock, "buffered_data:", this.buffered_data, "space_left:", this.space_left());
-      // XXX: Perhaps be more graceful.
-      // XXX: this should really never ever happen unless we are very close to full, but we do see it happening and I don't understand why.
-      throw("Buffer overflow");
+      throw new Error("Buffer overflow");
+    }
+    if (!isNaN(this.buf[this.real_offset(write_clock)])) {
+      // This is a "false" buffer overflow -- we are overwriting some past data that the reader skipped over (presumably due to an underflow.) Just write it anyway.
+      lib.log_every(12800, "sorta_overflow", LOG_WARNING, "Writing over existing buffered data; write_clock:", write_clock, "read_clock:", this.read_clock, "buffered_data:", this.buffered_data, "space_left:", this.space_left());
     }
     this.buf[this.real_offset(write_clock)] = value;
     this.buffered_data++;
   }
 }
 
-class Player extends AudioWorkletProcessor {
-  constructor () {
-    lib.log(LOG_INFO, "Audio worklet object constructing");
-    super();
-    this.ready = false;
-    this.port.onmessage = this.handle_message.bind(this);
+function rebless(o) {
+  if (o.type !== undefined) {
+    Object.setPrototypeOf(o, eval(o.type).prototype);
+  }
+  if (o.rebless) {
+    o.rebless();
+  }
+  return o;
+}
 
+class LatencyCalibrator {
+  constructor() {
     // State related to peak detection processing:
     // clicks
     this.click_index = 0;
@@ -120,7 +190,6 @@ class Player extends AudioWorkletProcessor {
     const bpm = 105;
     this.click_frame_interval =
       Math.round(sampleRate / FRAME_SIZE * 60 / bpm);
-    this.click_volume = 0;
     this.click_index_samples = 0;
     this.click_length_samples = sampleRate / 64;
 
@@ -139,148 +208,6 @@ class Player extends AudioWorkletProcessor {
     this.click_interval_samples = 3000;
 
     this.latencies = [];
-    this.local_latency = 150;  // rough initial guess
-  }
-
-  handle_message(event) {
-    try {
-      var msg = event.data;
-      lib.log(LOG_VERYSPAM, "handle_message in audioworklet:", msg);
-
-      if (msg.type == "log_params") {
-        if (msg.log_level) {
-          lib.set_log_level(msg.log_level);
-        }
-        if (msg.session_id) {
-          lib.set_logging_session_id(msg.session_id);
-          lib.log(LOG_INFO, "Audio worklet logging ready");
-        }
-        return;
-      } else if (msg.type == "audio_params") {
-        this.synthetic_source = msg.synthetic_source;
-        this.click_interval = msg.click_interval;
-        this.synthetic_sink = msg.synthetic_sink;
-        this.loopback_mode = msg.loopback_mode;
-
-        // This is _extra_ slack on top of the size of the server request.
-        this.client_slack = sampleRate * .3;  // 300ms
-
-        // 15 seconds of total buffer, `this.slack` seconds of leadin, force things to round to FRAME_SIZE
-        this.play_buffer = new ClockedRingBuffer(
-          Float32Array,
-          Math.round(15 * sampleRate / FRAME_SIZE) * FRAME_SIZE,
-          Math.round(this.client_slack / FRAME_SIZE) * FRAME_SIZE);
-
-        this.ready = true;
-        return;
-      } else if (msg.type == "local_latency") {
-        this.local_latency = msg.local_latency;
-        return;
-      } else if (msg.type == "latency_estimation_mode") {
-        this.latency_measurement_mode = msg.enabled;
-        this.click_index = 0;
-        this.beat_index = 0;
-        return;
-      } else if (msg.type == "mute_mode") {
-        this.mute_mode = msg.enabled;
-        return;
-      } else if (msg.type == "click_volume_change") {
-        this.set_click_volume(msg.value/100);
-        return;
-      } else if (!this.ready) {
-        lib.log(LOG_ERROR, "received message before ready:", msg);
-        return;
-      } else if (msg.type != "samples_in") {
-        lib.log(LOG_ERROR, "Unknown message:", msg);
-        return;
-      }
-      var play_samples = msg.samples;
-
-      lib.log_every(10, "new_samples", LOG_DEBUG, "new input (samples): ", play_samples.length, "; current play buffer:", this.play_buffer);
-
-      for (var i = 0; i < play_samples.length; i++) {
-        // XXX: Profiling shows that this is slow. Fix this so it only does a single call to typedarray "set".
-        // XXX: also, profiling shows lots of GC pauses. Figure out where we're allocating (clicks?) and stop it.
-        this.play_buffer.write(play_samples[i], msg.clock - play_samples.length + i);
-      }
-    lib.log(LOG_VERYSPAM, "new play buffer:", this.play_buffer);
-    } catch (ex) {
-      this.port.postMessage({
-        type: "exception",
-        exception: ex
-      });
-      if (ex != "Buffer overflow") {
-        throw ex;
-      }
-    }
-  }
-
-  set_click_volume(linear_volume) {
-    // https://www.dr-lex.be/info-stuff/volumecontrols.html
-    this.click_volume = Math.exp(6.908 * linear_volume)/1000;
-  }
-
-  // Only for debugging
-  synthesize_input(input) {
-    lib.log(LOG_SPAM, "synthesizing fake input");
-    if (!this.synthetic_source_counter) {
-      lib.log(LOG_INFO, "Starting up synthetic source");
-      this.synthetic_source_counter = 0;
-    }
-    // This is probably not very kosher...
-    for (var i = 0; i < input.length; i++) {
-      input[i] = this.synthetic_source_counter;
-      this.synthetic_source_counter++;
-    }
-  }
-
-  synthesize_clicks(input, interval) {
-    lib.log(LOG_SPAM, "synthesizing clicks");
-    if (!this.synthetic_source_counter) {
-      lib.log(LOG_INFO, "Starting up clicks");
-      this.synthetic_source_counter = 0;
-    }
-
-    var sound_level = 0.0;
-    if (this.synthetic_source_counter % Math.round(sampleRate * interval / FRAME_SIZE) == 0) {
-      sound_level = this.click_volume;
-    }
-
-    // This is probably not very kosher...
-    for (var i = 0; i < input.length; i++) {
-      input[i] = sound_level;
-    }
-    this.synthetic_source_counter++;
-  }
-
-  // Only for debugging
-  check_synthetic_output(output) {
-    lib.log(LOG_SPAM, "validating synthesized data in output (channel 0 only):", output[0]);
-    if (typeof this.synthetic_sink_counter === "undefined") {
-      lib.log(LOG_INFO, "Starting up synthetic sink");
-      this.synthetic_sink_counter = 0;
-      this.synthetic_sink_leading_zeroes = 0;
-    }
-    for (var i = 0; i < FRAME_SIZE; i++) {
-      if (this.synthetic_sink_counter == 0) {
-        if (output[i] == 0) {
-          // No problem, leading zeroes are fine.
-          this.synthetic_sink_leading_zeroes++;
-        } else {
-          lib.log(LOG_INFO, "Saw", this.synthetic_sink_leading_zeroes, "zeros in stream");
-          this.synthetic_sink_counter++;
-        }
-      } else if (output[i] == this.synthetic_sink_counter + 1) {
-        // No problem, incrementing numbers.
-        this.synthetic_sink_counter++;
-        if (this.synthetic_sink_counter % 100000 == 0) {
-          lib.log(LOG_INFO, "Synthetic sink has seen", this.synthetic_sink_counter, "samples");
-        }
-      } else {
-        lib.log(LOG_WARNING, "Misordered data in frame:", output);
-        this.synthetic_sink_counter = output[i];
-      }
-    }
   }
 
   detect_peak(index, now) {
@@ -300,23 +227,28 @@ class Player extends AudioWorkletProcessor {
       }
 
       this.latencies.push(latency_ms);
+      if (this.latencies.length > 5 /* XXX hardcoded */) {
+        this.latencies.shift();
+      }
       const msg = {
         "type": "latency_estimate",
         "samples": this.latencies.length,
       }
 
-      if (this.latencies.length > 5) {
-        this.latencies.sort((a, b) => a-b);
-        msg.p40 = this.latencies[Math.round(this.latencies.length * 0.4)];
-        msg.p50 = this.latencies[Math.round(this.latencies.length * 0.5)];
-        msg.p60 = this.latencies[Math.round(this.latencies.length * 0.6)];
+      if (this.latencies.length >= /* XXX */ 5) {
+        this.sorted_latencies = this.latencies.slice();
+        this.sorted_latencies.sort((a, b) => a-b);
+        msg.p40 = this.sorted_latencies[Math.round(this.latencies.length * 0.4)];
+        msg.p50 = this.sorted_latencies[Math.round(this.latencies.length * 0.5)];
+        msg.p60 = this.sorted_latencies[Math.round(this.latencies.length * 0.6)];
       }
-
-      this.port.postMessage(msg);
+      return msg;
     }
+
+    return null;
   }
 
-  process_latency_measurement(input, output) {
+  process_latency_measurement(input, output, click_volume) {
     this.click_index++;
     var is_beat = this.click_index % this.click_frame_interval == 0;
     if (is_beat) {
@@ -332,7 +264,7 @@ class Player extends AudioWorkletProcessor {
 
     for (var k = 0; k < output.length; k++) {
       if (this.click_index_samples < this.click_length_samples) {
-        output[k] = this.click_volume * Math.sin(Math.PI * 2 * this.click_index_samples / period);
+        output[k] = click_volume * Math.sin(Math.PI * 2 * this.click_index_samples / period);
         this.click_index_samples++;
       } else {
         output[k] = 0;
@@ -341,6 +273,7 @@ class Player extends AudioWorkletProcessor {
 
     var now = Date.now();
     var noise = 0;
+    var final_result = null;
     for (var i = 0 ; i < input.length; i++) {
       noise += Math.abs(input[i]);
 
@@ -350,7 +283,10 @@ class Player extends AudioWorkletProcessor {
       }
 
       if (this.background_noise > 0) {
-        this.detect_peak(i, now);
+        var result = this.detect_peak(i, now);
+        if (result !== null) {
+          final_result = result;
+        }
       }
     }
 
@@ -362,16 +298,123 @@ class Player extends AudioWorkletProcessor {
     }
 
     if (this.beat_index > 1 && this.background_noise == 0) {
-      this.port.postMessage({type: "no_mic_input"});
+      final_result = {type: "no_mic_input"};
     }
+
+    return final_result;
+  }
+}
+
+class Player extends AudioWorkletProcessor {
+  constructor () {
+    lib.log(LOG_INFO, "Audio worklet object constructing");
+    super();
+    this.ready = false;
+    this.port.onmessage = this.handle_message.bind(this);
+    this.clock_reference = new ClientClockReference({ sample_rate: sampleRate });
+    this.local_latency = 150;  // rough initial guess; XXX pretty sure this is wrong units
+    this.click_volume = 0;
+  }
+
+  handle_message(event) {
+    try {
+      var msg = event.data;
+      lib.log(LOG_VERYSPAM, "handle_message in audioworklet:", msg);
+
+      if (msg.type == "log_params") {
+        if (msg.log_level) {
+          lib.set_log_level(msg.log_level);
+        }
+        if (msg.session_id) {
+          lib.set_logging_session_id(msg.session_id);
+          lib.log(LOG_INFO, "Audio worklet logging ready");
+        }
+        return;
+      } else if (msg.type == "audio_params") {
+        // Reset and/or set up everything.
+        this.latency_calibrator = null;
+        this.latency_measurement_mode = false;
+
+        this.epoch = msg.epoch;
+
+        this.synthetic_source = msg.synthetic_source;
+        this.click_interval = msg.click_interval;
+        this.loopback_mode = msg.loopback_mode;
+
+        // This is _extra_ slack on top of the size of the server request.
+        this.client_slack = .500;  // 500ms
+
+        // 15 seconds of total buffer, `this.client_slack` seconds of leadin
+        this.play_buffer = new ClockedRingBuffer(15, this.client_slack, this.clock_reference);
+
+        this.ready = true;
+        return;
+      } else if (msg.type == "stop") {
+        this.ready = false;
+        return;
+      } else if (msg.type == "local_latency") {
+        this.local_latency = msg.local_latency;
+        return;
+      } else if (msg.type == "latency_estimation_mode") {
+        this.latency_measurement_mode = msg.enabled;
+        if (this.latency_measurement_mode) {
+          this.latency_calibrator = new LatencyCalibrator();
+        } else {
+          this.latency_calibrator = null;
+        }
+        return;
+      } else if (msg.type == "mute_mode") {
+        this.mute_mode = msg.enabled;
+        return;
+      } else if (msg.type == "click_volume_change") {
+        this.set_click_volume(msg.value/100);
+        return;
+      } else if (!this.ready) {
+        lib.log(LOG_ERROR, "received message before ready:", msg);
+        return;
+      } else if (msg.type != "samples_in") {
+        lib.log(LOG_ERROR, "Unknown message:", msg);
+        return;
+      }
+
+      var chunk = rebless(msg.chunk);
+      this.play_buffer.write_chunk(chunk);
+      lib.log(LOG_VERYSPAM, "new play buffer:", this.play_buffer);
+    } catch (ex) {
+      this.port.postMessage({
+        type: "exception",
+        exception: ex
+      });
+    }
+  }
+
+  set_click_volume(linear_volume) {
+    // https://www.dr-lex.be/info-stuff/volumecontrols.html
+    this.click_volume = Math.exp(6.908 * linear_volume)/1000;
+  }
+
+  synthesize_clicks(input, interval) {
+    lib.log(LOG_VERYSPAM, "synthesizing clicks");
+    if (!this.synthetic_source_counter) {
+      lib.log(LOG_INFO, "Starting up clicks");
+      this.synthetic_source_counter = 0;
+    }
+
+    var sound_level = 0.0;
+    if (this.synthetic_source_counter % Math.round(sampleRate * interval / FRAME_SIZE) == 0) {
+      sound_level = this.click_volume;
+    }
+
+    // This is probably not very kosher...
+    for (var i = 0; i < input.length; i++) {
+      input[i] = sound_level;
+    }
+    this.synthetic_source_counter++;
   }
 
   process_normal(input, output) {
     lib.log(LOG_VERYSPAM, "process_normal:", input);
-    if (this.synthetic_source == "NUMERIC") {
-      // Ignore our input and overwrite it with sequential numbers for debugging
-      this.synthesize_input(input);
-    } else if (this.synthetic_source == "CLICKS") {
+    if (this.synthetic_source == "CLICKS") {
       this.synthesize_clicks(input, this.click_interval);
     }
 
@@ -380,35 +423,46 @@ class Player extends AudioWorkletProcessor {
       output.set(input);
     } else {
       // Normal input/output handling
-      lib.log(LOG_VERYSPAM, "about to output samples from", this.play_buffer, "with length", this.play_buffer.length);
+      var play_chunk = this.play_buffer.read_into(output);
+      lib.log(LOG_VERYSPAM, "about to play chunk:", play_chunk);
 
-      for (var i = 0; i < output.length; i++) {
-        var val = this.play_buffer.read();
-        output[i] = val;
+      if (this.synthetic_source == "ECHO") {
         // This is the "opposite" of local loopback: There, we take whatever
         //   we hear on the mic and send to the speaker, whereas here we take
         //   whatever we're about to send to the speaker, and pretend we
-        //   heard it on the mic.
-        if (this.synthetic_source == "ECHO") {
-          input[i] = val;
-        }
+        //   heard it on the mic. (This has zero latency.)
+        input.set(play_chunk.data());
       }
-      var end_clock = this.play_buffer.get_read_clock();
-      var server_write_clock = null;
-      if (end_clock !== null) {
-        server_write_clock = end_clock - this.local_latency;
-      }
-      this.port.postMessage({
-        type: "samples_out",
-        samples: input,
-        clock: server_write_clock,
-      }, [input.buffer]);
-      // End normal handling
-    }
 
-    if (this.synthetic_sink) {
-      // Check that our output looks like sequential numbers for debugging
-      this.check_synthetic_output(output);
+      var mic_chunk = null;
+      if (!(play_chunk instanceof PlaceholderChunk)) {
+        var interval = new ClockInterval({
+          reference: play_chunk.reference,
+          length: input.length,
+          // This is where the magic happens: outgoing chunks are timestamped NOT
+          //   with when we got them, but with when we got the incoming audio
+          //   that aligns them.
+          end: play_chunk.end - this.local_latency,
+        });
+        mic_chunk = new AudioChunk({
+          data: input,
+          interval
+        });
+      } else {
+        mic_chunk = new PlaceholderChunk({
+          reference: play_chunk.reference,
+          length: input.length
+        });
+      }
+
+      lib.log(LOG_VERYSPAM, "about to return heard chunk:", mic_chunk);
+      this.port.postMessage({
+        epoch: this.epoch,
+        jank: this.acc_err,
+        type: "samples_out",
+        chunk: mic_chunk,
+      }, [mic_chunk.data.buffer]);
+      // End normal handling
     }
   }
 
@@ -425,10 +479,10 @@ class Player extends AudioWorkletProcessor {
       var err = interval - target_interval;
       var eff_rate = process_history_len * 128 * 1000 / interval;
       this.acc_err += err / process_history_len;
-      lib.log(LOG_VERYSPAM, eff_rate, this.process_history_ms[0], now_ms, interval, target_interval, err, this.acc_err);
+      lib.log_every(500, "profile_web_audio", LOG_DEBUG, sampleRate, eff_rate, this.process_history_ms[0], now_ms, interval, target_interval, err, this.acc_err, this.acc_err / (128 * 1000 / 22050 /* XXX... */));
 
       // other parameters of interesst
-      lib.log(LOG_VERYSPAM, currentTime, currentFrame, /* getOutputTimestamp(), performanceTime, contextTime*/);
+      // XXX lib.log(LOG_VERYSPAM, currentTime, currentFrame, /* getOutputTimestamp(), performanceTime, contextTime*/);
 
       if (eff_rate < 0.75 * sampleRate) {
         if (this.bad_sample_rate == 0) {
@@ -453,6 +507,9 @@ class Player extends AudioWorkletProcessor {
     if (this.killed) {
       return false;
     }
+    if (!this.ready) {
+      return true;
+    }
 
     var input = inputs[0][0];
     var output = outputs[0][0];
@@ -460,17 +517,18 @@ class Player extends AudioWorkletProcessor {
     // Gather some stats, and restart if things look wonky for too long.
     this.profile_web_audio()
 
-    if (!this.ready) {
-      lib.log_every(100, "process_before_ready", LOG_ERROR, "tried to process before ready");
-      return true;
-    }
-
     try {
-      if (this.latency_measurement_mode || this.mute_mode) {
-        if (this.latency_measurement_mode) {
-          this.process_latency_measurement(input, output);
+      if (this.latency_measurement_mode) {
+        var calibration_result = this.latency_calibrator.process_latency_measurement(input, output, this.click_volume);
+        if (calibration_result !== null) {
+          calibration_result.jank = this.acc_err;
+          this.port.postMessage(calibration_result);
         }
-        // Fake out the real processing function
+        // Don't even send or receive audio in this mode.
+        return true;
+      }
+      if (this.mute_mode) {
+        // Fake out the real processing function, but keep running
         input = new Float32Array(input.length);
         output = new Float32Array(output.length);
       }

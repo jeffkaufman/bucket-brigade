@@ -240,6 +240,7 @@ var workerResponded = false,
     }
   }
 }))();
+
 var SpeexResampler = (function() {
   function SpeexResampler(channels, in_rate, out_rate, quality) {
     if (quality === void 0) {
@@ -262,7 +263,7 @@ var SpeexResampler = (function() {
     this.out_len_ptr = Module._malloc(4)
   }
   SpeexResampler.prototype.process = (function(input) {
-    if (!this.handle) throw "disposed object";
+    if (!this.handle) throw new Error("disposed object");
     var samples = input.length;
     var outSamples = Math.ceil(samples * this.out_rate / this.in_rate);
     var requireSize = samples * 4;
@@ -298,6 +299,7 @@ var SpeexResampler = (function() {
   });
   return SpeexResampler
 })();
+
 var OpusEncoder = (function() {
   function OpusEncoder(worker) {
     var _this = this;
@@ -308,52 +310,77 @@ var OpusEncoder = (function() {
       _this.setup(ev.data)
     })
   }
-  OpusEncoder.prototype.reset = (function() {
+
+  OpusEncoder.prototype.reset = (function(msg) {
     _opus_encoder_destroy(this.handle);
+    this.buf_pos = 0;
     var err = Module._malloc(4);
-    this.handle = _opus_encoder_create(this.sampling_rate, this.channels, this.app, err);
+    this.handle = _opus_encoder_create(this.codec_sampling_rate, this.channels, this.app, err);
     var err_num = Module.getValue(err, "i32");
     Module._free(err);
     if (err_num != 0) {
       this.worker.postMessage({
-        status: err_num
+        request_id: msg.request_id,
+        status: err_num,
+        reason: "_opus_encoder_create failed",
       });
       return
     }
   });
   OpusEncoder.prototype.setup = (function(config) {
+    var request_id = config.request_id;
     var _this = this;
     var err = Module._malloc(4);
-    var app = config.params.application || 2049;
-    var sampling_rate = config.params.sampling_rate || config.sampling_rate;
-    var frame_duration = config.params.frame_duration || 20;
+    this.app = config.application || 2049;  // OPUS_AUDIO is the default
+    this.sampling_rate = config.sampling_rate;
+    this.codec_sampling_rate = config.codec_sampling_rate || 48000;  // TODO: this should really be the next highest acceptable rate above config.sampling_rate
+    if ([8000, 12000, 16000, 24000, 48000].indexOf(this.codec_sampling_rate) < 0) {
+      this.worker.postMessage({
+        request_id,
+        status: -1,
+        reason: "invalid codec sampling rate"
+      });
+      return
+    }
+    var frame_duration = config.frame_duration || 20;
     if ([2.5, 5, 10, 20, 40, 60].indexOf(frame_duration) < 0) {
       this.worker.postMessage({
+        request_id,
         status: -1,
         reason: "invalid frame duration"
       });
       return
     }
-    this.frame_size = sampling_rate * frame_duration / 1e3;
+    this.frame_size = this.codec_sampling_rate * frame_duration / 1e3;
     this.channels = config.num_of_channels;
-    this.sampling_rate = sampling_rate;
-    this.app = app;
-    this.handle = _opus_encoder_create(this.sampling_rate, this.channels, this.app, err);
+    if ([1, 2].indexOf(this.channels) < 0) {
+      this.worker.postMessage({
+          request_id,
+          status: -1,
+          reason: "invalid number of channels"
+      });
+      return
+    }
+    this.handle = _opus_encoder_create(this.codec_sampling_rate, this.channels, this.app, err);
     var err_num = Module.getValue(err, "i32");
     Module._free(err);
     if (err_num != 0) {
       this.worker.postMessage({
-        status: err_num
+        request_id,
+        status: err_num,
+        reason: "_opus_encoder_create failed",
       });
       return
     }
-    if (sampling_rate != config.sampling_rate) {
+    if (this.sampling_rate != this.codec_sampling_rate) {
       try {
-        this.resampler = new SpeexResampler(config.num_of_channels, config.sampling_rate, sampling_rate)
+        this.resampler = new SpeexResampler(this.channels, this.sampling_rate, this.codec_sampling_rate)
       } catch (e) {
         this.worker.postMessage({
+          request_id,
           status: -1,
-          reason: e
+          reason: e,
+          message: "failed to create resampler"
         });
         return
       }
@@ -367,32 +394,24 @@ var OpusEncoder = (function() {
     this.worker.onmessage = (function(ev) {
       _this.encode(ev.data)
     });
-    var opus_header_buf = new ArrayBuffer(19);
-    var view8 = new Uint8Array(opus_header_buf);
-    var view32 = new Uint32Array(opus_header_buf, 12, 1);
-    var magic = "OpusHead";
-    for (var i = 0; i < magic.length; ++i) view8[i] = magic.charCodeAt(i);
-    view8[8] = 1;
-    view8[9] = this.channels;
-    view8[10] = view8[11] = 0;
-    view32[0] = sampling_rate;
-    view8[16] = view8[17] = 0;
-    view8[18] = 0;
     this.worker.postMessage({
+      request_id,
       status: 0,
-      packets: [{
-        data: opus_header_buf
-      }]
-    }, [opus_header_buf])
+      resampling: this.resampler !== null
+    })
   });
+
   OpusEncoder.prototype.encode = (function(data) {
+    var request_id = data.request_id;
+
     if (data.reset) {
-        this.reset();
-        this.worker.postMessage({
-          status: 0,
-          message: "reset ok"
-        });
-        return;
+      this.reset(data);
+      this.worker.postMessage({
+        request_id,
+        status: 0,
+        message: "reset ok"
+      });
+      return;
     }
     var samples = data.samples;
     if (this.resampler) {
@@ -400,24 +419,29 @@ var OpusEncoder = (function() {
         samples = this.resampler.process(samples)
       } catch (e) {
         this.worker.postMessage({
+          request_id,
           status: -1,
-          reason: e
+          reason: e,
+          message: "resampling failed"
         });
         return
       }
     }
     var packets = [];
     var transfer_list = [];
+    var encoded = 0;
     while (samples && samples.length > 0) {
       var size = Math.min(samples.length, this.buf.length - this.buf_pos);
       this.buf.set(samples.subarray(0, size), this.buf_pos);
       this.buf_pos += size;
       samples = samples.subarray(size);
       if (this.buf_pos == this.buf.length) {
+        encoded += this.buf.length;
         this.buf_pos = 0;
         var ret = _opus_encode_float(this.handle, this.buf_ptr, this.frame_size, this.out_ptr, this.out.byteLength);
         if (ret < 0) {
           this.worker.postMessage({
+            request_id,
             status: ret
           });
           return
@@ -430,7 +454,10 @@ var OpusEncoder = (function() {
       }
     }
     this.worker.postMessage({
+      request_id,
       status: 0,
+      samples_encoded: encoded,
+      buffered_samples: this.buf_pos,
       packets: packets
     }, transfer_list)
   });

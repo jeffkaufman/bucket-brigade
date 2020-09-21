@@ -1,7 +1,10 @@
 import * as lib from './lib.js';
 import {LOG_VERYSPAM, LOG_SPAM, LOG_DEBUG, LOG_INFO, LOG_WARNING, LOG_ERROR} from './lib.js';
 import {LOG_LEVELS} from './lib.js';
-import {query_server_clock, samples_to_server} from './net.js';
+import {check} from './lib.js';
+
+import {ServerConnection, FakeServerConnection, query_server_clock, samples_to_server} from './net.js';
+import {AudioChunk, CompressedAudioChunk, PlaceholderChunk, concat_chunks, ClockInterval, ClientClockReference, ServerClockReference} from './audiochunk.js';
 
 // Work around some issues related to caching and error reporting
 //   by forcing this to load up top, before we try to 'addModule' it.
@@ -183,14 +186,6 @@ async function enumerate_devices() {
     el.text = "SILENCE";
     in_select.appendChild(el);
 
-    /* Disabled for more public test, since it wastes a lot
-       of bandwidth re-downloading a giant MP3
-    el = document.createElement("option");
-    el.value = "HAMILTON";
-    el.text = "HAMILTON";
-    in_select.appendChild(el);
-    */
-
     el = document.createElement("option");
     el.value = "CLICKS";
     el.text = "CLICKS";
@@ -199,11 +194,6 @@ async function enumerate_devices() {
     el = document.createElement("option");
     el.value = "ECHO";
     el.text = "ECHO";
-    in_select.appendChild(el);
-
-    el = document.createElement("option");
-    el.value = "NUMERIC";
-    el.text = "NUMERIC";
     in_select.appendChild(el);
 
     el = document.createElement("option");
@@ -219,11 +209,6 @@ async function enumerate_devices() {
     el = document.createElement("option");
     el.value = "NOWHERE";
     el.text = "NOWHERE";
-    out_select.appendChild(el);
-
-    el = document.createElement("option");
-    el.value = "NUMERIC";
-    el.text = "NUMERIC (use with NUMERIC source)";
     out_select.appendChild(el);
   });
 }
@@ -243,11 +228,10 @@ var latency_compensation_apply_button = document.getElementById('latencyCompensa
 var sample_rate_text = document.getElementById('sampleRate');
 var peak_in_text = document.getElementById('peakIn');
 var peak_out_text = document.getElementById('peakOut');
-var hamilton_audio_span = document.getElementById('hamiltonAudioSpan');
-var output_audio_span = document.getElementById('outputAudioSpan');
 var client_total_time = document.getElementById('clientTotalTime');
 var client_read_slippage = document.getElementById('clientReadSlippage');
 var running = false;
+var estimate_latency_mode = false;
 
 function set_controls() {
   start_button.textContent = running ? "Stop" : "Start";
@@ -260,31 +244,10 @@ function set_controls() {
   out_select.disabled = false;
 }
 
-async function initialize() {
-  await wait_for_mic_permissions();
-  await enumerate_devices();
-  set_controls(running);
-
-  if (document.location.hostname == "localhost" ||
-      document.location.hostname == "www.jefftk.com") {
-    // Better default
-    server_path_text.value = "http://localhost:8081/"
-  }
-
-  var hash = window.location.hash;
-  if (hash && hash.length > 1) {
-    var audio_offset = parseInt(hash.substr(1), 10);
-    if (audio_offset >= 0 && audio_offset <= 60) {
-      audio_offset_text.value = audio_offset;
-    }
-  }
-}
-
 async function configure_input_node(audioCtx) {
   synthetic_audio_source = null;
   var deviceId = in_select.value;
-  if (deviceId == "NUMERIC" ||
-      deviceId == "CLICKS" ||
+  if (deviceId == "CLICKS" ||
       deviceId == "ECHO") {
     synthetic_audio_source = deviceId;
     synthetic_click_interval = 60.0 / parseFloat(click_bpm.value);
@@ -300,30 +263,13 @@ async function configure_input_node(audioCtx) {
     source.loopEnd = source.buffer.duration;
     source.start();
     return source;
-  } else if (deviceId == "HAMILTON") {
-    override_gain = 0.5;
-    var hamilton_audio = hamilton_audio_span.getElementsByTagName('audio')[0];
-    // Can't use createMediaElementSource because you can only
-    //   ever do that once per element, so we could never restart.
-    //   See: https://github.com/webAudio/web-audio-api/issues/1202
-    var source = audioCtx.createMediaStreamSource(hamilton_audio.captureStream());
-    // NOTE: You MUST NOT call "load" on the element after calling
-    //   captureStream, or the capture will break. This is not documented
-    //   anywhere, of course.
-    hamilton_audio.muted = true;  // Output via stream only
-    hamilton_audio.loop = true;
-    hamilton_audio.controls = false;
-    lib.log(LOG_DEBUG, "Starting playback of hamilton...");
-    await hamilton_audio.play();
-    lib.log(LOG_DEBUG, "... started");
-    return source;
   }
 
   micStream = await navigator.mediaDevices.getUserMedia({
     audio: {
       echoCancellation: false,
-      noiseSuppression: false,
-      autoGainControl: true,
+      noiseSuppression: true,
+      autoGainControl: false,  // Unfortunately this tends to kill long held notes, which is bad; but people's levels being wildly different is also bad. Manage it ourselves?
       deviceId: { exact: deviceId }
     }
   });
@@ -332,14 +278,7 @@ async function configure_input_node(audioCtx) {
 }
 
 function configure_output_node(audioCtx) {
-  synthetic_audio_sink = false;
-  var deviceId = out_select.value;
-
-  if (deviceId == "NUMERIC" || deviceId == "NOWHERE") {
-    if (deviceId == "NUMERIC") {
-      // Signal the worklet for special handling
-      synthetic_audio_sink = true;
-    }
+  if (out_select.value == "NOWHERE") {
     // Send audio nowhere.
     return audioCtx.createMediaStreamDestination();
   } else {
@@ -355,29 +294,28 @@ function configure_output_node(audioCtx) {
 // * All `clock` variables represent the END of an interval, NOT the
 //   beginning. It's arbitrary which one to use, but you have to be
 //   consistent, and trust me that it's slightly nicer this way.
-var server_clock;
+var server_connection;
+var loopback_mode;
+
 var playerNode;
 var micStream;
-var read_clock;
-var mic_buf;
-var mic_buf_clock;
-var loopback_mode;
-var server_path;
-var audio_offset;
-var override_gain = 1.0;
 var synthetic_audio_source;
-var synthetic_audio_sink;
 var synthetic_click_interval;
-var sample_rate = 48000;  // Firefox may get upset if we use a weird value here? Also, we may not want to force this to a specific value?
+
+var mic_buf;
 var encoder;
 var decoder;
+var encoding_latency_ms;
+
+// Used to coordinate changes to various parameters while messages may still be in flight.
+var epoch = 0;
 
 function ms_to_samples(ms) {
-  return sample_rate * ms / 1000;
+  return audioCtx.sampleRate * ms / 1000;
 }
 
 function samples_to_ms(samples) {
-  return samples * 1000 / sample_rate;
+  return samples * 1000 / audioCtx.sampleRate;
 }
 
 function ms_to_batch_size(ms) {
@@ -389,11 +327,12 @@ function batch_size_to_ms(batch_size) {
 }
 
 // How many samples should we accumulate before sending to the server?
-// In units of 128 samples.
-var sample_batch_size = null;  // set by start()
-var max_sample_batch_size = ms_to_batch_size(MAX_MS_PER_BATCH);
+// In units of 128 samples. Set in start() once we know the sample rate.
+var sample_batch_size;
+var max_sample_batch_size;
 
 function set_estimate_latency_mode(mode) {
+  estimate_latency_mode = mode;
   playerNode.port.postMessage({
     "type": "latency_estimation_mode",
     "enabled": mode
@@ -419,121 +358,285 @@ function toggle_mute() {
 
 async function reset_if_running() {
   if (running) {
-    await start_stop();
-    await start_stop();
+    await stop();
+    await start();
   }
 }
 
 async function audio_offset_change() {
   if (running) {
     await reload_settings();
+    await server_connection.start();
   }
 }
 
 async function start_stop() {
-  const was_running = running;
-  running = !was_running;
-  set_controls();
-  was_running ? stop() : start();
+  if (running) {
+    await stop();
+  } else {
+    await start();
+  }
 }
-
-async function send_and_wait(port, msg, transfer) {
-    return new Promise(function (resolve, _) {
-        // XXX: I don't really trust this dynamic setting of onmessage business, but the example code does it so I'm leaving it for now... :-\
-        port.onmessage = function (ev) {
-            resolve(ev);
-        }
-        lib.log(LOG_VERYSPAM, "Posting to port", port, "msg", msg, "transfer", transfer);
-        port.postMessage(msg, transfer);
-    });
-}
-
-var expected_bogus_header = [
-    79, 112, 117, 115, 72, 101, 97, 100, // "OpusHead"
-    1, // version
-    1, // channels
-    0, 0, // pre-skip frames
-    128, 187, 0, 0, // sample rate (48,000)
-    0, 0, // output gain
-    0 // channel mapping mode
-];
 
 class AudioEncoder {
-    constructor(path) {
-        this.worker = new Worker(path);
+  constructor(path) {
+    this.worker = new Worker(path);
+    this.client_clock = null;
+    this.server_clock = null;
+    this.next_request_id = 0;
+    this.request_queue = [];
+    this.worker.onmessage = this.handle_message.bind(this);
+  }
+
+  handle_message(ev) {
+    var queue_entry = this.request_queue.shift();
+    var response_id = ev.data.request_id;
+    check(queue_entry[0] == response_id, "Responses out of order", queue_entry, ev.data);
+    if (ev.data.status != 0) {
+      throw { err: "AudioEncoder RPC failed", msg, data: ev.data };
+    }
+    queue_entry[1](ev.data);
+  }
+
+  async worker_rpc(msg, transfer) {
+    var request_id = this.next_request_id;
+    var _this = this;
+    this.next_request_id += 1;
+    return new Promise(function (resolve, _) {
+      _this.request_queue.push([request_id, resolve]);
+      lib.log(LOG_VERYSPAM, "Posting to port", _this.worker, "msg", msg, "transfer", transfer);
+      _this.worker.postMessage({ request_id, ...msg }, transfer);
+    });
+  }
+
+  // MUST be called before ANY other RPCs
+  async setup(cfg) {
+    this.client_clock_reference = new ClientClockReference({
+      sample_rate: cfg.sampling_rate
+    });
+    this.server_clock_reference = new ServerClockReference({
+      sample_rate: cfg.codec_sampling_rate || 48000  // keep in sync with encoder.js
+    })
+    this.queued_chunk = null;
+    return this.worker_rpc(cfg);
+  }
+
+  async encode_chunk(chunk) {
+    chunk.check_clock_reference(this.client_clock_reference);
+    check(this.client_clock === null || !(chunk instanceof PlaceholderChunk), "Can't send placeholder chunks once clock has started");
+
+    if (this.queued_chunk !== null) {
+      chunk = concat_chunks([this.queued_chunk, chunk]);
+      this.queued_chunk = null;
     }
 
-    async worker_rpc(msg) {
-        var ev = await send_and_wait(this.worker, msg);
-        if (ev.data.status != 0) {
-            throw ev.data;
-        }
-        return ev.data;
-    }
+    if (chunk instanceof PlaceholderChunk) {
+      var result_length = Math.round(chunk.length / this.client_clock_reference.sample_rate * this.server_clock_reference.sample_rate);
+      var opus_samples = OPUS_FRAME_MS * this.server_clock_reference.sample_rate / 1000;
+      var send_length = Math.round(result_length / opus_samples) * opus_samples;
 
-    async setup(cfg) {
-        var data = await this.worker_rpc(cfg);
-        var packets = data.packets;
-        // This opus wrapper library adds a bogus header, which we validate and then strip for our sanity.
-        if (packets.length != 1 || packets[0].data.byteLength != expected_bogus_header.length) {
-            throw { err: "Bad header packet", data: packets };
-        }
-        var bogus_header = new Uint8Array(packets[0].data);
-        for (var i = 0; i < expected_bogus_header.length; i++) {
-            if (bogus_header[i] != expected_bogus_header[i]) {
-                throw { err: "Bad header packet", data: packets };
-            }
-        }
-        // return nothing.
-    }
-
-    async encode(in_data) {
-        var data = await this.worker_rpc(in_data);
-        if (data.packets === undefined) {
-            throw data;
-        }
-        return data.packets;
-    }
-
-    async reset() {
-        return this.worker_rpc({
-          reset: true
+      // This is ugly.
+      var leftover_length = Math.round((result_length - send_length) * this.client_clock_reference.sample_rate / this.server_clock_reference.sample_rate);
+      if (leftover_length > 0) {
+        this.queued_chunk = new PlaceholderChunk({
+          reference: this.client_clock_reference,
+          length: leftover_length
         });
+      }
+
+      return new PlaceholderChunk({
+        reference: this.server_clock_reference,
+        length: send_length
+      });
     }
+
+    if (this.client_clock === null) {
+      this.client_clock = chunk.start;
+
+      // This isn't ideal, but the notion is that we only do this once, so there is no accumulating rounding error.
+      this.server_clock = Math.round(this.client_clock
+        / this.client_clock_reference.sample_rate
+        * this.server_clock_reference.sample_rate);
+    }
+    if (this.client_clock != chunk.start) {
+      throw new Error("Cannot encode non-contiguous chunks!");
+    }
+    this.client_clock = chunk.end;
+
+    var { packets, samples_encoded, buffered_samples } = await this.encode({
+      samples: chunk.data
+    });
+
+    this.server_clock += samples_encoded
+    // At this point server_clock is behind chunk.end by buffered_samples, the amount of stuff remaining buffered inside the encoder worker
+    var server_clock_adjusted = this.server_clock + buffered_samples;
+    var client_clock_hypothetical = server_clock_adjusted / this.server_clock_reference.sample_rate * this.client_clock_reference.sample_rate;
+
+    // XXX: we'll see about this? I believe as long as the resampler is buffering correctly, this should never exceed 1, and should not be subject to accumulated roundoff error.
+    // NOTE: We have to use chunk.end here, and not this.client_clock, which may have moved on while we were waiting for the decoder.
+    lib.log(LOG_SPAM, "net sample rate clock error:", chunk.end - client_clock_hypothetical);
+    if (Math.abs(chunk.end - client_clock_hypothetical) > 5 /* arbitrary */) {
+      throw new Error("sample rate clock slippage excessive; what happened?");
+    }
+
+    var enc_buf = [];
+    packets.forEach((packet) => {
+      enc_buf.push(new Uint8Array(packet.data));
+    });
+    var outdata = pack_multi(enc_buf);
+
+    var result_interval = new ClockInterval({
+      reference: this.server_clock_reference,
+      end: this.server_clock,
+      length: samples_encoded
+    });
+    return new CompressedAudioChunk({
+      interval: result_interval,
+      data: outdata
+    });
+  }
+
+  async encode(in_data) {
+    var data = await this.worker_rpc(in_data);
+    if (data.packets === undefined) {
+      throw { err: "encode returned no packets", data };
+    }
+    return data;
+  }
+
+  // XXX: should probably drain the queue?
+  async reset() {
+    this.client_clock = null;
+    this.server_clock = null;
+    return this.worker_rpc({
+      reset: true
+    });
+  }
 }
 
 class AudioDecoder {
-    constructor(path) {
-        this.worker = new Worker(path);
+  constructor(path) {
+    this.worker = new Worker(path);
+    this.server_clock = null;
+    this.client_clock = null;
+    this.next_request_id = 0;
+    this.request_queue = [];
+    this.worker.onmessage = this.handle_message.bind(this);
+  }
+
+  handle_message(ev) {
+    var queue_entry = this.request_queue.shift();
+    var response_id = ev.data.request_id;
+    check(queue_entry[0] == response_id, "Responses out of order", queue_entry, ev.data);
+    if (ev.data.status != 0) {
+      throw { err: "AudioEncoder RPC failed", msg, data: ev.data };
+    }
+    queue_entry[1](ev.data);
+  }
+
+  async worker_rpc(msg, transfer) {
+    var request_id = this.next_request_id;
+    var _this = this;
+    this.next_request_id += 1;
+    return new Promise(function (resolve, _) {
+      _this.request_queue.push([request_id, resolve]);
+      lib.log(LOG_VERYSPAM, "Posting to port", _this.worker, "msg", msg, "transfer", transfer);
+      _this.worker.postMessage({ request_id, ...msg }, transfer);
+    });
+  }
+
+  // MUST be called before ANY other RPCs
+  async setup(cfg) {
+    this.client_clock_reference = new ClientClockReference({
+      sample_rate: cfg.sampling_rate
+    });
+    this.server_clock_reference = new ServerClockReference({
+      sample_rate: cfg.codec_sampling_rate || 48000  // keep in sync with decoder.js
+    })
+    return this.worker_rpc(cfg);
+  }
+
+  // XXX: should probably drain the queue?
+  async reset() {
+    this.client_clock = null;
+    this.server_clock = null;
+    return this.worker_rpc({
+      reset: true
+    });
+  }
+
+  async decode_chunk(chunk) {
+    chunk.check_clock_reference(this.server_clock_reference);
+
+    if (chunk instanceof PlaceholderChunk) {
+      var result_interval = new ClockInterval({
+        reference: this.client_clock_reference,
+        length: Math.round(chunk.length / this.server_clock_reference.sample_rate * this.client_clock_reference.sample_rate),
+        end: Math.round(chunk.end / this.server_clock_reference.sample_rate * this.client_clock_reference.sample_rate),
+      });
+      // Wrap this in a promise so that it resolves asynchronously and does not return "too fast".
+      // XXX doesn't help
+      return Promise.resolve(new PlaceholderChunk({
+        reference: result_interval.reference,
+        length: result_interval.length,
+        interval: result_interval
+      }));
     }
 
-    async worker_rpc(msg, transfer) {
-        var ev = await send_and_wait(this.worker, msg, transfer);
-        if (ev.data.status != 0) {
-            throw ev.data;
-        }
-        return ev.data;
-    };
+    if (this.server_clock === null) {
+      this.server_clock = chunk.start;
 
-    async setup() {
-        var bogus_header_packet = {
-            data: Uint8Array.from(expected_bogus_header).buffer
-        };
-        return await this.worker_rpc({
-            config: {},  // not used
-            packets: [bogus_header_packet],
-        });
+      // This isn't ideal, but the notion is that we only do this once, so there is no accumulating rounding error.
+      this.client_clock = Math.round(this.server_clock
+        / this.server_clock_reference.sample_rate
+        * this.client_clock_reference.sample_rate);
+    }
+    if (this.server_clock != chunk.start) {
+      throw new Error("Cannot decode non-contiguous chunks!");
+    }
+    this.server_clock = chunk.end;
+
+    var indata = chunk.data;
+    var packets = unpack_multi(indata);
+
+    // Make all the calls FIRST, and THEN gather the results. This will prevent us from interleaving with other calls to decode_chunk. (Assuming certain things about in-order dispatch and delivery of postMessage, which I hope are true.)
+    lib.log(LOG_VERYSPAM, "Starting to decode sample packets", packets);
+    var decoding_promises = [];
+    for (var i = 0; i < packets.length; ++i) {
+      decoding_promises.push(decoder.decode({
+        data: packets[i].buffer
+      }));
     }
 
-    async reset() {
-        return this.worker_rpc({
-          reset: true
-        });
+    lib.log(LOG_VERYSPAM, "Forcing decoding promises", decoding_promises);
+    var decoded_packets = [];
+    for (var i = 0; i < decoding_promises.length; ++i) {
+      var p_samples = await decoding_promises[i];
+      lib.log(LOG_VERYSPAM, "Decoded samples:", p_samples);
+      decoded_packets.push(new Float32Array(p_samples.samples));
     }
 
-    async decode(packet) {
-        return await this.worker_rpc(packet, [packet.data]);
-    }
+    var play_samples = concat_typed_arrays(decoded_packets, Float32Array);
+    var decoded_length_expected = chunk.length / chunk.reference.sample_rate * this.client_clock_reference.sample_rate;
+    // XXX: This is janky, in reality our chunk length divides evenly so it should be 0, if it doesn't I'm not sure what we should expect here?
+    check(Math.abs(decoded_length_expected - play_samples.length) < 5, "Chunk decoded to wrong length!", chunk, play_samples);
+    this.client_clock += play_samples.length;
+    lib.log(LOG_SPAM, "Decoded all samples from server:", decoded_packets);
+
+    var result_interval = new ClockInterval({
+      reference: this.client_clock_reference,
+      end: this.client_clock,
+      length: play_samples.length
+    });
+    return new AudioChunk({
+      interval: result_interval,
+      data: play_samples
+    });
+  }
+
+  async decode(packet) {
+    return await this.worker_rpc(packet, [packet.data]);
+  }
 }
 
 var running_internal;
@@ -542,21 +645,36 @@ async function start() {
     lib.log(LOG_ERROR, "CANNOT START WHILE ALREADY RUNNING");
     return;
   }
+  if (audioCtx) {
+    lib.log(LOG_ERROR, "NOT RUNNING, BUT ALREADY HAVE AUDIOCTX?");
+    return;
+  }
+
   running_internal = true;
+  running = true;
+  set_controls();
   clear_error();
 
-  sample_batch_size = ms_to_batch_size(INITIAL_MS_PER_BATCH);
-  window.msBatchSize.value = batch_size_to_ms(sample_batch_size);
-
+  // Do NOT set the sample rate to a fixed value. We MUST let the audioContext use
+  // whatever it thinks the native sample rate is. This is becuse:
+  // * Firefox does not have a resampler, so it will refuse to operate if we try
+  //   to force a sample rate other than the native one
+  // * Chrome does have a resampler, but it's buggy and has a habit of dropping
+  //   frames of samples under load, which fucks everything up. (Note that even
+  //   without resampling, Chrome still has a habit of dropping frames under
+  //   load, but it happens a heck of a lot less often.)
   var AudioContext = window.AudioContext || window.webkitAudioContext;
-
-  audioCtx = new AudioContext({ sampleRate: sample_rate });
+  audioCtx = new AudioContext({});
+  sample_rate_text.value = audioCtx.sampleRate;
   lib.log(LOG_DEBUG, "Audio Context:", audioCtx);
 
-  var micNode = await configure_input_node(audioCtx);
-  //lib.log(LOG_DEBUG, "Input node sample rate (track 0):", micNode.mediaStream.getAudioTracks()[0].getSettings().sampleRate);
+  // XXX: this all gets kind of gross with 44100, nothing divides nicely.
+  sample_batch_size = ms_to_batch_size(INITIAL_MS_PER_BATCH);
+  max_sample_batch_size = ms_to_batch_size(MAX_MS_PER_BATCH);
+  window.msBatchSize.value = INITIAL_MS_PER_BATCH;
 
-  var spkrNode = configure_output_node(audioCtx);
+  var micNode = await configure_input_node(audioCtx);
+  var spkrNode = await configure_output_node(audioCtx);
 
   //XXX: the AudioWorkletProcessor just seems to get leaked here, every time we stop and restart. I'm not sure if there's a way to prevent that without reloading the page... (or avoiding reallocating it when we stop and start.)
   await audioCtx.audioWorklet.addModule('audio-worklet.js');
@@ -573,23 +691,47 @@ async function start() {
   if (!encoder) {
     encoder = new AudioEncoder('opusjs/encoder.js');
     var enc_cfg = {
-        sampling_rate: audioCtx.sampleRate,
+        sampling_rate: audioCtx.sampleRate,  // This instructs the encoder what sample rate we're giving it. If necessary (i.e. if not equal to 48000), it will resample.
         num_of_channels: 1,
-        params: {
-            application: 2049,  // AUDIO
-            sampling_rate: 48000,
-            frame_duration: OPUS_FRAME_MS,
-        }
+        frame_duration: OPUS_FRAME_MS,
     };
     lib.log(LOG_DEBUG, "Setting up opus encoder. Encoder params:", enc_cfg);
-    await encoder.setup(enc_cfg);
+    var { status, resampling } = await encoder.setup(enc_cfg);
+    if (status != 0) {
+      throw new Error("Encoder setup failed");
+    }
+
+    /** ENCODING/DECODING LATENCY NOTES:
+      * In most normal modes, Opus adds a total of 6.5ms across encoding and decoding.
+        * (see https://en.wikipedia.org/wiki/Opus_(audio_format) .)
+
+      * Resampler latency figures from https://lastique.github.io/src_test/
+        * (https://web.archive.org/web/20200918060257/https://lastique.github.io/src_test/):
+        * For quality 5 (we are here), 0.8 - 1ms.
+        * For quality 10, 2.6 - 3ms.
+
+      * We run the resampler in both direction (if the system is not 48k), giving about 8.3ms of
+        total added latency. (We can count the encoding and decoding together, even though they
+        happen separately, because latency coming or going has the same effect.)
+        * This is low enough that we SHOULD be ok to ignore it, but we will add it in to be sure.
+    */
+
+    encoding_latency_ms = 6.5;  // rudely hardcoded opus latency
+    if (resampling) {
+      encoding_latency_ms += 1.8;
+    }
   }
   encoder.reset();
 
   if (!decoder) {
     decoder = new AudioDecoder('opusjs/decoder.js')
-    var info = await decoder.setup();
-    lib.log(LOG_DEBUG, "Opus decoder returned parameters:", info);
+    var dec_cfg = {
+        sampling_rate: audioCtx.sampleRate,  // This instructs the decoder what sample rate we want from it. If necessary (i.e. if not equal to 48000), it will resample.
+        num_of_channels: 1,
+        // Frame duration will be derived from the encoded data.
+    };
+    lib.log(LOG_DEBUG, "Setting up opus decder. Decoder params:", dec_cfg);
+    await decoder.setup(dec_cfg);
   }
   decoder.reset();
 
@@ -597,12 +739,7 @@ async function start() {
 
   playerNode.port.onmessage = handle_message;
   micNode.connect(playerNode);
-
-  // This may not work in Firefox.
   playerNode.connect(spkrNode);
-
-  // To use the default output device, which should be supported on all browsers, instead use:
-  // playerNode.connect(audioCtx.destination);
 
   await reload_settings();
 
@@ -613,29 +750,64 @@ async function start() {
   } else {
     window.est40to60.innerText = "0ms";
     window.estLatency.innerText = "0ms";
-    window.msClietLatency.value = "0ms";
+    window.msClientLatency.value = "0ms";
     send_local_latency();
     window.initialInstructions.style.display = "none";
     window.calibration.style.display = "none";
     window.runningInstructions.style.display = "block";
+    try {
+      await server_connection.start();
+    } catch (e) {
+      lib.log(LOG_ERROR, "Failed to connect to server:", e);
+      await stop();
+      return;
+    }
   }
 }
 
+// Should really be named "restart everything", which is what it does.
 async function reload_settings() {
-  audio_offset = parseInt(audio_offset_text.value) * sample_rate;
+  lib.log(LOG_INFO, "Resetting the world! Old epoch was:", epoch);
+  epoch +=1;
+  lib.log(LOG_INFO, "New epoch is:", epoch);
 
-  read_clock = null;
+  // XXX: Not guaranteed to be immediate; we should wait for it to confirm.
+  playerNode.port.postMessage({
+    type: "stop"
+  });
+
+  if (server_connection) {
+    server_connection.stop();
+    server_connection = null;
+  }
+
+  lib.log(LOG_INFO, "Stopped audio worklet and server connection.");
+
   mic_buf = [];
-  mic_buf_clock = null;
-  override_gain = 1.0;
 
   loopback_mode = loopback_mode_select.value;
-  server_path = server_path_text.value;
 
-  // Support relative paths
-  var target_url = new URL(server_path, document.location);
-  server_clock = await query_server_clock(loopback_mode, target_url, sample_rate);
-  read_clock = server_clock - audio_offset;
+  if (loopback_mode == "none" || loopback_mode == "server") {
+    server_connection = new ServerConnection({
+      // Support relative paths
+      target_url: new URL(server_path_text.value, document.location),
+      audio_offset_seconds: parseInt(audio_offset_text.value),
+      userid,
+      epoch
+    })
+  } else {
+    server_connection = new FakeServerConnection({
+      sample_rate: 48000,
+      epoch
+    })
+  }
+
+  lib.log(LOG_INFO, "Created new server connection and started it, resetting encoder and decoder.");
+
+  await encoder.reset();
+  await decoder.reset();
+
+  lib.log(LOG_INFO, "Reset encoder and decoder, starting audio worket again.");
 
   // Send this before we set audio params, which declares us to be ready for audio
   click_volume_change();
@@ -643,17 +815,21 @@ async function reload_settings() {
     type: "audio_params",
     synthetic_source: synthetic_audio_source,
     click_interval: synthetic_click_interval,
-    synthetic_sink: synthetic_audio_sink,
-    loopback_mode: loopback_mode
+    loopback_mode,
+    epoch,
   }
+  // This will reset the audio worklett, flush its buffer, and start it up again.
   playerNode.port.postMessage(audio_params);
 }
 
 function send_local_latency() {
   var local_latency_ms = parseFloat(estLatency.innerText);
 
+  // Account for the (small) amount of latency added by opus and the speex resampler.
+  local_latency_ms += encoding_latency_ms;
+
   // Convert from ms to samples.
-  var local_latency = Math.round(local_latency_ms * sample_rate / 1000);
+  var local_latency = Math.round(local_latency_ms * audioCtx.sampleRate / 1000);
 
   if (synthetic_audio_source !== null) {
     local_latency = 0;
@@ -664,11 +840,10 @@ function send_local_latency() {
   });
 }
 
-function samples_to_worklet(samples, clock) {
+function samples_to_worklet(chunk) {
   var message = {
     type: "samples_in",
-    samples: samples,
-    clock: clock
+    chunk,
   };
 
   lib.log(LOG_SPAM, "Posting to worklet:", message);
@@ -693,7 +868,7 @@ function pack_multi(packets) {
   var outdata_idx = 1;
   packets.forEach((p) => {
     if (p.constructor !== Uint8Array) {
-      throw "must be Uint8Array";
+      throw new Error("must be Uint8Array");
     }
     var len = p.length;  // will never exceed 2**16
     var len_b = [len >> 8, len % 256];
@@ -707,36 +882,34 @@ function pack_multi(packets) {
 }
 
 function unpack_multi(data) {
-  lib.log(LOG_SPAM, "Decoding packet from server, data:", data);
+  lib.log(LOG_SPAM, "Unpacking multi-packet from server, data:", data);
   if (data.constructor !== Uint8Array) {
-    throw "must be Uint8Array";
+    throw new Error("must be Uint8Array");
   }
   var packet_count = data[0];
   var data_idx = 1;
   var result = [];
   for (var i = 0; i < packet_count; ++i) {
     var len = (data[data_idx] << 8) + data[data_idx + 1];
-    lib.log(LOG_VERYSPAM, "Decoding subpacket", i, "at offset", data_idx, "with len", len);
+    lib.log(LOG_VERYSPAM, "Unpacking subpacket", i, "at offset", data_idx, "with len", len);
     var packet = new Uint8Array(len);
     data_idx += 2;
     packet.set(data.slice(data_idx, data_idx + len));
     data_idx += len;
     result.push(packet);
   }
-  lib.log(LOG_SPAM, "Decoded packet from server! Final data_idx:", data_idx, ", total length:", data.length, ", num. subpackets:", packet_count, "final output:", result);
+  lib.log(LOG_SPAM, "Unpacked multi-packet from server! Final data_idx:", data_idx, ", total length:", data.length, ", num. subpackets:", packet_count, "final output:", result);
   return result;
 }
 
 function concat_typed_arrays(arrays, _constructor) {
   if (arrays.length == 0 && _constructor === undefined) {
-    throw "cannot concat zero arrays without constructor provided";
+    throw new Error("cannot concat zero arrays without constructor provided");
   }
   var constructor = _constructor || arrays[0].constructor;
   var total_len = 0;
   arrays.forEach((a) => {
-    if (a.constructor !== constructor) {
-      throw "must concat arrays of same type";
-    }
+    check(a.constructor === constructor, "must concat arrays of same type", a.constructor, constructor);
     total_len += a.length;
   });
   var result = new constructor(total_len);
@@ -752,18 +925,35 @@ function wait(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+function rebless(o) {
+  if (o.type !== undefined) {
+    Object.setPrototypeOf(o, eval(o.type).prototype);
+  }
+  if (o.rebless) {
+    o.rebless();
+  }
+  return o;
+}
+
 async function handle_message(event) {
   var msg = event.data;
   lib.log(LOG_VERYSPAM, "onmessage in main thread received ", msg);
+
+  // XXX lib.log(LOG_DEBUG, "audioCtx reported latency:", audioCtx.currentTime - audioCtx.getOutputTimestamp().contextTime, audioCtx.currentTime, audioCtx.getOutputTimestamp().contextTime);
 
   if (!running) {
     lib.log(LOG_WARNING, "Got message when done running");
     return;
   }
+  if (msg.epoch !== undefined && msg.epoch != epoch) {
+    lib.log(LOG_WARNING, "Ignoring message from old epoch");
+    return;
+  }
 
   if (msg.type == "exception") {
     lib.log(LOG_ERROR, "Exception thrown in audioworklet:", msg.exception);
-    reload_settings();
+    await reload_settings();
+    await server_connection.start();
     return;
   } else if (msg.type == "no_mic_input") {
     window.noAudioInputInstructions.style.display = "block";
@@ -777,7 +967,9 @@ async function handle_message(event) {
       const latency_range = msg.p60 - msg.p40;
       window.est40to60.innerText = Math.round(latency_range) + "ms";
       window.estLatency.innerText = Math.round(msg.p50) + "ms";
-      window.msClietLatency.value = Math.round(msg.p50) + "ms";
+      window.msClientLatency.value = Math.round(msg.p50) + "ms";
+      window.msWebAudioJank.value = Math.round(msg.jank) + "ms";
+      window.msTrueLatency.value = Math.round(msg.p50 - msg.jank) + "ms";
 
       if (latency_range < msg.samples / 2) {
         // Stop trying to estimate latency once were close enough. The
@@ -789,6 +981,7 @@ async function handle_message(event) {
         window.calibration.style.display = "none";
         window.runningInstructions.style.display = "block";
         set_estimate_latency_mode(false);
+        await server_connection.start();
       }
     }
     return;
@@ -810,135 +1003,98 @@ async function handle_message(event) {
     return;
   } else if (msg.type != "samples_out") {
     lib.log(LOG_ERROR, "Got message of unknown type:", msg);
-    stop();
+    await stop();
     return;
   }
 
-  var mic_samples = msg.samples;
-  // XXX: next line is wrong if the batch size is not a multiple of the opus frame size, I think.
-  var send_write_clock = msg.clock;
-  mic_buf.push(mic_samples);
-  lib.log(LOG_VERYSPAM, "added", mic_samples.length, "samples, for total of", mic_buf.length * 128, "with threshold", sample_batch_size);
+  // If we see this change at any point, that means stop what we're doing.
+  var our_epoch = epoch;
 
-  /*
-  // Update the peak meter
-  var peak_in = parseFloat(peak_in_text.value);
-  if (isNaN(peak_in)) {
-    peak_in = 0.0;
-  }
-  for (var i = 0; i < mic_samples.length; i++) {
-    if (Math.abs(mic_samples[i]) > peak_in) {
-      peak_in = Math.abs(mic_samples[i]);
-    }
-  }
-  // XXX: touching the DOM
-  peak_in_text.value = peak_in;
-  */
+  lib.log(LOG_SPAM, "Got heard chunk:", msg);
+
+  // Tricky metaprogramming bullshit to recover the object-nature of an object sent via postMessage
+  var chunk = rebless(msg.chunk);
+  mic_buf.push(chunk);
+
+  // XXX: just for debugging
+  window.msWebAudioJankCurrent.value = Math.round(msg.jank) + "ms";
 
   if (mic_buf.length >= sample_batch_size) {
-    var samples = concat_typed_arrays(mic_buf, Float32Array);
-    lib.log(LOG_SPAM, "Encoding samples:", mic_buf);
+    var chunk = concat_chunks(mic_buf);
+    lib.log(LOG_SPAM, "Encoding chunk to send:", chunk);
     mic_buf = [];
-    var encoded_samples = await encoder.encode({ samples });
-    var enc_buf = [];
-    lib.log(LOG_SPAM, "Got encoded packets:", encoded_samples);
-    encoded_samples.forEach((packet) => {
-      enc_buf.push(new Uint8Array(packet.data));
-    });
-    var outdata = pack_multi(enc_buf);
 
-    // Clocks are at the _end_ of intervals; the longer we've been
-    //   accumulating data, the more we have to read. (Trust me.)
-    var orig_read_clock = read_clock;
-    var packet_contents_length = enc_buf.length * ms_to_samples(OPUS_FRAME_MS)
-    // These SHOULD be equal IF we have managed to make our sample_back_size correctly a multiple of our OPUS_FRAME_MS. Otherwise they will be different, but hopefully still correct...
-    lib.log(LOG_SPAM, "Calculated packet contents length:", packet_contents_length, "; amount of stuff fed to encoder:", samples.length);
-    read_clock += packet_contents_length;
-
-    if (loopback_mode == "main") {
-      var packets = unpack_multi(outdata);
-      var decoded_packets = [];
-      for (var i = 0; i < packets.length; ++i) {
-        var p_samples = await decoder.decode({
-          data: packets[i].buffer
-        });
-        lib.log(LOG_VERYSPAM, "Decoded samples:", p_samples);
-        decoded_packets.push(new Float32Array(p_samples.samples));
-      }
-      lib.log(LOG_VERYSPAM, "Decoded packets looped back:", decoded_packets);
-      var play_samples = concat_typed_arrays(decoded_packets, Float32Array);
-      lib.log(LOG_SPAM, "Playing looped-back samples:", play_samples);
-      samples_to_worklet(play_samples, read_clock);
+    var encoded_chunk = await encoder.encode_chunk(chunk);
+    if (our_epoch != epoch) {
+      lib.log(LOG_WARNING, "Ending message handler early due to stale epoch");
       return;
-    } else {
-      var target_url = new URL(server_path, document.location);
-      var send_metadata = {
-        read_clock: orig_read_clock,
-        write_clock: send_write_clock,
-        username: window.userName.value,
-        userid,
-        chatsToSend,
-        requestedLeadPosition,
-        loopback_mode
-      };
-      if (requestedLeadPosition) {
-        requestedLeadPosition = false;
-      }
-      chatsToSend = [];
-
-      var response = await samples_to_server(outdata, target_url, send_metadata);
-      var result = new Uint8Array(response.data);
-      var packets = unpack_multi(result);
-      var metadata = response.metadata;
-
-      /*
-      // Update the peak meter
-      for (var i = 0; i < result.length; i++) {
-        if (Math.abs(play_samples[i]) > peak_out) {
-          peak_out = Math.abs(play_samples[i]);
-        }
-      }
-      */
-
-      // XXX: terrible.
-      //var reset_result = await decoder.reset();
-      //lib.log(LOG_DEBUG, "decoder reset:", reset_result);
-
-      var decoded_packets = [];
-      for (var i = 0; i < packets.length; ++i) {
-        var samples = await decoder.decode({
-          data: packets[i].buffer
-        });
-        decoded_packets.push(new Float32Array(samples.samples));
-      }
-      var play_samples = concat_typed_arrays(decoded_packets, Float32Array);
-      samples_to_worklet(play_samples, metadata["client_read_clock"]);
-
-      var queue_size = metadata["queue_size"];
-      var user_summary = metadata["user_summary"];
-      var chats = metadata["chats"];
-      var delay_samples = metadata["delay_samples"];
-
-      // Defer touching the DOM, just to be safe.
-      requestAnimationFrame(() => {
-        if (delay_samples) {
-          delay_samples = parseInt(delay_samples, 10);
-          if (delay_samples > 0) {
-            audio_offset_text.value = Math.round(delay_samples / sample_rate);
-            audio_offset_change();
-          }
-        }
-
-        update_active_users(user_summary);
-
-        chats.forEach((msg) => receiveChatMessage(msg[0], msg[1]));
-
-        peak_out_text.value = peak_out;
-
-        client_total_time.value = (metadata["client_read_clock"] - metadata["client_write_clock"] + play_samples.length) / sample_rate;
-        client_read_slippage.value = (metadata["server_clock"] - metadata["client_read_clock"] - audio_offset) / sample_rate;
-      });
     }
+    lib.log(LOG_SPAM, "Got encoded chunk to send:", encoded_chunk);
+
+    var send_metadata = {
+      username: window.userName.value,
+      chatsToSend,
+      requestedLeadPosition,
+      loopback_mode
+    };
+    if (requestedLeadPosition) {
+      requestedLeadPosition = false;
+    }
+    chatsToSend = [];
+
+    server_connection.set_metadata(send_metadata);
+    // XXX: interesting, it does not seem that these promises are guaranteed to resolve in order... and the worklet's buffer uses the first chunk's timestamp to decide where to start playing back, so if the first two chunks are swapped it has a big problem.
+    try {
+      var { metadata, chunk: response_chunk, epoch: server_epoch } = await server_connection.send(encoded_chunk);
+    } catch (e) {
+      // Server connection failed. If we got a client kill, really we should not increase the batch size here, but I'm honestly not clear on when it's ever a good idea to increase it.
+      lib.log(LOG_ERROR, "Resetting server connection due to caught exception:", e);
+      await try_increase_batch_size_and_reload();
+      return;
+    }
+    if (our_epoch != epoch) {
+      lib.log(LOG_WARNING, "Ending message handler early due to stale epoch");
+      return;
+    }
+    if (server_epoch != epoch) {
+      lib.log(LOG_WARNING, "Ignoring message from server with old epoch");
+      return;
+    }
+
+    lib.log(LOG_SPAM, "Got chunk from server:", response_chunk.interval, response_chunk, metadata);
+    var play_chunk = await decoder.decode_chunk(response_chunk);
+    if (our_epoch != epoch) {
+      lib.log(LOG_WARNING, "Ending message handler early due to stale epoch");
+      return;
+    }
+
+    lib.log(LOG_SPAM, "Decoded chunk from server:", play_chunk.interval, play_chunk);
+    samples_to_worklet(play_chunk);
+
+    var queue_size = metadata["queue_size"];
+    var user_summary = metadata["user_summary"] || [];
+    var chats = metadata["chats"] || [];
+    var delay_seconds = metadata["delay_seconds"];
+
+    // Defer touching the DOM, just to be safe.
+    requestAnimationFrame(() => {
+      if (delay_seconds) {
+        if (delay_seconds > 0) {
+          audio_offset_text.value = delay_seconds;
+          // This will restart the world, so don't try to continue.
+          audio_offset_change();
+          return;
+        }
+      }
+
+      update_active_users(user_summary);
+      chats.forEach((msg) => receiveChatMessage(msg[0], msg[1]));
+
+      // This is how closely it's safe to follow behind us, if you get as unlucky as possible (and try to read _just_ before we write).
+      client_total_time.value = server_connection.client_window_time + play_chunk.length_seconds;
+      // This is how far behind our target place in the audio stream we are. This must be added to the value above, to find out how closely it's safe to follow behind where we are _aiming_ to be. This value should be small and relatively stable, or something has gone wrong.
+      client_read_slippage.value = server_connection.client_read_slippage;
+    });
   }
 }
 
@@ -954,7 +1110,8 @@ function update_active_users(user_summary) {
   }
 
   for (var i = 0; i < user_summary.length; i++) {
-    const offset_s = Math.round(user_summary[i][0] / sample_rate);
+    // XXX: this is wrong (using wrong sample rate)
+    const offset_s = Math.round(user_summary[i][0] / audioCtx.sampleRate);
     const name = user_summary[i][1];
     const tr = document.createElement('tr');
 
@@ -970,20 +1127,26 @@ function update_active_users(user_summary) {
   }
 }
 
-function try_increase_batch_size_and_reload() {
+// XXX: what happened to this? We never call this.
+async function try_increase_batch_size_and_reload() {
   if (sample_batch_size < max_sample_batch_size) {
     // Try increasing the batch size and restarting.
     sample_batch_size *= 1.3;  // XXX: do we care that this may not be integral??
     window.msBatchSize.value = batch_size_to_ms(sample_batch_size);
-    reload_settings();
+    await reload_settings();
+    await server_connection.start();
     return;
   } else {
     set_error("Failed to communicate with the server at a reasonable latency");
-    stop();
+    await stop();
+    return;
   }
 }
 
 async function stop() {
+  running = false;
+  set_controls();
+
   window.initialInstructions.style.display = "block";
   window.calibration.style.display = "none";
   window.runningInstructions.style.display = "none";
@@ -1039,6 +1202,27 @@ for (var i = 0; i < coll.length; i++) {
       content.style.display = "block";
     }
   });
+}
+
+async function initialize() {
+  await wait_for_mic_permissions();
+  await enumerate_devices();
+  set_controls();
+
+  if (document.location.hostname == "localhost" ||
+      document.location.hostname == "www.jefftk.com") {
+    // Better default
+    server_path_text.value = "http://localhost:8081/"
+  }
+
+  var hash = window.location.hash;
+  if (hash && hash.length > 1) {
+    var set_audio_offset = parseInt(hash.substr(1), 10);
+    if (set_audio_offset >= 0 && set_audio_offset <= 60) {
+      audio_offset_text.value = set_audio_offset;
+      audio_offset_change();
+    }
+  }
 }
 
 initialize();

@@ -237,67 +237,140 @@ var workerResponded = false,
     }
   }
 }))();
+
+var SpeexResampler = (function() {
+  function SpeexResampler(channels, in_rate, out_rate, quality) {
+    if (quality === void 0) {
+      quality = 5
+    }
+    this.handle = 0;
+    this.in_ptr = 0;
+    this.out_ptr = 0;
+    this.in_capacity = 0;
+    this.in_len_ptr = 0;
+    this.out_len_ptr = 0;
+    this.channels = channels;
+    this.in_rate = in_rate;
+    this.out_rate = out_rate;
+    var err_ptr = Module._malloc(4);
+    this.handle = _speex_resampler_init(channels, in_rate, out_rate, quality, err_ptr);
+    if (Module.getValue(err_ptr, "i32") != 0) throw "speex_resampler_init failed: ret=" + Module.getValue(err_ptr, "i32");
+    Module._free(err_ptr);
+    this.in_len_ptr = Module._malloc(4);
+    this.out_len_ptr = Module._malloc(4)
+  }
+  SpeexResampler.prototype.process = (function(input) {
+    if (!this.handle) throw new Error("disposed object");
+    var samples = input.length;
+    var outSamples = Math.ceil(samples * this.out_rate / this.in_rate);
+    var requireSize = samples * 4;
+    if (this.in_capacity < requireSize) {
+      if (this.in_ptr) Module._free(this.in_ptr);
+      if (this.out_ptr) Module._free(this.out_ptr);
+      this.in_ptr = Module._malloc(requireSize);
+      this.out_ptr = Module._malloc(outSamples * 4);
+      this.in_capacity = requireSize
+    }
+    var ret;
+    Module.setValue(this.in_len_ptr, samples / this.channels, "i32");
+    Module.setValue(this.out_len_ptr, outSamples / this.channels, "i32");
+    if (input.buffer == Module.HEAPF32.buffer) {
+      ret = _speex_resampler_process_interleaved_float(this.handle, input.byteOffset, this.in_len_ptr, this.out_ptr, this.out_len_ptr)
+    } else {
+      Module.HEAPF32.set(input, this.in_ptr >> 2);
+      ret = _speex_resampler_process_interleaved_float(this.handle, this.in_ptr, this.in_len_ptr, this.out_ptr, this.out_len_ptr)
+    }
+    if (ret != 0) throw "speex_resampler_process_interleaved_float failed: " + ret;
+    var ret_samples = Module.getValue(this.out_len_ptr, "i32") * this.channels;
+    return Module.HEAPF32.subarray(this.out_ptr >> 2, (this.out_ptr >> 2) + ret_samples)
+  });
+  SpeexResampler.prototype.destroy = (function() {
+    if (!this.handle) return;
+    _speex_resampler_destroy(this.handle);
+    this.handle = 0;
+    Module._free(this.in_len_ptr);
+    Module._free(this.out_len_ptr);
+    if (this.in_ptr) Module._free(this.in_ptr);
+    if (this.out_ptr) Module._free(this.out_ptr);
+    this.in_len_ptr = this.out_len_ptr = this.in_ptr = this.out_ptr = 0
+  });
+  return SpeexResampler
+})();
+
 var OpusDecoder = (function() {
   function OpusDecoder(worker) {
     var _this = this;
+    this.resampler = null;
     this.worker = worker;
     this.worker.onmessage = (function(ev) {
-      _this.setup(ev.data.config, ev.data.packets)
+      _this.setup(ev.data)
     })
   }
-  OpusDecoder.prototype.reset = (function() {
+  OpusDecoder.prototype.reset = (function(msg) {
     _opus_decoder_destroy(this.handle);
     var err = Module._malloc(4);
-    this.handle = _opus_decoder_create(this.sampling_rate, this.channels, err);
+    this.handle = _opus_decoder_create(this.codec_sampling_rate, this.channels, err);
     var err_num = Module.getValue(err, "i32");
     Module._free(err);
     if (err_num != 0) {
       this.worker.postMessage({
-        status: err_num
+        request_id: msg.request_id,
+        status: err_num,
+        reason: "_opus_decoder_create failed",
       });
       return
     }
   });
-  OpusDecoder.prototype.setup = (function(config, packets) {
+  OpusDecoder.prototype.setup = (function(config) {
+    var request_id = config.request_id;
     var _this = this;
-    if (packets.length != 1 || packets[0].data.byteLength != 19) {
-      this.worker.postMessage({
-        status: -1,
-        reason: "invalid opus header packet"
-      });
-      return
-    }
-    var invalid = false;
-    var view8 = new Uint8Array(packets[0].data);
-    var view32 = new Uint32Array(packets[0].data, 12, 1);
-    var magic = "OpusHead";
-    for (var i = 0; i < magic.length; ++i) {
-      if (view8[i] != magic.charCodeAt(i)) invalid = true
-    }
-    invalid = invalid || view8[8] != 1;
-    this.channels = view8[9];
-    invalid = invalid || this.channels == 0 || this.channels > 2;
-    var sampling_rate = view32[0];
-    invalid = invalid || view8[18] != 0;
-    if (invalid) {
-      this.worker.postMessage({
-        status: -1,
-        reason: "invalid opus header packet"
-      });
-      return
-    }
     var err = Module._malloc(4);
-    this.sampling_rate = sampling_rate;
-    this.handle = _opus_decoder_create(this.sampling_rate, this.channels, err);
+    this.codec_sampling_rate = config.codec_sampling_rate || 48000;  // TODO: this should really be the next highest acceptable rate above config.sampling_rate
+    if ([8000, 12000, 16000, 24000, 48000].indexOf(this.codec_sampling_rate) < 0) {
+      this.worker.postMessage({
+        request_id,
+        status: -1,
+        reason: "invalid codec sampling rate"
+      });
+      return
+    }
+    this.channels = config.num_of_channels;
+    if ([1, 2].indexOf(this.channels) < 0) {
+      this.worker.postMessage({
+        request_id,
+        status: -1,
+        reason: "invalid number of channels"
+      });
+      return
+    }
+    this.sampling_rate = config.sampling_rate;
+    this.handle = _opus_decoder_create(this.codec_sampling_rate, this.channels, err);
     var err_num = Module.getValue(err, "i32");
     Module._free(err);
     if (err_num != 0) {
       this.worker.postMessage({
-        status: err_num
+        request_id,
+        status: err_num,
+        reason: "_opus_decoder_create failed",
       });
       return
     }
-    this.frame_size = sampling_rate * 60 / 1e3;
+
+    if (this.sampling_rate != this.codec_sampling_rate) {
+      try {
+        this.resampler = new SpeexResampler(this.channels, this.codec_sampling_rate, this.sampling_rate)
+      } catch (e) {
+        this.worker.postMessage({
+          request_id,
+          status: -1,
+          reason: e,
+          message: "failed to create resampler"
+        });
+        return
+      }
+    }
+
+    this.frame_size = this.codec_sampling_rate * 60 / 1e3;  /* XXX: For max-size opus packets, that 60 should be 120, but this encoder will never emit them. (Will the Python one? Might have to change the next line also.) */
     var buf_size = 1275 * 3 + 7;
     var pcm_samples = this.frame_size * this.channels;
     this.buf_ptr = Module._malloc(buf_size);
@@ -308,32 +381,50 @@ var OpusDecoder = (function() {
       _this.decode(ev.data)
     });
     this.worker.postMessage({
+      request_id,
       status: 0,
-      sampling_rate: sampling_rate,
-      num_of_channels: this.channels
     })
   });
   OpusDecoder.prototype.decode = (function(packet) {
+    var request_id = packet.request_id;
+
     if (packet.reset) {
-        this.reset();
-        this.worker.postMessage({
-          status: 0,
-          message: "reset ok"
-        });
-        return;
+      this.reset(packet);
+      this.worker.postMessage({
+        request_id,
+        status: 0,
+        message: "reset ok"
+      });
+      return;
     }
     this.buf.set(new Uint8Array(packet.data));
     var ret = _opus_decode_float(this.handle, this.buf_ptr, packet.data.byteLength, this.pcm_ptr, this.frame_size, 0);
     if (ret < 0) {
       this.worker.postMessage({
+        request_id,
         status: ret
       });
       return
     }
+    var samples = new Float32Array(this.pcm.subarray(0, ret * this.channels));
+    if (this.resampler) {
+      try {
+        samples = this.resampler.process(samples)
+      } catch (e) {
+        this.worker.postMessage({
+          request_id,
+          status: -1,
+          reason: e,
+          message: "resampling failed"
+        });
+        return
+      }
+    }
+    var samples_copy = samples.slice();  // necessary because samples is a view into the emscripten heap, and trying to postMessage it causes the entire heap to be copied
     var buf = {
+      request_id,
       status: 0,
-      timestamp: 0,
-      samples: new Float32Array(this.pcm.subarray(0, ret * this.channels)),
+      samples: samples_copy,
       transferable: true
     };
     this.worker.postMessage(buf, [buf.samples.buffer])

@@ -47,6 +47,9 @@ class User:
         self.chats_to_send = []
         self.delay_to_send = None
         self.opus_state = None
+        # For debugging purposes only
+        self.last_seen_read_clock = None
+        self.last_seen_write_clock = None
 
 users = {} # userid -> User
 
@@ -97,13 +100,16 @@ def assign_delays(userid_lead):
         users[userid].delay_to_send = positions[i % len(positions)]
 
 def update_users(userid, username, server_clock, client_read_clock):
+    # Delete expired users BEFORE adding us to the list, so that our session
+    #   will correctly reset if we are the next customer after we've been gone
+    #   for awhile.
+    clean_users(server_clock)
+
     delay_samples = server_clock - client_read_clock
     if userid not in users:
         users[userid] = User(userid, username, server_clock, delay_samples)
     users[userid].last_heard_server_clock = server_clock
     users[userid].delay_samples = delay_samples
-
-    clean_users(server_clock)
 
 def clean_users(server_clock):
     to_delete = []
@@ -178,6 +184,10 @@ def handle_post(in_data_raw, query_params):
     else:
         raise ValueError("no client read clock")
 
+    n_samples = query_params.get("n_samples", None)
+    if n_samples is not None:
+        n_samples = int(n_samples[0])
+
     userid = None
     userids = query_params.get("userid", None)
 
@@ -190,6 +200,10 @@ def handle_post(in_data_raw, query_params):
     username, = usernames
     if not userid or not username:
         raise ValueError("missing username/id")
+
+    # This indicates a new session, so flush everything. (There's probably a better way to handle this.)
+    if (client_write_clock is None) and (userid in users):
+        del users[userid]
 
     update_users(userid, username, server_clock, client_read_clock)
     user = users[userid]
@@ -228,47 +242,69 @@ def handle_post(in_data_raw, query_params):
         )
     (enc, dec) = user.opus_state
 
-    packets = unpack_multi(in_data)
-    decoded = []
-    for p in packets:
-        d = dec.decode_float(p.tobytes(), OPUS_FRAME_SAMPLES, decode_fec=False)
-        decoded.append(np.frombuffer(d, np.float32))
-    # decoded_len = sum([len(x) for x in decoded])
-    # in_data = np.array([decoded_len], np.float32)
-    in_data = np.concatenate(decoded)
-    """
-    idx = 0
-    for d in decoded:
-        in_data[idx:idx+len(d)] = d[:]
-        idx += len(d)
-    """
+    # If the user does not send us any data, we will treat it as silence of length n_samples. This is useful if they are just starting up.
+    if len(in_data) == 0:
+        if n_samples is None:
+            raise ValueError("Must provide either n_samples or data")
+        in_data = np.zeros(n_samples, np.float32)
+    else:
+        packets = unpack_multi(in_data)
+        decoded = []
+        for p in packets:
+            d = dec.decode_float(p.tobytes(), OPUS_FRAME_SAMPLES, decode_fec=False)
+            decoded.append(np.frombuffer(d, np.float32))
+        in_data = np.concatenate(decoded)
 
-    kill_client = False
-    # Note: If we get a write that is "too far" in the past, we need to throw it away.
+    # Sending n_samples is optional if data is sent, but in case of both they must match
+    if n_samples is None:
+        n_samples = len(in_data)
+    if n_samples != len(in_data):
+        raise ValueError("Client is confused about how many samples it sent")
+
     if client_write_clock is None:
         pass
-    elif client_write_clock - len(in_data) < server_clock - len(queue):
+    elif client_write_clock - n_samples < server_clock - len(queue):
         # Client is too far behind and going to wrap the buffer. :-(
-        kill_client = True
+        raise ValueError("Client's write clock is too far in the past")
     else:
-        wrap_assign(client_write_clock - len(in_data),
-                    wrap_get(client_write_clock - len(in_data), len(in_data)) +
+        # For debugging purposes only
+        if user.last_seen_write_clock is not None:
+            if client_write_clock - n_samples != user.last_seen_write_clock:
+                raise ValueError(
+                    f'Client write clock desync ('
+                    f'{client_write_clock - n_samples} - '
+                    f'{user.last_seen_write_clock} = '
+                    f'{client_write_clock - n_samples - user.last_seen_write_clock})')
+        user.last_seen_write_clock = client_write_clock
+
+        wrap_assign(client_write_clock - n_samples,
+                    wrap_get(client_write_clock - n_samples, n_samples) +
                     in_data)
 
-    # Why subtract len(in_data) above and below? Because the future is to the
+    # Why subtract n_samples above and below? Because the future is to the
     #   right. So when a client asks for n samples at time t, what they
     #   actually want is "the time interval ending at t", i.e. [t-n, t). Since
     #   the latest possible time they can ask for is "now", this means that
     #   the latest possible time interval they can get is "the recent past"
     #   instead of "the near future".
-    # This doesn't matter to the clients if they all use the same value of
-    #   len(in_data), but it matters if len(in_data) changes, and it matters for
+    # This doesn't matter to the clients if they all always use the same value of
+    #   n_samples, but it matters if n_samples changes, and it matters for
     #   the server's zeroing.
+
+    # For debugging purposes only
+    if user.last_seen_read_clock is not None:
+        if client_read_clock - n_samples != user.last_seen_read_clock:
+            raise ValueError(
+                f'Client read clock desync ('
+                f'{client_read_clock - n_samples} - '
+                f'{user.last_seen_read_clock} = '
+                f'{client_read_clock - n_samples - user.last_seen_read_clock})')
+    user.last_seen_read_clock = client_read_clock
 
     if query_params.get("loopback", [None])[0] == "true":
         data = in_data
     else:
-        data = wrap_get(client_read_clock - len(in_data), len(in_data))
+        data = wrap_get(client_read_clock - n_samples, n_samples)
 
     packets = data.reshape([-1, OPUS_FRAME_SAMPLES])
     encoded = []
@@ -279,6 +315,7 @@ def handle_post(in_data_raw, query_params):
 
     x_audio_metadata = json.dumps({
         "server_clock": server_clock,
+        "server_sample_rate": SAMPLE_RATE,
         "last_request_clock": saved_last_request_clock,
         "client_read_clock": client_read_clock,
         "client_write_clock": client_write_clock,
@@ -287,7 +324,6 @@ def handle_post(in_data_raw, query_params):
         "delay_samples": user.delay_to_send,
         # Both the following uses units of 128-sample frames
         "queue_size": len(queue) / FRAME_SIZE,
-        "kill_client": kill_client,
     })
 
     user.chats_to_send.clear()
@@ -309,7 +345,8 @@ class OurHandler(BaseHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
         self.send_header("Access-Control-Expose-Headers", "X-Audio-Metadata")
         self.send_header("X-Audio-Metadata", json.dumps({
-            "server_clock": server_clock
+            "server_clock": server_clock,
+            "server_sample_rate": SAMPLE_RATE,
         }))
         self.send_header("Content-Length", 0)
         self.send_header("Content-Type", "application/octet-stream")
@@ -325,9 +362,19 @@ class OurHandler(BaseHTTPRequestHandler):
             query_params = urllib.parse.parse_qs(parsed_url.query, strict_parsing=True)
 
         try:
+            (userid,) = query_params.get("userid", None)
             data, x_audio_metadata = handle_post(in_data_raw, query_params)
-        except ValueError as e:
+        except Exception as e:
+            # Clear out stale session
+            if userid and (userid in users):
+                del users[userid]
+
+            x_audio_metadata = json.dumps({
+                "kill_client": True,
+                "message": str(e)
+            })
             self.send_response(500)
+            self.send_header("X-Audio-Metadata", x_audio_metadata)
             self.end_headers()
             raise  # re-raise exception so we can see it on the console
 

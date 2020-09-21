@@ -1,40 +1,260 @@
 import * as lib from './lib.js';
 import {LOG_VERYSPAM, LOG_SPAM, LOG_DEBUG, LOG_INFO, LOG_WARNING, LOG_ERROR} from './lib.js';
 import {LOG_LEVELS} from './lib.js';
+import {check} from './lib.js';
+import {AudioChunk, PlaceholderChunk, CompressedAudioChunk, ServerClockReference, ClockInterval} from './audiochunk.js'
 
-export async function query_server_clock(loopback_mode, target_url, sample_rate) {
-  if (loopback_mode == "main") {
-    // I got yer server right here!
-    return Math.round(Date.now() * sample_rate / 1000.0);
-  } else {
-    var request_time_ms = Date.now();
-    var fetch_result = await fetch(target_url, {
-      method: "get",  // default
-      cache: "no-store",
-    });
-    // We need one-way latency; dividing by 2 is unprincipled but probably close enough.
-    // XXX: This is not actually correct. We should really be using the roundtrip latency here. Because we want to know not "what is the server clock now", but "what will the server clock be by the time my request reaches the server."
-    // Proposed alternative:
-    /*
-      var request_time_samples = Math.round(request_time_ms * sample_rate / 1000.0);
-      var metadata = JSON.parse(fetch_result.headers.get("X-Audio-Metadata"));
-      // Add this to "our time now" to yield "server time when it gets our request."
-      server_sample_offset = metadata["server_clock"] - request_time_samples;
-      // Note: In the presence of network jitter, our message can get to the server either before or after the target server moment. This means that if our target server moment is "now", our actual requested moment could end up in the future. Someone on one side or the other has to deal with this. But in general if we are requesting "now" it means we do not expect to get audio data at all, so it should be okay for us to never ask for audio data in the case (and it should be ok for the server to give us zeros for "future" data, since we should never have asked, but that's what _would_ be there.)
-    */
-    var server_latency_ms = (Date.now() - request_time_ms) / 2.0;  // Wrong, see above
-    var metadata = JSON.parse(fetch_result.headers.get("X-Audio-Metadata"));
-    var server_clock = Math.round(metadata["server_clock"] + server_latency_ms * sample_rate / 1000.0);
-    lib.log(LOG_INFO, "Server clock is estimated to be:", server_clock, " (", metadata["server_clock"], "+", server_latency_ms * sample_rate / 1000.0);
-    return server_clock;
+class ServerConnectionBase {
+  constructor() {}
+
+  // This is how much notional time we take up between getting audio and sending it back, server-to-server. ("Notional" becuase the flow of samples is not continuous, so for most purposes the size of the chunks we send to the server must be added to this.)
+  get client_window_time() {
+    return (this.read_clock - this.write_clock) / this.clock_reference.sample_rate;
   }
+
+  // This is how far behind our target place in the audio stream we are. This must be added to the value above, to find out how closely it's safe to follow behind where we are _aiming_ to be. This value should be small and relatively stable, or something has gone wrong.
+  get client_read_slippage() {
+    return (this.last_server_clock - this.read_clock - this.audio_offset) / this.clock_reference.sample_rate;
+  }
+}
+
+export class ServerConnection extends ServerConnectionBase {
+  constructor({ target_url, audio_offset_seconds, userid, epoch }) {
+    super();
+
+    check(
+      target_url !== undefined &&
+      audio_offset_seconds !== undefined &&
+      userid !== undefined,
+      "target_url, audio_offset_seconds, userid must be provided as named parameters");
+    check(target_url instanceof URL, "target_url must be a URL");
+    check(typeof audio_offset_seconds == "number", "audio_offset_seconds must be a number");
+    check(Number.isInteger(userid), "userid must be an integer")
+
+    this.target_url = target_url;
+    this.audio_offset_seconds = audio_offset_seconds;
+    this.read_clock = null;
+    this.write_clock = null;
+    this.send_metadata = {
+      userid
+    };
+    this.running = false;
+    this.app_epoch = epoch;
+    this.clock_epoch = 0;  // incremented when we modify the offset externally, so we can tell that in-flight responses are using an old clock, and this is not a bug
+  }
+
+  async start() {
+    check(this.running === false, "ServerConnection already started");
+    this.running = true;
+
+    var { server_clock, server_sample_rate } = await query_server_clock(this.target_url);
+
+    this.clock_reference = new ServerClockReference({ sample_rate: server_sample_rate });
+    this.audio_offset = this.audio_offset_seconds * server_sample_rate;
+    this.read_clock = server_clock - this.audio_offset;
+  }
+
+  stop() {
+    this.running = false;
+  }
+
+  /* XXX: this turned out to be a bad idea, stuff associated with it can probably be removed
+  set_audio_offset(new_offset_seconds) {
+    check(typeof new_offset_seconds == "number", "New audio offset must be a number");
+
+    // We can change this without resetting the connection, if we're careful.
+    this.audio_offset_seconds = new_offset_seconds;
+    if (this.server_sample_rate !== null) {
+      var new_offset = new_offset_seconds * this.server_sample_rate;
+      if (this.read_clock !== null) {
+        this.read_clock -= (new_offset - this.audio_offset);
+      }
+      if (this.write_clock !== null) {
+        this.write_clock -= (new_offset - this.audio_offset);
+      }
+      this.audio_offset = new_offset;
+    }
+    this.clock_epoch += 1;
+  }
+  */
+
+  set_metadata(send_metadata) {
+    // Merge dictionaries
+    Object.assign(this.send_metadata, send_metadata);
+  }
+
+  async send(chunk) {
+    if (!this.running) {
+      lib.log(LOG_WARNING, "Not sending to server because not running");
+      return {
+        metadata: {},
+        epoch: this.app_epoch,
+        chunk: null
+      };
+    }
+    chunk.check_clock_reference(this.clock_reference);
+    var chunk_data = null;
+
+    if (!(chunk instanceof PlaceholderChunk)) {
+      chunk_data = chunk.data;
+
+      if (this.write_clock === null) {
+        this.write_clock = chunk.start;
+      }
+      check(this.write_clock == chunk.start, "Trying to send non-contiguous chunk to server");
+      // Remember:
+      // * Our convention is clock at the END;
+      // * We implicitly request as many samples we send, so the more we're sending, the further ahead we need to read from.
+      // * For the VERY first request, this means we have to start the clock BEFORE we start accumulating audio to send.
+      this.write_clock += chunk.length;  // ... = chunk.end;
+    }
+
+    this.read_clock += chunk.length;
+    var epoch = this.clock_epoch;
+    var response = await samples_to_server(chunk_data, this.target_url, {
+      read_clock: this.read_clock,
+      write_clock: this.write_clock,
+      n_samples: chunk.length,
+      ... this.send_metadata
+    });
+    var metadata = response.metadata;
+    check(this.server_sample_rate == metadata.sample_rate, "wrong sample rate from server");
+    if (epoch == this.clock_epoch) {
+      check(this.read_clock == metadata.client_read_clock, "wrong read clock from server");
+      check(this.write_clock === null || this.write_clock == metadata.client_write_clock, "wrong write clock from server");
+    }
+    this.last_server_clock = metadata.server_clock;
+
+    // This is a bit of a hack; it would be better if we just passed around seconds in the first place.
+    if ("delay_samples" in metadata) {
+      var delay_samples = parseInt(metadata.delay_samples, 10);
+      if (Number.isInteger(delay_samples) && delay_samples > 0) {
+        metadata.delay_seconds = Math.round(delay_samples / this.clock_reference.sample_rate);
+        lib.log(LOG_DEBUG, "Got command from server to delay by (samples, seconds):", delay_samples, metadata.delay_seconds);
+      }
+      delete metadata.delay_samples;
+    }
+
+    var result_interval = new ClockInterval({
+      reference: this.clock_reference,
+      end: this.read_clock,
+      length: chunk.length  // assume we got what we asked for; since it's compressed we can't check, but when we decompress it we will check automatically
+    });
+    return {
+      epoch: this.app_epoch,
+      metadata,
+      chunk: new CompressedAudioChunk({
+        interval: result_interval,
+        data: new Uint8Array(response.data)
+      })
+    };
+  }
+}
+
+export class FakeServerConnection extends ServerConnectionBase {
+  constructor({ sample_rate, epoch }) {
+    super();
+
+    check(sample_rate !== undefined, "sample_rate must be provided as a named parameter");
+    check(Number.isInteger(sample_rate), "sample_rate must be an integer");
+
+    this.clock_reference = new ServerClockReference({ sample_rate });
+    this.read_clock = null;
+    this.write_clock = null;
+    this.running = false;
+    this.app_epoch = epoch;
+  }
+
+  async start() {
+    check(this.running === false, "FakeServerConnection already started");
+    this.running = true;
+    this.read_clock = Math.round(Date.now() / 1000 * this.clock_reference.sample_rate);
+  }
+
+  stop() {
+    this.running = false;
+  }
+
+  set_metadata() {}
+
+  async send(chunk) {
+    if (!this.running) {
+      lib.log(LOG_WARNING, "Not sending to fake server because not running");
+      return {
+        metadata: {},
+        epoch: this.app_epoch,
+        chunk: null
+      };
+    }
+    chunk.check_clock_reference(this.clock_reference);
+    var chunk_data = null;
+
+    if (!(chunk instanceof PlaceholderChunk)) {
+      chunk_data = chunk.data;
+
+      if (this.write_clock === null) {
+        this.write_clock = chunk.start;
+      }
+      check(this.write_clock == chunk.start, "Trying to send non-contiguous chunk to server");
+      // Remember:
+      // * Our convention is clock at the END;
+      // * We implicitly request as many samples we send, so the more we're sending, the further ahead we need to read from.
+      // * For the VERY first request, this means we have to start the clock BEFORE we start accumulating audio to send.
+      this.write_clock += chunk.length;  // ... = chunk.end;
+    }
+
+    this.read_clock += chunk.length;
+    var epoch = this.clock_epoch;
+
+    // Adjust the time of chunks we get from the "server" to be contiguous.
+    var result_interval = new ClockInterval({
+      reference: chunk.reference,
+      end: this.read_clock,
+      length: chunk.length
+    });
+    chunk.interval = result_interval;
+
+    return {
+      epoch: this.app_epoch,
+      metadata: {},
+      chunk
+    };
+  }
+}
+
+export async function query_server_clock(target_url) {
+  var request_time_ms = Date.now();
+  var fetch_result = await fetch(target_url, {
+    method: "get",  // default
+    cache: "no-store",
+  });
+  // We need one-way latency; dividing by 2 is unprincipled but probably close enough.
+  // XXX: This is not actually correct. We should really be using the roundtrip latency here. Because we want to know not "what is the server clock now", but "what will the server clock be by the time my request reaches the server."
+  // Proposed alternative:
+  /*
+    var request_time_samples = Math.round(request_time_ms * sample_rate / 1000.0);
+    var metadata = JSON.parse(fetch_result.headers.get("X-Audio-Metadata"));
+    // Add this to "our time now" to yield "server time when it gets our request."
+    server_sample_offset = metadata["server_clock"] - request_time_samples;
+    // Note: In the presence of network jitter, our message can get to the server either before or after the target server moment. This means that if our target server moment is "now", our actual requested moment could end up in the future. Someone on one side or the other has to deal with this. But in general if we are requesting "now" it means we do not expect to get audio data at all, so it should be okay for us to never ask for audio data in the case (and it should be ok for the server to give us zeros for "future" data, since we should never have asked, but that's what _would_ be there.)
+  */
+  var server_latency_ms = (Date.now() - request_time_ms) / 2.0;  // Wrong, see above
+  var metadata = JSON.parse(fetch_result.headers.get("X-Audio-Metadata"));
+  lib.log(LOG_DEBUG, "query_server_clock got metadata:", metadata);
+  var server_sample_rate = parseInt(metadata["server_sample_rate"], 10);
+  var server_clock = Math.round(metadata["server_clock"] + server_latency_ms * server_sample_rate / 1000.0);
+  lib.log(LOG_INFO, "Server clock is estimated to be:", server_clock, " (", metadata["server_clock"], "+", server_latency_ms * server_sample_rate / 1000.0);
+  return { server_clock, server_sample_rate };
 }
 
 var xhrs_inflight = 0;
 export async function samples_to_server(outdata, target_url, send_metadata) {
   // Not a tremendous improvement over having too many parameters, but a bit.
   var { read_clock, write_clock, username, userid, chatsToSend, requestedLeadPosition,
-    loopback_mode } = send_metadata;
+    loopback_mode, n_samples } = send_metadata;
+  if (outdata === null) {
+    outdata = new Uint8Array();
+  }
 
   return new Promise((resolve, reject) => {
     var xhr = new XMLHttpRequest();
@@ -49,12 +269,13 @@ export async function samples_to_server(outdata, target_url, send_metadata) {
       var params = new URLSearchParams();
 
       params.set('read_clock', read_clock);
+      params.set('n_samples', n_samples);
       if (write_clock !== null) {
         params.set('write_clock', write_clock);
       }
       if (loopback_mode == "server") {
         params.set('loopback', true);
-        lib.log(LOG_DEBUG, "looping back samples at server");
+        lib.log(LOG_SPAM, "looping back samples at server");
       }
       params.set('username', username);
       params.set('userid', userid);
@@ -72,8 +293,7 @@ export async function samples_to_server(outdata, target_url, send_metadata) {
       // Arbitrary cap; browser cap is 8(?) after which they queue
       if (xhrs_inflight >= 4) {
         lib.log(LOG_WARNING, "NOT SENDING XHR w/ ID:", xhr.debug_id, " due to limit -- already in flight:", xhrs_inflight);
-        // XXX XXX try_increase_batch_size_and_reload();
-        return reject();
+        return reject(Error("Too many XHRs in flight."));
       }
 
       lib.log(LOG_SPAM, "Sending XHR w/ ID:", xhr.debug_id, "already in flight:", xhrs_inflight++, "; data size:", outdata.length);
@@ -84,8 +304,7 @@ export async function samples_to_server(outdata, target_url, send_metadata) {
       lib.log(LOG_SPAM, "... XHR sent.");
     } catch(e) {
       lib.log(LOG_ERROR, "Failed to make XHR:", e);
-      //stop();
-      return reject();
+      return reject(new Error("Failed to make XHR."));
     }
   });
 }
@@ -105,8 +324,7 @@ function handle_xhr_result(xhr, resolve, reject) {
     lib.log(LOG_SPAM, "Got XHR response w/ ID:", xhr.debug_id, "result:", xhr.response, " -- still in flight:", --xhrs_inflight);
     if (metadata["kill_client"]) {
       lib.log(LOG_ERROR, "Received kill from server");
-      //XXX reload_settings();
-      return reject();
+      return reject(new Error("Received kill from server"));
     }
 
     return resolve({
@@ -115,8 +333,6 @@ function handle_xhr_result(xhr, resolve, reject) {
     });
   } else {
     lib.log(LOG_ERROR, "XHR failed w/ ID:", xhr.debug_id, "stopping:", xhr, " -- still in flight:", --xhrs_inflight);
-
-    //try_increase_batch_size_and_reload();
-    return reject();
+    return reject(new Error("XHR failed"));
   }
 }
