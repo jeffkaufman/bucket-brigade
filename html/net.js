@@ -40,7 +40,6 @@ export class ServerConnection extends ServerConnectionBase {
     };
     this.running = false;
     this.app_epoch = epoch;
-    this.clock_epoch = 0;  // incremented when we modify the offset externally, so we can tell that in-flight responses are using an old clock, and this is not a bug
   }
 
   async start() {
@@ -48,6 +47,7 @@ export class ServerConnection extends ServerConnectionBase {
     this.running = true;
 
     var { server_clock, server_sample_rate } = await query_server_clock(this.target_url);
+    check(this.running, "ServerConnection stopped while waiting for server clock");
 
     this.clock_reference = new ServerClockReference({ sample_rate: server_sample_rate });
     this.audio_offset = this.audio_offset_seconds * server_sample_rate;
@@ -57,26 +57,6 @@ export class ServerConnection extends ServerConnectionBase {
   stop() {
     this.running = false;
   }
-
-  /* XXX: this turned out to be a bad idea, stuff associated with it can probably be removed
-  set_audio_offset(new_offset_seconds) {
-    check(typeof new_offset_seconds == "number", "New audio offset must be a number");
-
-    // We can change this without resetting the connection, if we're careful.
-    this.audio_offset_seconds = new_offset_seconds;
-    if (this.server_sample_rate !== null) {
-      var new_offset = new_offset_seconds * this.server_sample_rate;
-      if (this.read_clock !== null) {
-        this.read_clock -= (new_offset - this.audio_offset);
-      }
-      if (this.write_clock !== null) {
-        this.write_clock -= (new_offset - this.audio_offset);
-      }
-      this.audio_offset = new_offset;
-    }
-    this.clock_epoch += 1;
-  }
-  */
 
   set_metadata(send_metadata) {
     // Merge dictionaries
@@ -108,21 +88,24 @@ export class ServerConnection extends ServerConnectionBase {
       // * For the VERY first request, this means we have to start the clock BEFORE we start accumulating audio to send.
       this.write_clock += chunk.length;  // ... = chunk.end;
     }
-
     this.read_clock += chunk.length;
-    var epoch = this.clock_epoch;
+
+    // These could change while we're alseep
+    var saved_read_clock = this.read_clock;
+    var saved_write_clock = this.write_clock;
+
     var response = await samples_to_server(chunk_data, this.target_url, {
       read_clock: this.read_clock,
       write_clock: this.write_clock,
       n_samples: chunk.length,
       ... this.send_metadata
     });
+    check(this.running, "ServerConnection stopped while waiting for response from server");
+
     var metadata = response.metadata;
     check(this.server_sample_rate == metadata.sample_rate, "wrong sample rate from server");
-    if (epoch == this.clock_epoch) {
-      check(this.read_clock == metadata.client_read_clock, "wrong read clock from server");
-      check(this.write_clock === null || this.write_clock == metadata.client_write_clock, "wrong write clock from server");
-    }
+    check(saved_read_clock == metadata.client_read_clock, "wrong read clock from server");
+    check(saved_write_clock === null || saved_write_clock == metadata.client_write_clock, "wrong write clock from server");
     this.last_server_clock = metadata.server_clock;
 
     // This is a bit of a hack; it would be better if we just passed around seconds in the first place.
@@ -137,7 +120,7 @@ export class ServerConnection extends ServerConnectionBase {
 
     var result_interval = new ClockInterval({
       reference: this.clock_reference,
-      end: this.read_clock,
+      end: saved_read_clock,
       length: chunk.length  // assume we got what we asked for; since it's compressed we can't check, but when we decompress it we will check automatically
     });
     return {
@@ -202,9 +185,7 @@ export class FakeServerConnection extends ServerConnectionBase {
       // * For the VERY first request, this means we have to start the clock BEFORE we start accumulating audio to send.
       this.write_clock += chunk.length;  // ... = chunk.end;
     }
-
     this.read_clock += chunk.length;
-    var epoch = this.clock_epoch;
 
     // Adjust the time of chunks we get from the "server" to be contiguous.
     var result_interval = new ClockInterval({
