@@ -664,7 +664,7 @@ async function start() {
   //   without resampling, Chrome still has a habit of dropping frames under
   //   load, but it happens a heck of a lot less often.)
   var AudioContext = window.AudioContext || window.webkitAudioContext;
-  audioCtx = new AudioContext({});
+  audioCtx = new AudioContext({latencyHint: 'playback'});
   sample_rate_text.value = audioCtx.sampleRate;
   lib.log(LOG_DEBUG, "Audio Context:", audioCtx);
 
