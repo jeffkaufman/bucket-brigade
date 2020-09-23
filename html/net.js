@@ -48,17 +48,12 @@ export class ServerConnection extends ServerConnectionBase {
       return;
     }
 
-    this.running = true;
-
     var { server_clock, server_sample_rate } = await query_server_clock(this.target_url);
-    if (!this.running) {
-      lib.log(LOG_WARNING, "ServerConnection stopped while waiting for server clock");
-      return;
-    }
 
     this.clock_reference = new ServerClockReference({ sample_rate: server_sample_rate });
     this.audio_offset = this.audio_offset_seconds * server_sample_rate;
     this.read_clock = server_clock - this.audio_offset;
+    this.running = true;
   }
 
   stop() {
