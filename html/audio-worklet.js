@@ -413,7 +413,7 @@ class Player extends AudioWorkletProcessor {
   }
 
   process_normal(input, output) {
-    lib.log(LOG_VERYSPAM, "process_normal:", input);
+    //lib.log(LOG_VERYSPAM, "process_normal:", input);
     if (this.synthetic_source == "CLICKS") {
       this.synthesize_clicks(input, this.click_interval);
     }
@@ -538,8 +538,9 @@ class Player extends AudioWorkletProcessor {
         type: "exception",
         exception: ex
       });
-      throw ex;
+      // Don't rethrow here, which seems to kill the worklet.
     }
+    // Handle stereo output by cloning mono output.
     for (var chan = 1; chan < outputs[0].length; chan++) {
       outputs[0][chan].set(outputs[0][0]);
     }

@@ -3,7 +3,7 @@ import {LOG_VERYSPAM, LOG_SPAM, LOG_DEBUG, LOG_INFO, LOG_WARNING, LOG_ERROR} fro
 import {LOG_LEVELS} from './lib.js';
 import {check} from './lib.js';
 
-import {ServerConnection, FakeServerConnection, query_server_clock, samples_to_server} from './net.js';
+import {ServerConnection, FakeServerConnection} from './net.js';
 import {AudioChunk, CompressedAudioChunk, PlaceholderChunk, concat_chunks, ClockInterval, ClientClockReference, ServerClockReference} from './audiochunk.js';
 
 // Work around some issues related to caching and error reporting
@@ -230,18 +230,35 @@ var peak_in_text = document.getElementById('peakIn');
 var peak_out_text = document.getElementById('peakOut');
 var client_total_time = document.getElementById('clientTotalTime');
 var client_read_slippage = document.getElementById('clientReadSlippage');
-var running = false;
-var estimate_latency_mode = false;
 
 function set_controls() {
-  start_button.textContent = running ? "Stop" : "Start";
+  // Defaults, will be overridden below depending on state
+  mute_button.disabled = true;
+  loopback_mode_select.disabled = true;
+  click_bpm.disabled = true;
 
-  mute_button.disabled = !running;
-  loopback_mode_select.disabled = running;
-  click_bpm.disabled = running;
+  in_select.disabled = true;
+  out_select.disabled = true;
 
-  in_select.disabled = false;
-  out_select.disabled = false;
+  start_button.disabled = true;
+  start_button.textContent = ". . .";
+
+
+  if (app_state != APP_INITIALIZING) {
+    in_select.disabled = false;
+    out_select.disabled = false;
+  }
+
+  if (app_state == APP_RUNNING || app_state == APP_CALIBRATING) {
+    start_button.textContent = "Stop";
+    start_button.disabled = false;
+    mute_button.disabled = false;
+  } else if (app_state == APP_STOPPED) {
+    start_button.textContent = "Start";
+    start_button.disabled = false;
+    loopback_mode_select.disabled = false;
+    click_bpm.disabled = false;
+  }
 }
 
 async function configure_input_node(audioCtx) {
@@ -307,6 +324,31 @@ var encoder;
 var decoder;
 var encoding_latency_ms;
 
+const APP_INITIALIZING = "initializing";
+const APP_STOPPED = "stopped";
+const APP_STARTING = "starting";
+const APP_RUNNING = "running";
+const APP_CALIBRATING = "calibrating";
+const APP_STOPPING = "stopping";
+const APP_RESTARTING = "restarting";
+const APP_CRASHED = "crashed";
+
+var app_state = APP_INITIALIZING;
+
+function switch_app_state(oldstate, newstate) {
+  lib.log(LOG_INFO, "Changing app state from", oldstate, "to", newstate, ".");
+
+  if (app_state != oldstate) {
+    lib.log(LOG_WARNING, "Changed app state from", oldstate, "to", newstate, ", but current state is actually", app_state, ".");
+    app_state = newstate;
+    return false;
+  }
+
+  app_state = newstate;
+  set_controls();
+  return true;
+}
+
 // Used to coordinate changes to various parameters while messages may still be in flight.
 var epoch = 0;
 
@@ -332,7 +374,6 @@ var sample_batch_size;
 var max_sample_batch_size;
 
 function set_estimate_latency_mode(mode) {
-  estimate_latency_mode = mode;
   playerNode.port.postMessage({
     "type": "latency_estimation_mode",
     "enabled": mode
@@ -357,24 +398,27 @@ function toggle_mute() {
 }
 
 async function reset_if_running() {
-  if (running) {
+  if (app_state == APP_RUNNING) {
     await stop();
     await start();
   }
 }
 
 async function audio_offset_change() {
-  if (running) {
+  if (app_state == APP_RUNNING) {
     await reload_settings();
     await server_connection.start();
   }
 }
 
 async function start_stop() {
-  if (running) {
+  if (app_state == APP_RUNNING) {
     await stop();
-  } else {
+  } else if (app_state == APP_STOPPED) {
     await start();
+  } else {
+    lib.log(LOG_WARNING, "Pressed start/stop button while not stopped or running; stopping by default.");
+    await stop();
   }
 }
 
@@ -393,7 +437,7 @@ class AudioEncoder {
     var response_id = ev.data.request_id;
     check(queue_entry[0] == response_id, "Responses out of order", queue_entry, ev.data);
     if (ev.data.status != 0) {
-      throw { err: "AudioEncoder RPC failed", msg, data: ev.data };
+      throw { err: "AudioEncoder RPC failed", data: ev.data };
     }
     queue_entry[1](ev.data);
   }
@@ -529,7 +573,7 @@ class AudioDecoder {
     var response_id = ev.data.request_id;
     check(queue_entry[0] == response_id, "Responses out of order", queue_entry, ev.data);
     if (ev.data.status != 0) {
-      throw { err: "AudioEncoder RPC failed", msg, data: ev.data };
+      throw { err: "AudioDecoder RPC failed", data: ev.data };
     }
     queue_entry[1](ev.data);
   }
@@ -639,20 +683,14 @@ class AudioDecoder {
   }
 }
 
-var running_internal;
 async function start() {
-  if (running_internal) {
-    lib.log(LOG_ERROR, "CANNOT START WHILE ALREADY RUNNING");
-    return;
-  }
+  if (!switch_app_state(APP_STOPPED, APP_STARTING)) { return; }
+
   if (audioCtx) {
     lib.log(LOG_ERROR, "NOT RUNNING, BUT ALREADY HAVE AUDIOCTX?");
     return;
   }
 
-  running_internal = true;
-  running = true;
-  set_controls();
   clear_error();
 
   // Do NOT set the sample rate to a fixed value. We MUST let the audioContext use
@@ -741,12 +779,15 @@ async function start() {
   micNode.connect(playerNode);
   playerNode.connect(spkrNode);
 
+  // XXX: This is not great, becase it will start the AudioWorklet, which will immediately proceed to start sending us audio, which we aren't ready for yet because we're about to go into calibration mode. However if we get enough to try to send to the server at this point, the ServerConnection will discard it anyway, since it hasn't been started yet.
+  if (!switch_app_state(APP_STARTING, APP_RUNNING)) { return; }
   await reload_settings();
 
   window.calibration.style.display = "block";
 
   if (!disable_latency_measurement_checkbox.checked) {
     set_estimate_latency_mode(true);
+    switch_app_state(APP_RUNNING, APP_CALIBRATING);
   } else {
     window.est40to60.innerText = "0ms";
     window.estLatency.innerText = "0ms";
@@ -766,7 +807,13 @@ async function start() {
 }
 
 // Should really be named "restart everything", which is what it does.
-async function reload_settings() {
+async function reload_settings(startup) {
+  if (app_state != APP_RUNNING && app_state != APP_CALIBRATING) {
+    lib.log(LOG_WARNING, "Tried to reload_settings while neither running nor calibrating, skipping.")
+    return;
+  }
+  switch_app_state(app_state, APP_RESTARTING);
+
   lib.log(LOG_INFO, "Resetting the world! Old epoch was:", epoch);
   epoch +=1;
   lib.log(LOG_INFO, "New epoch is:", epoch);
@@ -802,7 +849,7 @@ async function reload_settings() {
     })
   }
 
-  lib.log(LOG_INFO, "Created new server connection and started it, resetting encoder and decoder.");
+  lib.log(LOG_INFO, "Created new server connection, resetting encoder and decoder.");
 
   await encoder.reset();
   await decoder.reset();
@@ -820,6 +867,7 @@ async function reload_settings() {
   }
   // This will reset the audio worklett, flush its buffer, and start it up again.
   playerNode.port.postMessage(audio_params);
+  switch_app_state(APP_RESTARTING, APP_RUNNING);
 }
 
 function send_local_latency() {
@@ -847,7 +895,7 @@ function samples_to_worklet(chunk) {
   };
 
   lib.log(LOG_SPAM, "Posting to worklet:", message);
-  playerNode.port.postMessage(message);
+  playerNode.port.postMessage(message);  // XXX huh, we aren't using transfer, and plausibly should be
 }
 
 // Pack multiple subpackets into an encoded blob to send the server
@@ -938,11 +986,8 @@ function rebless(o) {
 async function handle_message(event) {
   var msg = event.data;
   lib.log(LOG_VERYSPAM, "onmessage in main thread received ", msg);
-
-  // XXX lib.log(LOG_DEBUG, "audioCtx reported latency:", audioCtx.currentTime - audioCtx.getOutputTimestamp().contextTime, audioCtx.currentTime, audioCtx.getOutputTimestamp().contextTime);
-
-  if (!running) {
-    lib.log(LOG_WARNING, "Got message when done running");
+  if (app_state != APP_RUNNING && app_state != APP_CALIBRATING) {
+    lib.log(LOG_WARNING, "Ending message handler early because not running or calibrating");
     return;
   }
   if (msg.epoch !== undefined && msg.epoch != epoch) {
@@ -952,8 +997,10 @@ async function handle_message(event) {
 
   if (msg.type == "exception") {
     lib.log(LOG_ERROR, "Exception thrown in audioworklet:", msg.exception);
-    await reload_settings();
-    await server_connection.start();
+    if (app_state == APP_RUNNING) {
+      await reload_settings();
+      await server_connection.start();
+    }
     return;
   } else if (msg.type == "no_mic_input") {
     window.noAudioInputInstructions.style.display = "block";
@@ -981,6 +1028,7 @@ async function handle_message(event) {
         window.calibration.style.display = "none";
         window.runningInstructions.style.display = "block";
         set_estimate_latency_mode(false);
+        if (!switch_app_state(APP_CALIBRATING, APP_RUNNING)) { return; }
         await server_connection.start();
       }
     }
@@ -1025,6 +1073,10 @@ async function handle_message(event) {
     mic_buf = [];
 
     var encoded_chunk = await encoder.encode_chunk(chunk);
+    if (app_state != APP_RUNNING) {
+      lib.log(LOG_WARNING, "Ending message handler early because not running");
+      return;
+    }
     if (our_epoch != epoch) {
       lib.log(LOG_WARNING, "Ending message handler early due to stale epoch");
       return;
@@ -1060,11 +1112,19 @@ async function handle_message(event) {
       lib.log(LOG_WARNING, "Ignoring message from server with old epoch");
       return;
     }
+    if (app_state != APP_RUNNING) {
+      lib.log(LOG_WARNING, "Ending message handler early because not running");
+      return;
+    }
 
     lib.log(LOG_SPAM, "Got chunk from server:", response_chunk.interval, response_chunk, metadata);
     var play_chunk = await decoder.decode_chunk(response_chunk);
     if (our_epoch != epoch) {
       lib.log(LOG_WARNING, "Ending message handler early due to stale epoch");
+      return;
+    }
+    if (app_state != APP_RUNNING) {
+      lib.log(LOG_WARNING, "Ending message handler early because not running");
       return;
     }
 
@@ -1075,6 +1135,7 @@ async function handle_message(event) {
     var user_summary = metadata["user_summary"] || [];
     var chats = metadata["chats"] || [];
     var delay_seconds = metadata["delay_seconds"];
+    var server_sample_rate = metadata["server_sample_rate"];
 
     // Defer touching the DOM, just to be safe.
     requestAnimationFrame(() => {
@@ -1087,7 +1148,8 @@ async function handle_message(event) {
         }
       }
 
-      update_active_users(user_summary);
+      // XXX: DOM stuff below this line.
+      update_active_users(user_summary, server_sample_rate);
       chats.forEach((msg) => receiveChatMessage(msg[0], msg[1]));
 
       // This is how closely it's safe to follow behind us, if you get as unlucky as possible (and try to read _just_ before we write).
@@ -1103,15 +1165,15 @@ if (isNaN(peak_out)) {
   peak_out = 0.0;
 }
 
-function update_active_users(user_summary) {
+// XXX: this is a performance problem maybe? Big DOM manipulation multiple times per second.
+function update_active_users(user_summary, server_sample_rate) {
   // Delete previous users.
   while (window.activeUsers.firstChild) {
     window.activeUsers.removeChild(window.activeUsers.lastChild);
   }
 
   for (var i = 0; i < user_summary.length; i++) {
-    // XXX: this is wrong (using wrong sample rate)
-    const offset_s = Math.round(user_summary[i][0] / audioCtx.sampleRate);
+    const offset_s = Math.round(user_summary[i][0] / server_sample_rate);
     const name = user_summary[i][1];
     const tr = document.createElement('tr');
 
@@ -1127,7 +1189,6 @@ function update_active_users(user_summary) {
   }
 }
 
-// XXX: what happened to this? We never call this.
 async function try_increase_batch_size_and_reload() {
   if (sample_batch_size < max_sample_batch_size) {
     // Try increasing the batch size and restarting.
@@ -1144,8 +1205,10 @@ async function try_increase_batch_size_and_reload() {
 }
 
 async function stop() {
-  running = false;
-  set_controls();
+  if (app_state != APP_RUNNING && app_state != APP_CALIBRATING) {
+    lib.log(LOG_WARNING, "Trying to stop, but current state is not running or calibrating? Stopping anyway.");
+  }
+  switch_app_state(app_state, APP_STOPPING);
 
   window.initialInstructions.style.display = "block";
   window.calibration.style.display = "none";
@@ -1170,7 +1233,7 @@ async function stop() {
     micStream = undefined;
   }
   lib.log(LOG_INFO, "...closed.");
-  running_internal = false;
+  switch_app_state(APP_STOPPING, APP_STOPPED);
 }
 
 start_button.addEventListener("click", start_stop);
@@ -1207,7 +1270,6 @@ for (var i = 0; i < coll.length; i++) {
 async function initialize() {
   await wait_for_mic_permissions();
   await enumerate_devices();
-  set_controls();
 
   if (document.location.hostname == "localhost" ||
       document.location.hostname == "www.jefftk.com") {
@@ -1223,6 +1285,8 @@ async function initialize() {
       audio_offset_change();
     }
   }
+
+  switch_app_state(APP_INITIALIZING, APP_STOPPED);
 }
 
 initialize();

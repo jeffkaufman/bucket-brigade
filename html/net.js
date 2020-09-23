@@ -43,11 +43,18 @@ export class ServerConnection extends ServerConnectionBase {
   }
 
   async start() {
-    check(this.running === false, "ServerConnection already started");
+    if (this.running) {
+      lib.log(LOG_WARNING, "ServerConnection already started, ignoring");
+      return;
+    }
+
     this.running = true;
 
     var { server_clock, server_sample_rate } = await query_server_clock(this.target_url);
-    check(this.running, "ServerConnection stopped while waiting for server clock");
+    if (!this.running) {
+      lib.log(LOG_WARNING, "ServerConnection stopped while waiting for server clock");
+      return;
+    }
 
     this.clock_reference = new ServerClockReference({ sample_rate: server_sample_rate });
     this.audio_offset = this.audio_offset_seconds * server_sample_rate;
@@ -100,7 +107,14 @@ export class ServerConnection extends ServerConnectionBase {
       n_samples: chunk.length,
       ... this.send_metadata
     });
-    check(this.running, "ServerConnection stopped while waiting for response from server");
+    if (!this.running) {
+      lib.log(LOG_WARNING, "ServerConnection stopped while waiting for response from server");
+      return {
+        metadata: {},
+        epoch: this.app_epoch,
+        chunk: null
+      };
+    }
 
     var metadata = response.metadata;
     check(this.server_sample_rate == metadata.sample_rate, "wrong sample rate from server");
@@ -149,7 +163,11 @@ export class FakeServerConnection extends ServerConnectionBase {
   }
 
   async start() {
-    check(this.running === false, "FakeServerConnection already started");
+    if (this.running) {
+      lib.log(LOG_WARNING, "FakeServerConnection already started");
+      return;
+    }
+
     this.running = true;
     this.read_clock = Math.round(Date.now() / 1000 * this.clock_reference.sample_rate);
   }
