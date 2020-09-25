@@ -48,6 +48,7 @@ class User:
         self.chats_to_send = []
         self.delay_to_send = None
         self.opus_state = None
+        self.mic_volume = 1.0
         # For debugging purposes only
         self.last_seen_read_clock = None
         self.last_seen_write_clock = None
@@ -124,7 +125,7 @@ def clean_users(server_clock):
 def user_summary():
     summary = []
     for user in users.values():
-        summary.append((user.delay_samples, user.name))
+        summary.append((user.delay_samples, user.name, user.mic_volume))
     summary.sort()
     return summary
 
@@ -224,6 +225,13 @@ def handle_post(in_data_raw, query_params):
                 for msg_chat in msg_chats:
                     other_user.chats_to_send.append((username, msg_chat))
 
+    mic_volumes = query_params.get("mic_volume", None)
+    if mic_volumes:
+        mic_volume, = mic_volumes
+        for other_userid, new_mic_volume in json.loads(mic_volume):
+            if other_userid in users:
+                users[other_userid].mic_volume = new_mic_volume
+
     if query_params.get("request_lead", None):
         assign_delays(userid)
 
@@ -283,6 +291,8 @@ def handle_post(in_data_raw, query_params):
                     f'{user.last_seen_write_clock} = '
                     f'{client_write_clock - n_samples - user.last_seen_write_clock})')
         user.last_seen_write_clock = client_write_clock
+
+        in_data *= user.mic_volume
 
         wrap_assign(client_write_clock - n_samples,
                     wrap_get(client_write_clock - n_samples, n_samples) +
@@ -369,8 +379,9 @@ class OurHandler(BaseHTTPRequestHandler):
         if parsed_url.query:
             query_params = urllib.parse.parse_qs(parsed_url.query, strict_parsing=True)
 
+        userid = None
         try:
-            (userid,) = query_params.get("userid", None)
+            userid, = query_params.get("userid", None)
             data, x_audio_metadata = handle_post(in_data_raw, query_params)
         except Exception as e:
             # Clear out stale session
