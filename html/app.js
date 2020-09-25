@@ -1191,7 +1191,7 @@ function update_active_users(user_summary, server_sample_rate) {
     const mic_volume = user_summary[i][2];
     const userid = user_summary[i][3];
 
-    mic_volume_inputs.append([name, userid, mic_volume]);
+    mic_volume_inputs.push([name, userid, mic_volume]);
 
     const tr = document.createElement('tr');
 
