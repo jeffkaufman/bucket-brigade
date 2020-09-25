@@ -1094,12 +1094,14 @@ async function handle_message(event) {
       requestedLeadPosition,
       loopback_mode,
       globalVolumeToSend,
+      micVolumesToSend,
     };
     if (requestedLeadPosition) {
       requestedLeadPosition = false;
     }
     chatsToSend = [];
     globalVolumeToSend = null;
+    micVolumesToSend = [];
 
     server_connection.set_metadata(send_metadata);
     // XXX: interesting, it does not seem that these promises are guaranteed to resolve in order... and the worklet's buffer uses the first chunk's timestamp to decide where to start playing back, so if the first two chunks are swapped it has a big problem.
@@ -1172,6 +1174,9 @@ if (isNaN(peak_out)) {
   peak_out = 0.0;
 }
 
+
+let previous_mic_volume_inputs_str = [];
+
 // XXX: this is a performance problem maybe? Big DOM manipulation multiple times per second.
 function update_active_users(user_summary, server_sample_rate) {
   // Delete previous users.
@@ -1179,10 +1184,14 @@ function update_active_users(user_summary, server_sample_rate) {
     window.activeUsers.removeChild(window.activeUsers.lastChild);
   }
 
+  const mic_volume_inputs = [];
   for (var i = 0; i < user_summary.length; i++) {
     const offset_s = Math.round(user_summary[i][0] / server_sample_rate);
     const name = user_summary[i][1];
     const mic_volume = user_summary[i][2];
+    const userid = user_summary[i][3];
+
+    mic_volume_inputs.push([name, userid, mic_volume]);
 
     const tr = document.createElement('tr');
 
@@ -1194,20 +1203,43 @@ function update_active_users(user_summary, server_sample_rate) {
     td2.textContent = name;
     tr.appendChild(td2);
 
-    const td3 = document.createElement('td');
-    const input = document.createElement('input');
-    input.setAttribute('type', 'range');
-    input.setAttribute('min',  0);
-    input.setAttribute('max',  2);
-    input.setAttribute('disabled',  'true');
-    input.style.width = "20em";
-    input.value = mic_volume;
-    td3.appendChild(input);
-    tr.appendChild(td3);
-
     window.activeUsers.appendChild(tr);
   }
+
+  mic_volume_inputs.sort();
+  if (JSON.stringify(mic_volume_inputs) != previous_mic_volume_inputs_str) {
+    while (window.micVolumesUser.firstChild) {
+      window.micVolumesUser.removeChild(window.micVolumesUser.lastChild);
+    }
+    const initialOption = document.createElement('option');
+    initialOption.textContent = "Select User";
+    window.micVolumesUser.appendChild(initialOption);
+
+    for (var i = 0; i < mic_volume_inputs.length; i++) {
+      const option = document.createElement('option');
+      option.textContent = mic_volume_inputs[i][0];;
+      option.userid = mic_volume_inputs[i][1];
+      option.mic_volume = mic_volume_inputs[i][2];
+
+      window.micVolumesUser.appendChild(option);
+    }
+  }
+  previous_mic_volume_inputs_str = JSON.stringify(mic_volume_inputs);
 }
+
+window.micVolumesUser.addEventListener("change", (e) => {
+  const option = window.micVolumesUser.children[window.micVolumesUser.selectedIndex];
+  if (option.userid) {
+    window.micVolumeSetting.userid = option.userid;
+    window.micVolumeSetting.value = option.mic_volume;
+  }
+});
+
+let micVolumesToSend = [];
+window.micVolumeSetting.addEventListener("change", (e) => {
+  micVolumesToSend.push([window.micVolumeSetting.userid,
+                         parseFloat(window.micVolumeSetting.value)]);
+});
 
 async function try_increase_batch_size_and_reload() {
   if (sample_batch_size < max_sample_batch_size) {
