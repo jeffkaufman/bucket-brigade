@@ -216,7 +216,7 @@ def handle_post(in_data_raw, query_params):
     volumes = query_params.get("volume", None)
     if volumes:
         volume, = volumes
-        global_volume = float(volume)
+        global_volume = math.exp(6.908 * float(volume)) / 1000
 
     msg_chats = query_params.get("chat", None)
     if msg_chats:
