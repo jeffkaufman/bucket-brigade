@@ -1228,9 +1228,9 @@ function update_active_users(user_summary, server_sample_rate) {
 
     for (var i = 0; i < mic_volume_inputs.length; i++) {
       const option = document.createElement('option');
-      option.textContent = name;
-      option.userid = userid;
-      option.mic_volume = mic_volume;
+      option.textContent = mic_volume_inputs[i][0];;
+      option.userid = mic_volume_inputs[i][1];
+      option.mic_volume = mic_volume_inputs[i][2];
 
       window.micVolumesUser.appendChild(option);
     }
