@@ -111,6 +111,11 @@ function takeLeadPosition() {
 
 window.takeLead.addEventListener("click", takeLeadPosition);
 
+window.jumpToEnd.addEventListener("click", () => {
+  audio_offset_text.value = 115;
+  audio_offset_change();
+});
+
 function persist(textFieldId) {
   const textField = document.getElementById(textFieldId);
   const prevVal = localStorage.getItem(textFieldId);
