@@ -1203,17 +1203,6 @@ function update_active_users(user_summary, server_sample_rate) {
     td2.textContent = name;
     tr.appendChild(td2);
 
-    const td3 = document.createElement('td');
-    const input = document.createElement('input');
-    input.setAttribute('type', 'range');
-    input.setAttribute('min',  0);
-    input.setAttribute('max',  2);
-    input.setAttribute('disabled',  'true');
-    input.style.width = "20em";
-    input.value = mic_volume;
-    td3.appendChild(input);
-    tr.appendChild(td3);
-
     window.activeUsers.appendChild(tr);
   }
 
