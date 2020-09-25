@@ -239,8 +239,8 @@ def handle_post(in_data_raw, query_params):
 
                 users[other_userid].mic_volume = new_mic_volume
 
-                // https://www.dr-lex.be/info-stuff/volumecontrols.html
-                // Make 1 be unity
+                # https://www.dr-lex.be/info-stuff/volumecontrols.html
+                # Make 1 be unity
                 users[other_userid].scaled_mic_volume = math.exp(
                     6.908 * new_mic_volume * .5) / math.exp(6.908 * 0.5)
 
