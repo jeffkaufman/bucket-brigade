@@ -56,7 +56,16 @@ body {
 }
 #noAudioInputInstructions {
   display: none;
-
+}
+#notchrome {
+  width: 100%;
+  height: 100%;
+  background: black;
+  color: white;
+  font-size: 200%;
+  position: fixed;
+  top: 0;
+  left: 0;
 }
 </style>
 <h1>"Bucket Brigade" Audio Demo</h1>
@@ -68,6 +77,17 @@ one active instance. Please be kind! If you're a programmer, I would
 recommend opening up devtools so you can see if there are any
 interesting console messages.
 
+</div>
+
+<div id=notchrome>
+  It looks like you're not using Chrome.  Unfortunately, we haven't
+  yet put in the work to make this prototype work on other browsers. Sorry!
+
+  <p>
+
+    While we don't recommend trying to continue anyway, because it will probably fail silently and just be frustrating for you, if you want you may continue:
+
+    <button id=dismissNotChrome>dismiss</button>
 </div>
 
 Enter your name and press enter:
@@ -268,5 +288,14 @@ Audio offset (seconds):
 
 </div>
 
+<script>
+  window.dismissNotChrome.addEventListener(
+    "click", () => window.notchrome.style.display = "none");
+  if (navigator.userAgent.match(/Chrome/)) {
+    window.notchrome.style.display = "none";
+  }
+</script>
+
 <script type="module" src="./app.js"></script>
+
 </html>
