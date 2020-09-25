@@ -15,6 +15,7 @@ last_request_clock = None
 first_client_write_clock = None
 first_client_total_samples = None
 first_client_value = None
+global_volume = 1
 
 QUEUE_SECONDS = 120
 
@@ -163,6 +164,7 @@ def handle_post(in_data_raw, query_params):
     global first_client_write_clock
     global first_client_total_samples
     global first_client_value
+    global global_volume
 
     # NOTE NOTE NOTE:
     # * All `clock` variables are measured in samples.
@@ -207,6 +209,11 @@ def handle_post(in_data_raw, query_params):
 
     update_users(userid, username, server_clock, client_read_clock)
     user = users[userid]
+
+    volumes = query_params.get("volume", None)
+    if volumes:
+        volume, = volumes
+        global_volume = float(volume)
 
     msg_chats = query_params.get("chat", None)
     if msg_chats:
@@ -305,6 +312,7 @@ def handle_post(in_data_raw, query_params):
         data = in_data
     else:
         data = wrap_get(client_read_clock - n_samples, n_samples)
+        data *= global_volume
 
     packets = data.reshape([-1, OPUS_FRAME_SAMPLES])
     encoded = []
