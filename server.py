@@ -312,7 +312,7 @@ def handle_post(in_data_raw, query_params):
         data = in_data
     else:
         data = wrap_get(client_read_clock - n_samples, n_samples)
-        date *= global_volume
+        data *= global_volume
 
     packets = data.reshape([-1, OPUS_FRAME_SAMPLES])
     encoded = []
