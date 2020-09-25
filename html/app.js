@@ -1233,8 +1233,8 @@ window.micVolumesUser.addEventListener("change", (e) => {
 
 let micVolumesToSend = [];
 window.micVolumeSetting.addEventListener("change", (e) => {
-  micVolumesToSend.push([window.micVolumeSetting.value,
-                         window.micVolumeSetting.userid]);
+  micVolumesToSend.push([window.micVolumeSetting.userid,
+                         parseFloat(window.micVolumeSetting.value)]);
 });
 
 async function try_increase_batch_size_and_reload() {
