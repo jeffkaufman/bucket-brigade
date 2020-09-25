@@ -8,6 +8,7 @@ import time
 import numpy as np
 import random
 import opuslib
+import math
 
 FRAME_SIZE = 128
 
@@ -49,6 +50,7 @@ class User:
         self.delay_to_send = None
         self.opus_state = None
         self.mic_volume = 1.0
+        self.scaled_mic_volume = 1.0
         # For debugging purposes only
         self.last_seen_read_clock = None
         self.last_seen_write_clock = None
@@ -230,7 +232,17 @@ def handle_post(in_data_raw, query_params):
         mic_volume, = mic_volumes
         for other_userid, new_mic_volume in json.loads(mic_volume):
             if other_userid in users:
+                if new_mic_volume > 2:
+                    new_mic_volume = 2
+                elif new_mic_volume < 0:
+                    new_mic_volume = 0
+
                 users[other_userid].mic_volume = new_mic_volume
+
+                // https://www.dr-lex.be/info-stuff/volumecontrols.html
+                // Make 1 be unity
+                users[other_userid].scaled_mic_volume = math.exp(
+                    6.908 * new_mic_volume * .5) / math.exp(6.908 * 0.5)
 
     if query_params.get("request_lead", None):
         assign_delays(userid)
@@ -292,7 +304,7 @@ def handle_post(in_data_raw, query_params):
                     f'{client_write_clock - n_samples - user.last_seen_write_clock})')
         user.last_seen_write_clock = client_write_clock
 
-        in_data *= user.mic_volume
+        in_data *= user.scaled_mic_volume
 
         wrap_assign(client_write_clock - n_samples,
                     wrap_get(client_write_clock - n_samples, n_samples) +
