@@ -1094,6 +1094,7 @@ async function handle_message(event) {
       requestedLeadPosition,
       loopback_mode,
       globalVolumeToSend,
+      micVolumesToSend,
     };
     if (requestedLeadPosition) {
       requestedLeadPosition = false;
@@ -1172,6 +1173,8 @@ if (isNaN(peak_out)) {
   peak_out = 0.0;
 }
 
+
+
 // XXX: this is a performance problem maybe? Big DOM manipulation multiple times per second.
 function update_active_users(user_summary, server_sample_rate) {
   // Delete previous users.
@@ -1179,10 +1182,15 @@ function update_active_users(user_summary, server_sample_rate) {
     window.activeUsers.removeChild(window.activeUsers.lastChild);
   }
 
+  while (window.micVolumesUser.firstChild) {
+    window.micVolumesUser.removeChild(window.micVolumesUser.lastChild);
+  }
+
   for (var i = 0; i < user_summary.length; i++) {
     const offset_s = Math.round(user_summary[i][0] / server_sample_rate);
     const name = user_summary[i][1];
     const mic_volume = user_summary[i][2];
+    const userid = user_summary[i][3];
 
     const tr = document.createElement('tr');
 
@@ -1206,8 +1214,27 @@ function update_active_users(user_summary, server_sample_rate) {
     tr.appendChild(td3);
 
     window.activeUsers.appendChild(tr);
+
+    const option = document.createElement('option');
+    option.textContent = name;
+    option.userid = userid;
+    option.mic_volume = mic_volume;
+
+    window.micVolumesUser.appendChild(option);
   }
 }
+
+window.micVolumesUser.addEventListener("change", (e) => {
+  const option = window.micVolumesUser.children[window.micVolumesUser.selectedIndex];
+  window.micVolumeSetting.value = option.mic_volume;
+  window.micVolumeSetting.userid = option.userid;
+});
+
+let micVolumesToSend = [];
+window.micVolumeSetting.addEventListener("change", (e) => {
+  micVolumesToSend.push([window.micVolumeSetting.value,
+                         window.micVolumeSetting.userid]);
+});
 
 async function try_increase_batch_size_and_reload() {
   if (sample_batch_size < max_sample_batch_size) {
