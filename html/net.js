@@ -245,7 +245,7 @@ var xhrs_inflight = 0;
 export async function samples_to_server(outdata, target_url, send_metadata) {
   // Not a tremendous improvement over having too many parameters, but a bit.
   var { read_clock, write_clock, username, userid, chatsToSend, requestedLeadPosition,
-    loopback_mode, n_samples } = send_metadata;
+      loopback_mode, n_samples, globalVolumeToSend } = send_metadata;
   if (outdata === null) {
     outdata = new Uint8Array();
   }
@@ -280,6 +280,9 @@ export async function samples_to_server(outdata, target_url, send_metadata) {
       if (requestedLeadPosition) {
         params.set('request_lead', '1');
         requestedLeadPosition = false;
+      }
+      if (globalVolumeToSend != null) {
+        params.set('volume', JSON.stringify(globalVolumeToSend));
       }
 
       target_url.search = params.toString();

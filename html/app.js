@@ -1092,12 +1092,14 @@ async function handle_message(event) {
       username: window.userName.value,
       chatsToSend,
       requestedLeadPosition,
-      loopback_mode
+      loopback_mode,
+      globalVolumeToSend,
     };
     if (requestedLeadPosition) {
       requestedLeadPosition = false;
     }
     chatsToSend = [];
+    globalVolumeToSend = null;
 
     server_connection.set_metadata(send_metadata);
     // XXX: interesting, it does not seem that these promises are guaranteed to resolve in order... and the worklet's buffer uses the first chunk's timestamp to decide where to start playing back, so if the first two chunks are swapped it has a big problem.
@@ -1245,6 +1247,11 @@ start_button.addEventListener("click", start_stop);
 mute_button.addEventListener("click", toggle_mute);
 click_volume_slider.addEventListener("change", click_volume_change);
 audio_offset_text.addEventListener("change", audio_offset_change);
+
+let globalVolumeToSend = null;
+window.globalVolumeControl.addEventListener("change", () => {
+  globalVolumeToSend = window.globalVolumeControl.value;
+});
 
 log_level_select.addEventListener("change", () => {
   lib.set_log_level(parseInt(log_level_select.value));
