@@ -1199,9 +1199,9 @@ function update_active_users(user_summary, server_sample_rate) {
     span.textContent = "volume:";
     td3.appendChild(span);
     const input = document.createElement('input');
-    input.setAttribute('type') = 'range'
-    input.setAttribute('min') = 0;
-    input.setAttribute('max') = 2;
+    input.setAttribute('type', 'range');
+    input.setAttribute('min',  0);
+    input.setAttribute('max',  2);
     input.value = mic_volume;
     td3.appendChild(input);
     tr.appendChild(td3);
