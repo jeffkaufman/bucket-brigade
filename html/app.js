@@ -1184,6 +1184,7 @@ function update_active_users(user_summary, server_sample_rate) {
     window.activeUsers.removeChild(window.activeUsers.lastChild);
   }
 
+  mic_volume_inputs = [];
   for (var i = 0; i < user_summary.length; i++) {
     const offset_s = Math.round(user_summary[i][0] / server_sample_rate);
     const name = user_summary[i][1];
