@@ -1175,6 +1175,7 @@ if (isNaN(peak_out)) {
 }
 
 
+let previous_mic_volume_inputs_str = [];
 
 // XXX: this is a performance problem maybe? Big DOM manipulation multiple times per second.
 function update_active_users(user_summary, server_sample_rate) {
@@ -1183,19 +1184,13 @@ function update_active_users(user_summary, server_sample_rate) {
     window.activeUsers.removeChild(window.activeUsers.lastChild);
   }
 
-  while (window.micVolumesUser.firstChild) {
-    window.micVolumesUser.removeChild(window.micVolumesUser.lastChild);
-  }
-
-  const initialOption = document.createElement('option');
-  initialOption.textContent = "Select User";
-  window.micVolumesUser.appendChild(initialOption);
-
   for (var i = 0; i < user_summary.length; i++) {
     const offset_s = Math.round(user_summary[i][0] / server_sample_rate);
     const name = user_summary[i][1];
     const mic_volume = user_summary[i][2];
     const userid = user_summary[i][3];
+
+    mic_volume_inputs.append([name, userid, mic_volume]);
 
     const tr = document.createElement('tr');
 
@@ -1219,14 +1214,27 @@ function update_active_users(user_summary, server_sample_rate) {
     tr.appendChild(td3);
 
     window.activeUsers.appendChild(tr);
-
-    const option = document.createElement('option');
-    option.textContent = name;
-    option.userid = userid;
-    option.mic_volume = mic_volume;
-
-    window.micVolumesUser.appendChild(option);
   }
+
+  mic_volume_inputs.sort();
+  if (JSON.stringify(mic_volume_inputs) != previous_mic_volume_inputs_str) {
+    while (window.micVolumesUser.firstChild) {
+      window.micVolumesUser.removeChild(window.micVolumesUser.lastChild);
+    }
+    const initialOption = document.createElement('option');
+    initialOption.textContent = "Select User";
+    window.micVolumesUser.appendChild(initialOption);
+
+    for (var i = 0; i < mic_volume_inputs.length; i++) {
+      const option = document.createElement('option');
+      option.textContent = name;
+      option.userid = userid;
+      option.mic_volume = mic_volume;
+
+      window.micVolumesUser.appendChild(option);
+    }
+  }
+  previous_mic_volume_inputs_str = JSON.stringify(mic_volume_inputs);
 }
 
 window.micVolumesUser.addEventListener("change", (e) => {
