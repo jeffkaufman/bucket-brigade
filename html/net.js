@@ -282,7 +282,7 @@ export async function samples_to_server(outdata, target_url, send_metadata) {
         requestedLeadPosition = false;
       }
       if (globalVolumeToSend != null) {
-        params.set('volume', JSON.stringify(globalVolumeToSend));
+        params.set('volume', globalVolumeToSend);
       }
 
       target_url.search = params.toString();
