@@ -1101,6 +1101,7 @@ async function handle_message(event) {
     }
     chatsToSend = [];
     globalVolumeToSend = null;
+    micVolumesToSend = [];
 
     server_connection.set_metadata(send_metadata);
     // XXX: interesting, it does not seem that these promises are guaranteed to resolve in order... and the worklet's buffer uses the first chunk's timestamp to decide where to start playing back, so if the first two chunks are swapped it has a big problem.
