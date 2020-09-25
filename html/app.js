@@ -1175,10 +1175,15 @@ if (isNaN(peak_out)) {
 }
 
 
-let previous_mic_volume_inputs_str = [];
+let previous_user_summary_str = "";
+let previous_mic_volume_inputs_str = "";
 
-// XXX: this is a performance problem maybe? Big DOM manipulation multiple times per second.
 function update_active_users(user_summary, server_sample_rate) {
+  if (JSON.stringify(user_summary) == previous_user_summary_str) {
+    return;
+  }
+  previous_user_summary_str = JSON.stringify(user_summary);
+
   // Delete previous users.
   while (window.activeUsers.firstChild) {
     window.activeUsers.removeChild(window.activeUsers.lastChild);
