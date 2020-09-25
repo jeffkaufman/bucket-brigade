@@ -1187,6 +1187,10 @@ function update_active_users(user_summary, server_sample_rate) {
     window.micVolumesUser.removeChild(window.micVolumesUser.lastChild);
   }
 
+  const initialOption = document.createElement('option');
+  initialOption.textContent = "Select User";
+  window.micVolumesUser.appendChild(initialOption);
+
   for (var i = 0; i < user_summary.length; i++) {
     const offset_s = Math.round(user_summary[i][0] / server_sample_rate);
     const name = user_summary[i][1];
@@ -1227,8 +1231,10 @@ function update_active_users(user_summary, server_sample_rate) {
 
 window.micVolumesUser.addEventListener("change", (e) => {
   const option = window.micVolumesUser.children[window.micVolumesUser.selectedIndex];
-  window.micVolumeSetting.value = option.mic_volume;
-  window.micVolumeSetting.userid = option.userid;
+  if (option.userid) {
+    window.micVolumeSetting.userid = option.userid;
+    window.micVolumeSetting.value = option.mic_volume;
+  }
 });
 
 let micVolumesToSend = [];
