@@ -1182,6 +1182,8 @@ function update_active_users(user_summary, server_sample_rate) {
   for (var i = 0; i < user_summary.length; i++) {
     const offset_s = Math.round(user_summary[i][0] / server_sample_rate);
     const name = user_summary[i][1];
+    const mic_volume = user_summary[i][2];
+
     const tr = document.createElement('tr');
 
     const td1 = document.createElement('td');
@@ -1191,6 +1193,18 @@ function update_active_users(user_summary, server_sample_rate) {
     const td2 = document.createElement('td');
     td2.textContent = name;
     tr.appendChild(td2);
+
+    const td3 = document.createElement('td');
+    const span = document.createElement('span');
+    span.textContent = "volume:";
+    td3.appendChild(span);
+    const input = document.createElement('input');
+    input.setAttribute('type') = 'range'
+    input.setAttribute('min') = 0;
+    input.setAttribute('max') = 2;
+    input.value = mic_volume;
+    td3.appendChild(input);
+    tr.appendChild(td3);
 
     window.activeUsers.appendChild(tr);
   }
