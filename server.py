@@ -95,9 +95,12 @@ class OurHandler(BaseHTTPRequestHandler):
         content_length = int(self.headers["Content-Length"])
         parsed_url = urllib.parse.urlparse(self.path)
 
-        if parsed_url.path == "/reset_events":
+        if parsed_url.path in {"/reset_events", "//reset_events"}:
+            print("in reset_events codepath")
             events.clear()
+            print("  cleared")
             self.send_response(204)
+            print("  sent")
             return
 
         query_params = {}

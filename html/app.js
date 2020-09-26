@@ -189,12 +189,15 @@ async function query_server_clock() {
 }
 
 var estimate_latency_mode = false;
-export function estimate_latency_toggle() {
-  estimate_latency_mode = !estimate_latency_mode;
+export function set_estimate_latency_mode(v) {
+  estimate_latency_mode = v;
   playerNode.port.postMessage({
     "type": "latency_estimation_mode",
     "enabled": estimate_latency_mode
   });
+}
+export function estimate_latency_toggle() {
+  set_estimate_latency_mode(!estimate_latency_mode);
   return estimate_latency_mode;
 }
 
@@ -213,14 +216,23 @@ export function click_volume_change() {
 }
 
 var muted = false;
-export function toggle_mute() {
-  muted = !muted;
+export function set_mute(v) {
+  muted = v;
   playerNode.port.postMessage({
     "type": "mute_mode",
     "enabled": muted
   });
+}  
+export function toggle_mute() {
+  set_muted(!muted);
   return muted;
 }
+
+export async function set_offset(audio_offset) {
+  await query_server_clock();
+  audio_offset = parseInt(audio_offset) * sample_rate;
+  read_clock = server_clock - audio_offset;
+}  
 
 export async function start({input_device_id, output_device_id, input_opts, audio_offset, loopback, server_url, script_prefix}) {
   running = true;
@@ -291,6 +303,7 @@ export async function start({input_device_id, output_device_id, input_opts, audi
 
 export function init_events() {
   let target_url = server_path + "/reset_events";
+  target_url = target_url.replace('//','/');
   lib.log(LOG_DEBUG,{server_path,target_url,where:'init_events'});
   let xhr = new XMLHttpRequest();
   xhr.open("POST", target_url, true);
