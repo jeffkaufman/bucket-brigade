@@ -66,6 +66,31 @@ body {
   position: fixed;
   top: 0;
   left: 0;
+  z-index: 2;
+}
+#tutorial {
+  width: 100%;
+  height: 100%;
+  position: fixed;
+  top: 0;
+  left: 0;
+  background: white;
+  z-index: 1;
+}
+#tutorial > div {
+  margin: 1em;
+}
+#tutorial button {
+  margin: 0.25em;
+}
+.headphoneAdvice,
+#q_wired_headphones_available,
+#q_headphones_wired,
+#final_attach_wired,
+#final_wired_headphones,
+#final_detach_wireless,
+#final_no_headphones{
+  display: none;
 }
 </style>
 <h1>"Bucket Brigade" Audio Demo</h1>
@@ -90,6 +115,57 @@ interesting console messages.
     <button id=dismissNotChrome>dismiss</button>
 </div>
 
+<script>
+  window.dismissNotChrome.addEventListener(
+    "click", () => window.notchrome.style.display = "none");
+  if (navigator.userAgent.match(/Chrome/)) {
+    window.notchrome.style.display = "none";
+  }
+</script>
+
+<div id=tutorial>
+  <div id=tutorial_questions>
+    <div id=q_headphones_present>
+      Are you using headphones?
+      <button>Yes</button>
+      <button>No</button>
+    </div>
+
+    <div id=q_wired_headphones_available>
+      Do you have wired headphones that you could easily use?
+      <button>Yes</button>
+      <button>No</button>
+    </div>
+
+    <div id=q_headphones_wired>
+      Are your headphones wired?
+      <button>Yes</button>
+      <button>No</button>
+    </div>
+  </div>
+
+  <div id=final_attach_wired>
+    Great! Please attach them and then refresh this page.
+  </div>
+
+  <div id=final_no_headphones>
+    That's OK! Using headphones helps reduce noise, but it still works OK
+    if a few people aren't wearing headphones.
+    <button class=dismiss_tutorial>Get Started</button>
+  </div>
+
+  <div id=final_detach_wireless>
+    Wireless headphones have large and inconsistent latency.  Please
+    detach them and refresh this page.
+  </div>
+
+  <div id=final_wired_headphones>
+    Wired headphones are ideal!
+    <p>
+    <button class=dismiss_tutorial>Get Started</button>
+  </div>
+  </div>
+
 Enter your name and press enter:
   <input id=userName></input>
 
@@ -111,26 +187,25 @@ Input device:
 
 <div id=initialInstructions>
   <ul>
-    <li>If you're using wireless headphones, please disconnect them and
-      refresh the page.
-
-    <li>If you're using other headphones, take them off your head and
-      arrange them so that the microphone is near the ear piece.  On a
-      mac laptop this is near the "esc" key.
-
-    <li>If you're using earbuds or other tiny headphones, you might
-      need to remove them for calibration. If you calibrate without
-      them, then leave them off.  Adding them back in after calibration
-      can give latency problems.
-
-    <li>When you press start, the system will make some loud beeps,
-      because it needs to hear itself.  If the noises are not loud,
-      turn up your computer's volume until they are.
-
     <li style="display: none; color: red" id=bluetoothWarning><b>Your audio device (bluetooth headset?) is triggering a bug. Please let Glenn know you saw this. We will try to work around it automatically.</b>
   </ul>
 </div>
+  <p>
+
+
+In the next step we are going to need to make some really loud beeps to
+calibrate latency.
+
+  <p>
+
+Please turn your volume all the way up.
+<span class=headphoneAdvice>
+Take your headphones off your head, and position the earpieces as
+close as possible to your mic.  On a mac laptop this is near the "esc"
+key.</span>  Press "start" when ready.
+
 <p>
+
 <button id=startButton></button>
 <button id=muteButton disabled=true>Mute</button>
 
@@ -236,6 +311,9 @@ Audio offset (seconds):
 
 <button type="button" data-otherlabel="Close debug settings" class="collapse">Open debug settings</button>
 <div style="display:none">
+    Disable tutorial:
+  <input type="checkbox" id="disableTutorial">
+  <br>
     Disable latency measurement:
     <input type="checkbox" id="disableLatencyMeasurement">
   <br>
@@ -293,14 +371,6 @@ Audio offset (seconds):
 <br>
 
 </div>
-
-<script>
-  window.dismissNotChrome.addEventListener(
-    "click", () => window.notchrome.style.display = "none");
-  if (navigator.userAgent.match(/Chrome/)) {
-    window.notchrome.style.display = "none";
-  }
-</script>
 
 <script type="module" src="./app.js"></script>
 

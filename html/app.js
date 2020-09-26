@@ -131,9 +131,7 @@ function persist(textFieldId) {
 function persist_checkbox(checkboxId) {
   const checkbox = document.getElementById(checkboxId);
   const prevVal = localStorage.getItem(checkboxId);
-  if (prevVal !== null) {
-    checkbox.checked = prevVal;
-  }
+  checkbox.checked = (prevVal === "true");
 
   checkbox.addEventListener("change", () => {
     localStorage.setItem(checkboxId, checkbox.checked);
@@ -142,6 +140,7 @@ function persist_checkbox(checkboxId) {
 
 persist("userName");
 persist("audioOffset");
+persist_checkbox("disableTutorial");
 persist_checkbox("disableLatencyMeasurement");
 
 function setMainAppVisibility() {
@@ -223,6 +222,7 @@ var audioCtx;
 var start_button = document.getElementById('startButton');
 var mute_button = document.getElementById('muteButton');
 var click_volume_slider = document.getElementById('clickVolumeSlider');
+var disable_tutorial_checkbox = document.getElementById('disableTutorial');
 var disable_latency_measurement_checkbox = document.getElementById('disableLatencyMeasurement');
 var loopback_mode_select = document.getElementById('loopbackMode');
 var server_path_text = document.getElementById('serverPath');
@@ -1349,6 +1349,53 @@ async function initialize() {
   }
 
   switch_app_state(APP_INITIALIZING, APP_STOPPED);
+}
+
+function hide_buttons_and_append_answer(element, answer) {
+  for (var i = 0; i < element.children.length; i++) {
+    element.children[i].style.display = "none";
+  }
+  const b = document.createElement('b');
+  b.innerText = answer;
+  element.appendChild(b);
+};
+
+function tutorial_answer(button) {
+  const answer = button.innerText;
+  const question = button.parentElement.id;
+  hide_buttons_and_append_answer(button.parentElement, button.innerText);
+  if (question === "q_headphones_present") {
+    if (answer == "Yes") {
+      window.q_headphones_wired.style.display = 'block';
+    } else {
+      window.q_wired_headphones_available.style.display = 'block';
+    }
+  } else if (question === "q_wired_headphones_available") {
+    if (answer == "Yes") {
+      window.final_attach_wired.style.display = 'block';
+    } else {
+      window.final_no_headphones.style.display = 'block';
+    }
+  } else if (question === "q_headphones_wired") {
+    if (answer == "Yes") {
+      window.final_wired_headphones.style.display = 'block';
+      document.querySelectorAll(".headphoneAdvice").forEach(
+        (element) => element.style.display = 'inline-block');
+    } else {
+      window.final_detach_wireless.style.display = 'block';
+    }
+  }
+}
+
+document.querySelectorAll(".dismiss_tutorial").forEach(
+  (button) => button.addEventListener(
+    "click", () => window.tutorial.style.display = 'none'));
+
+document.querySelectorAll("#tutorial_questions button").forEach(
+  (button) => button.addEventListener("click", () => tutorial_answer(button)));
+
+if (disable_tutorial_checkbox.checked) {
+  window.tutorial.style.display = 'none';
 }
 
 initialize();
