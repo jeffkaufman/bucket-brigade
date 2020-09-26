@@ -525,14 +525,14 @@ class Player extends AudioWorkletProcessor {
           this.port.postMessage(calibration_result);
         }
         // Don't even send or receive audio in this mode.
-        return true;
+      } else {
+        if (this.mute_mode) {
+          // Fake out the real processing function, but keep running
+          input = new Float32Array(input.length);
+          output = new Float32Array(output.length);
+        }
+        this.process_normal(input, output);
       }
-      if (this.mute_mode) {
-        // Fake out the real processing function, but keep running
-        input = new Float32Array(input.length);
-        output = new Float32Array(output.length);
-      }
-      this.process_normal(input, output);
     } catch (ex) {
       this.port.postMessage({
         type: "exception",
