@@ -17,7 +17,7 @@ first_client_write_clock = None
 first_client_total_samples = None
 first_client_value = None
 global_volume = 1
-song_end_clock = None
+song_end_clock = 0
 
 QUEUE_SECONDS = 120
 
