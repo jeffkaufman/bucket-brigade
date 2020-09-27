@@ -300,6 +300,16 @@ def handle_post(in_data_raw, query_params):
         # Client is too far behind and going to wrap the buffer. :-(
         raise ValueError("Client's write clock is too far in the past")
     else:
+        print("--------DEBUG--------\n\n"
+              "user.name: %s\n"
+              "user.last_seen_write_clock: %s\n"
+              "song_end_clock: %s\n"
+              "client_write_clock: %s\n" % (
+                  user.name,
+                  user.last_seen_write_clock,
+                  song_end_clock,
+                  client_write_clock))
+            
         if user.last_seen_write_clock is not None:
             # For debugging purposes only
             if client_write_clock - n_samples != user.last_seen_write_clock:
@@ -309,15 +319,6 @@ def handle_post(in_data_raw, query_params):
                     f'{user.last_seen_write_clock} = '
                     f'{client_write_clock - n_samples - user.last_seen_write_clock})')
 
-            if song_end_clock > 0:
-                print("--------DEBUG--------\n\n"
-                      "user.last_seen_write_clock: %s\n"
-                      "song_end_clock: %s\n"
-                      "client_write_clock: %s\n" % (
-                          user.last_seen_write_clock,
-                          song_end_clock,
-                          client_write_clock))
-            
             if user.last_seen_write_clock <= song_end_clock <= client_write_clock:
                 user.delay_to_send = 115 * SAMPLE_RATE
 
