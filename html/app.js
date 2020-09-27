@@ -220,7 +220,7 @@ async function enumerate_devices() {
 var audioCtx;
 
 var start_button = document.getElementById('startButton');
-var mute_button = document.getElementById('muteButton');
+var pause_button = document.getElementById('pauseButton');
 var click_volume_slider = document.getElementById('clickVolumeSlider');
 var disable_tutorial_checkbox = document.getElementById('disableTutorial');
 var disable_latency_measurement_checkbox = document.getElementById('disableLatencyMeasurement');
@@ -238,7 +238,7 @@ var client_read_slippage = document.getElementById('clientReadSlippage');
 
 function set_controls() {
   // Defaults, will be overridden below depending on state
-  mute_button.disabled = true;
+  pause_button.disabled = true;
   loopback_mode_select.disabled = true;
   click_bpm.disabled = true;
 
@@ -257,7 +257,7 @@ function set_controls() {
   if (app_state == APP_RUNNING || app_state == APP_CALIBRATING) {
     start_button.textContent = "Stop";
     start_button.disabled = false;
-    mute_button.disabled = false;
+    pause_button.disabled = false;
   } else if (app_state == APP_STOPPED) {
     start_button.textContent = "Start";
     start_button.disabled = false;
@@ -392,13 +392,13 @@ function click_volume_change() {
   });
 }
 
-var muted = false;
-function toggle_mute() {
-  muted = !muted;
-  mute_button.innerText = muted ? "Unmute" : "Mute";
+var paused = false;
+function toggle_pause() {
+  paused = !paused;
+  pause_button.innerText = paused ? "Unpause" : "Pause";
   playerNode.port.postMessage({
-    "type": "mute_mode",
-    "enabled": muted
+    "type": "pause_mode",
+    "enabled": paused
   });
 }
 
@@ -1276,8 +1276,8 @@ async function stop() {
   window.est40to60.innerText = "...";
   window.estLatency.innerText = "...";
 
-  if (muted) {
-    toggle_mute();
+  if (paused) {
+    toggle_pause();
   }
 
   lib.log(LOG_INFO, "Closing audio context and mic stream...");
@@ -1294,7 +1294,7 @@ async function stop() {
 }
 
 start_button.addEventListener("click", start_stop);
-mute_button.addEventListener("click", toggle_mute);
+pause_button.addEventListener("click", toggle_pause);
 click_volume_slider.addEventListener("change", click_volume_change);
 audio_offset_text.addEventListener("change", audio_offset_change);
 

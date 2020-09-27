@@ -363,8 +363,8 @@ class Player extends AudioWorkletProcessor {
           this.latency_calibrator = null;
         }
         return;
-      } else if (msg.type == "mute_mode") {
-        this.mute_mode = msg.enabled;
+      } else if (msg.type == "pause_mode") {
+        this.pause_mode = msg.enabled;
         return;
       } else if (msg.type == "click_volume_change") {
         this.set_click_volume(msg.value/100);
@@ -526,7 +526,7 @@ class Player extends AudioWorkletProcessor {
         }
         // Don't even send or receive audio in this mode.
       } else {
-        if (this.mute_mode) {
+        if (this.pause_mode) {
           // Fake out the real processing function, but keep running
           input = new Float32Array(input.length);
           output = new Float32Array(output.length);
