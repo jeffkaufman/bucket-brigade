@@ -212,7 +212,7 @@ def handle_post(in_data_raw, query_params):
     # This indicates a new session, so flush everything. (There's probably a better way to handle this.)
     prev_last_write_clock = None
     if (client_write_clock is None) and (userid in users):
-        previous_last_write_clock = users[userid].last_write_clock
+        prev_last_write_clock = users[userid].last_write_clock
         del users[userid]
 
     update_users(userid, username, server_clock, client_read_clock)
