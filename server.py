@@ -52,7 +52,7 @@ class User:
         self.opus_state = None
         self.mic_volume = 1.0
         self.scaled_mic_volume = 1.0
-        self.last_write_clock = None
+        self.last_write_clock = 0
         # For debugging purposes only
         self.last_seen_read_clock = None
         self.last_seen_write_clock = None
