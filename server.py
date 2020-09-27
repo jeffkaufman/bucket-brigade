@@ -210,7 +210,9 @@ def handle_post(in_data_raw, query_params):
         raise ValueError("missing username/id")
 
     # This indicates a new session, so flush everything. (There's probably a better way to handle this.)
+    prev_last_write_clock = None
     if (client_write_clock is None) and (userid in users):
+        previous_last_write_clock = users[userid].last_write_clock
         del users[userid]
 
     update_users(userid, username, server_clock, client_read_clock)
@@ -251,8 +253,8 @@ def handle_post(in_data_raw, query_params):
         assign_delays(userid)
 
     if query_params.get("mark_finished_leading", None):
-        print("mark_finished_leading: %s" % user.last_write_clock)
-        song_end_clock = user.last_write_clock
+        print("mark_finished_leading: %s" % prev_last_write_clock)
+        song_end_clock = prev_last_write_clock
 
     in_data = np.frombuffer(in_data_raw, dtype=np.uint8)
 
