@@ -250,7 +250,8 @@ def handle_post(in_data_raw, query_params):
         assign_delays(userid)
 
     if query_params.get("mark_finished_leading", None):
-        song_end_clock = client_write_clock
+        if user.last_seen_write_clock:
+            song_end_clock = user.last_seen_write_clock
 
     in_data = np.frombuffer(in_data_raw, dtype=np.uint8)
 
