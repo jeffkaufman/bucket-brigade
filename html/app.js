@@ -1208,7 +1208,7 @@ function update_active_users(user_summary, server_sample_rate) {
     const userid = user_summary[i][3];
 
     if (i === 0) {
-      imLeading = (userid === myUserid && offset_s < 5);
+      imLeading = (userid == myUserid && offset_s < 5);
       console.log("JTK imLeading: " + imLeading);
     }
 
