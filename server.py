@@ -52,6 +52,7 @@ class User:
         self.opus_state = None
         self.mic_volume = 1.0
         self.scaled_mic_volume = 1.0
+        self.last_write_clock = None
         # For debugging purposes only
         self.last_seen_read_clock = None
         self.last_seen_write_clock = None
@@ -250,9 +251,8 @@ def handle_post(in_data_raw, query_params):
         assign_delays(userid)
 
     if query_params.get("mark_finished_leading", None):
-        print("mark_finished_leading: %s" % user.last_seen_write_clock)
-        if user.last_seen_write_clock:
-            song_end_clock = user.last_seen_write_clock
+        print("mark_finished_leading: %s" % user.last_write_clock)
+        song_end_clock = user.last_write_clock
 
     in_data = np.frombuffer(in_data_raw, dtype=np.uint8)
 
@@ -303,11 +303,11 @@ def handle_post(in_data_raw, query_params):
     else:
         print("--------DEBUG--------\n\n"
               "user.name: %s\n"
-              "user.last_seen_write_clock: %s\n"
+              "user.last_write_clock: %s\n"
               "song_end_clock: %s\n"
               "client_write_clock: %s\n" % (
                   user.name,
-                  user.last_seen_write_clock,
+                  user.last_write_clock,
                   song_end_clock,
                   client_write_clock))
             
@@ -320,10 +320,12 @@ def handle_post(in_data_raw, query_params):
                     f'{user.last_seen_write_clock} = '
                     f'{client_write_clock - n_samples - user.last_seen_write_clock})')
 
-            if user.last_seen_write_clock <= song_end_clock <= client_write_clock:
+            if user.last_write_clock <= song_end_clock <= client_write_clock:
                 user.delay_to_send = 115 * SAMPLE_RATE
 
         user.last_seen_write_clock = client_write_clock
+        if client_write_clock is not None:
+            user.last_write_clock = client_write_clock
 
         in_data *= user.scaled_mic_volume
 
