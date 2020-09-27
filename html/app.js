@@ -1106,7 +1106,6 @@ async function handle_message(event) {
     }
     if (markFinishedLeading) {
       markFinishedLeading = false;
-      console.log("JTK marked finished leading");
     }
     chatsToSend = [];
     globalVolumeToSend = null;
@@ -1209,7 +1208,6 @@ function update_active_users(user_summary, server_sample_rate) {
 
     if (i === 0) {
       imLeading = (userid == myUserid && offset_s < 5);
-      console.log("JTK imLeading: " + imLeading);
     }
 
     mic_volume_inputs.push([name, userid, mic_volume]);
