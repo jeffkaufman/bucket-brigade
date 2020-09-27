@@ -250,6 +250,7 @@ def handle_post(in_data_raw, query_params):
         assign_delays(userid)
 
     if query_params.get("mark_finished_leading", None):
+        print("mark_finished_leading: %s" % user.last_seen_write_clock)
         if user.last_seen_write_clock:
             song_end_clock = user.last_seen_write_clock
 
