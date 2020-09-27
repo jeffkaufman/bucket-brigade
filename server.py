@@ -169,6 +169,7 @@ def handle_post(in_data_raw, query_params):
     global first_client_total_samples
     global first_client_value
     global global_volume
+    global song_end_clock
 
     # NOTE NOTE NOTE:
     # * All `clock` variables are measured in samples.
