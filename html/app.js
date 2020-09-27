@@ -38,7 +38,7 @@ const OPUS_FRAME_MS = 60;
 
 lib.log(LOG_INFO, "Starting up");
 
-const userid = Math.round(Math.random()*100000000000)
+const myUserid = Math.round(Math.random()*100000000000)
 
 function set_error(msg) {
   window.errorBox.innerText = msg;
@@ -111,7 +111,11 @@ function takeLeadPosition() {
 
 window.takeLead.addEventListener("click", takeLeadPosition);
 
+let markFinishedLeading = false;
 window.jumpToEnd.addEventListener("click", () => {
+  if (imLeading) {
+    markFinishedLeading = true;
+  }
   audio_offset_text.value = 115;
   audio_offset_change();
 });
@@ -844,7 +848,7 @@ async function reload_settings(startup) {
       // Support relative paths
       target_url: new URL(server_path_text.value, document.location),
       audio_offset_seconds: parseInt(audio_offset_text.value),
-      userid,
+      userid: myUserid,
       epoch
     })
   } else {
@@ -1092,12 +1096,16 @@ async function handle_message(event) {
       username: window.userName.value,
       chatsToSend,
       requestedLeadPosition,
+      markFinishedLeading,
       loopback_mode,
       globalVolumeToSend,
       micVolumesToSend,
     };
     if (requestedLeadPosition) {
       requestedLeadPosition = false;
+    }
+    if (markFinishedLeading) {
+      markFinishedLeading = false;
     }
     chatsToSend = [];
     globalVolumeToSend = null;
@@ -1178,6 +1186,8 @@ if (isNaN(peak_out)) {
 let previous_user_summary_str = "";
 let previous_mic_volume_inputs_str = "";
 
+let imLeading = false;
+
 function update_active_users(user_summary, server_sample_rate) {
   if (JSON.stringify(user_summary) == previous_user_summary_str) {
     return;
@@ -1195,6 +1205,10 @@ function update_active_users(user_summary, server_sample_rate) {
     const name = user_summary[i][1];
     const mic_volume = user_summary[i][2];
     const userid = user_summary[i][3];
+
+    if (i === 0) {
+      imLeading = (userid === myUserid && offset_s < 5);
+    }
 
     mic_volume_inputs.push([name, userid, mic_volume]);
 

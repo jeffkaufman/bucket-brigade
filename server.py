@@ -17,6 +17,7 @@ first_client_write_clock = None
 first_client_total_samples = None
 first_client_value = None
 global_volume = 1
+song_end_clock = None
 
 QUEUE_SECONDS = 120
 
@@ -247,6 +248,9 @@ def handle_post(in_data_raw, query_params):
     if query_params.get("request_lead", None):
         assign_delays(userid)
 
+    if query_params.get("mark_finished_leading", None):
+        song_end_clock = client_write_clock
+
     in_data = np.frombuffer(in_data_raw, dtype=np.uint8)
 
     # Audio from clients is summed, so we need to clear the circular
@@ -294,14 +298,18 @@ def handle_post(in_data_raw, query_params):
         # Client is too far behind and going to wrap the buffer. :-(
         raise ValueError("Client's write clock is too far in the past")
     else:
-        # For debugging purposes only
         if user.last_seen_write_clock is not None:
+            # For debugging purposes only
             if client_write_clock - n_samples != user.last_seen_write_clock:
                 raise ValueError(
                     f'Client write clock desync ('
                     f'{client_write_clock - n_samples} - '
                     f'{user.last_seen_write_clock} = '
                     f'{client_write_clock - n_samples - user.last_seen_write_clock})')
+
+            if user.last_seen_write_clock <= song_end_clock <= client_write_clock:
+                user.delay_to_send = 115 * SAMPLE_RATE
+
         user.last_seen_write_clock = client_write_clock
 
         in_data *= user.scaled_mic_volume
