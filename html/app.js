@@ -1394,7 +1394,7 @@ function tutorial_answer(button) {
     if (answer == "Yes") {
       window.final_wired_headphones.style.display = 'block';
       document.querySelectorAll(".headphoneAdvice").forEach(
-        (element) => element.style.display = 'inline-block');
+        (element) => element.style.display = 'inline');
     } else {
       window.final_detach_wireless.style.display = 'block';
     }
