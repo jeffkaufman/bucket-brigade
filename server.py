@@ -52,7 +52,7 @@ class User:
         self.opus_state = None
         self.mic_volume = 1.0
         self.scaled_mic_volume = 1.0
-        self.last_write_clock = 0
+        self.last_write_clock = None
         # For debugging purposes only
         self.last_seen_read_clock = None
         self.last_seen_write_clock = None
@@ -217,6 +217,8 @@ def handle_post(in_data_raw, query_params):
 
     update_users(userid, username, server_clock, client_read_clock)
     user = users[userid]
+    if user.last_write_clock is None:
+        user.last_write_clock = prev_last_write_clock
 
     volumes = query_params.get("volume", None)
     if volumes:
@@ -253,8 +255,8 @@ def handle_post(in_data_raw, query_params):
         assign_delays(userid)
 
     if query_params.get("mark_finished_leading", None):
-        print("mark_finished_leading: %s" % prev_last_write_clock)
-        song_end_clock = prev_last_write_clock
+        print("mark_finished_leading: %s" % user.last_write_clock)
+        song_end_clock = user.last_write_clock
 
     in_data = np.frombuffer(in_data_raw, dtype=np.uint8)
 
