@@ -157,17 +157,14 @@ setMainAppVisibility();
 window.userName.addEventListener("change", setMainAppVisibility);
 
 var in_select = document.getElementById('inSelect');
-var out_select = document.getElementById('outSelect');
 var click_bpm = document.getElementById('clickBPM');
 
 in_select.addEventListener("change", in_select_change);
-out_select.addEventListener("change", reset_if_running);
 
 async function enumerate_devices() {
   navigator.mediaDevices.enumerateDevices().then((devices) => {
     // Clear existing entries
     in_select.options.length = 0;
-    out_select.options.length = 0;
 
     devices.forEach((info) => {
       var el = document.createElement("option");
@@ -178,12 +175,6 @@ async function enumerate_devices() {
           el.selected = true;
         }
         in_select.appendChild(el);
-      } else if (info.kind === 'audiooutput') {
-        /* The hack we use for supporting audio output selection seems to be a
-           bit janky, so let's disable it.
-        el.text = info.label || 'Unknown Output';
-        out_select.appendChild(el);
-        */
       }
     });
 
@@ -206,21 +197,6 @@ async function enumerate_devices() {
     el.value = "ECHO";
     el.text = "ECHO";
     in_select.appendChild(el);
-
-    el = document.createElement("option");
-    el.value = "";
-    el.text = "Default output device";
-    out_select.appendChild(el);
-
-    el = document.createElement("option");
-    el.text = "---";
-    el.disabled = true;
-    out_select.appendChild(el);
-
-    el = document.createElement("option");
-    el.value = "NOWHERE";
-    el.text = "NOWHERE";
-    out_select.appendChild(el);
   });
 }
 
@@ -250,7 +226,6 @@ function set_controls() {
   click_bpm.disabled = true;
 
   in_select.disabled = true;
-  out_select.disabled = true;
 
   start_button.disabled = true;
   start_button.textContent = ". . .";
@@ -258,7 +233,6 @@ function set_controls() {
 
   if (app_state != APP_INITIALIZING) {
     in_select.disabled = false;
-    out_select.disabled = false;
   }
 
   if (app_state == APP_RUNNING || app_state == APP_CALIBRATING) {
@@ -312,15 +286,8 @@ async function configure_input_node(audioCtx) {
 }
 
 function configure_output_node(audioCtx) {
-  if (out_select.value == "NOWHERE") {
-    // Send audio nowhere.
-    return audioCtx.createMediaStreamDestination();
-  } else {
-    // Default output device.
-    return audioCtx.destination;
-  }
-
-  return dest;
+  // Default output device.
+  return audioCtx.destination;
 }
 
 // NOTE NOTE NOTE:
