@@ -173,6 +173,9 @@ async function enumerate_devices() {
       el.value = info.deviceId;
       if (info.kind === 'audioinput') {
         el.text = info.label || 'Unknown Input';
+        if (info.deviceId && localStorage.getItem("inSelect") === info.deviceId) {
+          el.selected = true;
+        }
         in_select.appendChild(el);
       } else if (info.kind === 'audiooutput') {
         /* The hack we use for supporting audio output selection seems to be a
@@ -272,6 +275,7 @@ function set_controls() {
 async function configure_input_node(audioCtx) {
   synthetic_audio_source = null;
   var deviceId = in_select.value;
+  window.localStorage.setItem("inSelect", deviceId);
   if (deviceId == "CLICKS" ||
       deviceId == "ECHO") {
     synthetic_audio_source = deviceId;
