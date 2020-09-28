@@ -415,7 +415,7 @@ async function reset_if_running() {
 async function audio_offset_change() {
   const new_value = parseInt(audio_offset_text.value);
   // TODO: stop using magic numbers about the buffer size
-  if (isNaN(newValue) || new_value < 1 || new_value > 115) {
+  if (isNaN(new_value) || new_value < 1 || new_value > 115) {
     audio_offset_text.value = 115;
   }
 
