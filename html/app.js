@@ -145,6 +145,7 @@ function persist_checkbox(checkboxId) {
 persist("userName");
 persist_checkbox("disableTutorial");
 persist_checkbox("disableLatencyMeasurement");
+// Persisting select boxes is harder, so we do it manually for inSelect.
 
 function setMainAppVisibility() {
   if (window.userName.value) {
