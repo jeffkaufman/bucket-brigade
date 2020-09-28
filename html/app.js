@@ -143,7 +143,6 @@ function persist_checkbox(checkboxId) {
 }
 
 persist("userName");
-persist("audioOffset");
 persist_checkbox("disableTutorial");
 persist_checkbox("disableLatencyMeasurement");
 
