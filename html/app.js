@@ -159,7 +159,7 @@ var in_select = document.getElementById('inSelect');
 var out_select = document.getElementById('outSelect');
 var click_bpm = document.getElementById('clickBPM');
 
-in_select.addEventListener("change", reset_if_running);
+in_select.addEventListener("change", in_select_change);
 out_select.addEventListener("change", reset_if_running);
 
 async function enumerate_devices() {
@@ -272,10 +272,14 @@ function set_controls() {
   }
 }
 
+function in_select_change() {
+  window.localStorage.setItem("inSelect", in_select.value);
+  reset_if_running();
+}
+
 async function configure_input_node(audioCtx) {
   synthetic_audio_source = null;
   var deviceId = in_select.value;
-  window.localStorage.setItem("inSelect", deviceId);
   if (deviceId == "CLICKS" ||
       deviceId == "ECHO") {
     synthetic_audio_source = deviceId;
