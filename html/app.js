@@ -1160,7 +1160,7 @@ async function handle_message(event) {
     requestAnimationFrame(() => {
       if (song_start_clock && song_start_clock > client_read_clock) {
         window.startSingingCountdown.style.display = "block";
-        window.countdown.innerText = (
+        window.countdown.innerText = Math.round(
           (song_start_clock - client_read_clock) / server_sample_rate) + "s";
       } else {
         window.startSingingCountdown.style.display = "none";
