@@ -268,7 +268,6 @@ def handle_post(in_data_raw, query_params):
 
     if query_params.get("mark_stop_singing", None):
         song_end_clock = user.last_write_clock
-        song_start_clock = None
 
         # They're done singing, send them to the end.
         user.delay_to_send = 115 * SAMPLE_RATE
@@ -338,8 +337,9 @@ def handle_post(in_data_raw, query_params):
         in_data *= user.scaled_mic_volume
 
         # Don't keep any input unless a song is in progress.
-        if ((song_start_clock and client_write_clock > song_start_clock) or
-            (song_end_clock and client_write_clock - n_samples < song_end_clock)):
+        if (song_start_clock and client_write_clock > song_start_clock and
+            (not song_end_clock or
+             client_write_clock - n_samples < song_end_clock)):
             wrap_assign(client_write_clock - n_samples,
                         wrap_get(client_write_clock - n_samples, n_samples) +
                         in_data)
