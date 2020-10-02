@@ -92,6 +92,17 @@ body {
 #final_no_headphones{
   display: none;
 }
+
+#startSingingCountdown {
+  display: none;
+}
+#countdown {
+  font-size: 500%;
+  background: #eee;
+  border-radius: 1em;
+  padding: 5em;
+  margin: 1em;
+}
 </style>
 <h1>"Bucket Brigade" Audio Demo</h1>
 
@@ -257,25 +268,23 @@ value=100>
 
 <div id=runningInstructions>
 
-You're calibrated now!  Everyone is in one big long chain, and your
-audio offset chooses where you are in that chain. If you use a smaller
-number, more people will be able to hear you, while if you use a
-larger number you will be able to hear more people.  The "Take Lead
-Position" button puts you at the head of the chain and randomly
-assigns positions to everyone else.  The "Jump To End" button moves
-you as far late as possible so you can hear what everybody sounded
-like singing all together.
+You're calibrated now!  Talk to each other in chat and figure out
+who's going to lead the next song.  They should click the "Lead a
+Song" button.
 
 <p>
 
-Audio offset (seconds):
-<input type=text id=audioOffset value="115">
+<button id=takeLead>Lead a Song</button>
+<button id=jumpToEnd>Jump To End</button>
 
-<p>
+<div id=startSingingCountdown>
 
-<h4>Active Users</h4>
+  The leader has started a song, but you can't hear it yet because you
+  are farther down the chain. You'll hear it in:
 
-<table id=activeUsers></table>
+  <div id=countdown></div>
+
+</div>
 
 <h4>Chat</h4>
 <div id=chatWindow>
@@ -283,8 +292,21 @@ Audio offset (seconds):
   <form id=chatForm><input type="text" id=chatEntry></input><input type="submit" id=chatPost value="Post"></input></form>
 </div>
 
-<button id=takeLead>Take Lead Position</button><br>
-<button id=jumpToEnd>Jump To End</button>
+<h4>People</h4>
+
+<table id=activeUsers></table>
+
+
+<p>
+
+Everyone has a position, listed next to their name above.  Closer to
+the front and more people will be able to hear you, closer to the back
+and you will be able to hear more people.  Normally positions are
+assigned automatically, but if you don't like your assignment you can
+choose a new one. Enter a number between 6 and 30:
+<input type=text id=audioOffset value="115">
+
+<p>
 
 </div>
 

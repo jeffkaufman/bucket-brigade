@@ -18,6 +18,7 @@ first_client_total_samples = None
 first_client_value = None
 global_volume = 1
 song_end_clock = 0
+song_start_clock = None
 
 QUEUE_SECONDS = 120
 
@@ -171,6 +172,7 @@ def handle_post(in_data_raw, query_params):
     global first_client_value
     global global_volume
     global song_end_clock
+    global song_start_clock
 
     # NOTE NOTE NOTE:
     # * All `clock` variables are measured in samples.
@@ -253,9 +255,17 @@ def handle_post(in_data_raw, query_params):
 
     if query_params.get("request_lead", None):
         assign_delays(userid)
+        song_start_clock = None
 
-    if query_params.get("mark_finished_leading", None):
+    if query_params.get("mark_start_singing", None):
+        song_start_clock = user.last_write_clock
+
+    if query_params.get("mark_stop_singing", None):
         song_end_clock = user.last_write_clock
+        song_start_clock = None
+
+        # They're done singing, send them to the end.
+        user.delay_to_send = 115 * SAMPLE_RATE
 
     in_data = np.frombuffer(in_data_raw, dtype=np.uint8)
 
@@ -312,7 +322,6 @@ def handle_post(in_data_raw, query_params):
                     f'{client_write_clock - n_samples} - '
                     f'{user.last_seen_write_clock} = '
                     f'{client_write_clock - n_samples - user.last_seen_write_clock})')
-
             if user.last_write_clock <= song_end_clock <= client_write_clock:
                 user.delay_to_send = 115 * SAMPLE_RATE
 
@@ -322,9 +331,11 @@ def handle_post(in_data_raw, query_params):
 
         in_data *= user.scaled_mic_volume
 
-        wrap_assign(client_write_clock - n_samples,
-                    wrap_get(client_write_clock - n_samples, n_samples) +
-                    in_data)
+        if song_start_clock:
+            # Don't keep any input unless someone has started a song.
+            wrap_assign(client_write_clock - n_samples,
+                        wrap_get(client_write_clock - n_samples, n_samples) +
+                        in_data)
 
     # Why subtract n_samples above and below? Because the future is to the
     #   right. So when a client asks for n samples at time t, what they
@@ -368,6 +379,7 @@ def handle_post(in_data_raw, query_params):
         "user_summary": user_summary(),
         "chats": user.chats_to_send,
         "delay_samples": user.delay_to_send,
+        "song_start_clock": song_start_clock,
         # Both the following uses units of 128-sample frames
         "queue_size": len(queue) / FRAME_SIZE,
     })

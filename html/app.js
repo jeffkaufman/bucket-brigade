@@ -104,18 +104,31 @@ function sendChatMessage() {
 
 window.chatForm.addEventListener("submit", (e) => { sendChatMessage(); e.preventDefault(); });
 
+let leadButtonState = "take-lead";
 let requestedLeadPosition = false;
-function takeLeadPosition() {
-  requestedLeadPosition = true;
+let markStartSinging = false;
+let markStopSinging = false;
+function takeLeadClick() {
+  if (leadButtonState == "take-lead") {
+    requestedLeadPosition = true;
+    // Action doesn't take effect until server confirms.
+  } else if (leadButtonState == "start-singing") {
+    window.takeLead.textContent = "Stop Singing";
+    markStartSinging = true;
+    leadButtonState = "stop-singing";
+  } else if (leadButtonState == "stop-singing") {
+    window.takeLead.textContent = "Lead a Song";
+    markStopSinging = true;
+    leadButtonState = "take-lead";
+    window.jumpToEnd.disabled = false;
+  } else {
+    throw "unknown state " + leadButtonState;
+  }
 }
 
-window.takeLead.addEventListener("click", takeLeadPosition);
+window.takeLead.addEventListener("click", takeLeadClick);
 
-let markFinishedLeading = false;
 window.jumpToEnd.addEventListener("click", () => {
-  if (imLeading) {
-    markFinishedLeading = true;
-  }
   audio_offset_text.value = 115;
   audio_offset_change();
 });
@@ -1077,7 +1090,8 @@ async function handle_message(event) {
       username: window.userName.value,
       chatsToSend,
       requestedLeadPosition,
-      markFinishedLeading,
+      markStartSinging,
+      markStopSinging,
       loopback_mode,
       globalVolumeToSend,
       micVolumesToSend,
@@ -1085,8 +1099,11 @@ async function handle_message(event) {
     if (requestedLeadPosition) {
       requestedLeadPosition = false;
     }
-    if (markFinishedLeading) {
-      markFinishedLeading = false;
+    if (markStartSinging) {
+      markStartSinging = false;
+    }
+    if (markStopSinging) {
+      markStopSinging = false;
     }
     chatsToSend = [];
     globalVolumeToSend = null;
@@ -1134,9 +1151,19 @@ async function handle_message(event) {
     var chats = metadata["chats"] || [];
     var delay_seconds = metadata["delay_seconds"];
     var server_sample_rate = metadata["server_sample_rate"];
+    var song_start_clock = metadata["song_start_clock"];
+    var client_read_clock = metadata["client_read_clock"];
 
     // Defer touching the DOM, just to be safe.
     requestAnimationFrame(() => {
+      if (song_start_clock && song_start_clock > client_read_clock) {
+        window.startSingingCountdown.display = "block";
+        window.countdown = (
+          (song_start_clock - client_read_clock) / server_sample_rate) + "s";
+      } else {
+        window.startSingingCountdown.display = "none";
+      }
+
       if (delay_seconds) {
         if (delay_seconds > 0) {
           audio_offset_text.value = delay_seconds;
@@ -1188,7 +1215,18 @@ function update_active_users(user_summary, server_sample_rate) {
     const userid = user_summary[i][3];
 
     if (i === 0) {
+      const wasLeading = imLeading;
       imLeading = (userid == myUserid && offset_s < 5);
+
+      if (imLeading && !wasLeading) {
+        window.takeLead.textContent = "Start Singing";
+        leadButtonState = "start-singing";
+        window.jumpToEnd.disabled = true;
+      } else if (!imLeading && wasLeading) {
+        window.takeLead.textContent = "Take the Lead";
+        leadButtonState = "take-lead";
+        window.jumpToEnd.disabled = false;
+      }
     }
 
     mic_volume_inputs.push([name, userid, mic_volume]);
