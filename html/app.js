@@ -1209,7 +1209,7 @@ function update_active_users(user_summary, server_sample_rate) {
 
   const mic_volume_inputs = [];
   for (var i = 0; i < user_summary.length; i++) {
-    const offset_s = Math.round(user_summary[i][0] / server_sample_rate);
+    const offset_s = user_summary[i][0];
     const name = user_summary[i][1];
     const mic_volume = user_summary[i][2];
     const userid = user_summary[i][3];

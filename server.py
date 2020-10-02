@@ -130,7 +130,11 @@ def clean_users(server_clock):
 def user_summary():
     summary = []
     for userid, user in users.items():
-        summary.append((user.delay_samples, user.name, user.mic_volume, userid))
+        summary.append((
+            round(user.delay_samples / SAMPLE_RATE),
+            user.name,
+            user.mic_volume,
+            userid))
     summary.sort()
     return summary
 
