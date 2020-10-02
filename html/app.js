@@ -216,7 +216,6 @@ async function enumerate_devices() {
 var audioCtx;
 
 var start_button = document.getElementById('startButton');
-var pause_button = document.getElementById('pauseButton');
 var click_volume_slider = document.getElementById('clickVolumeSlider');
 var disable_tutorial_checkbox = document.getElementById('disableTutorial');
 var disable_latency_measurement_checkbox = document.getElementById('disableLatencyMeasurement');
@@ -234,7 +233,8 @@ var client_read_slippage = document.getElementById('clientReadSlippage');
 
 function set_controls() {
   // Defaults, will be overridden below depending on state
-  pause_button.disabled = true;
+  window.micToggleButton.disabled = true;
+  window.speakerToggleButton.disabled = true;
   loopback_mode_select.disabled = true;
   click_bpm.disabled = true;
 
@@ -251,12 +251,16 @@ function set_controls() {
   if (app_state == APP_RUNNING || app_state == APP_CALIBRATING) {
     start_button.textContent = "Stop";
     start_button.disabled = false;
-    pause_button.disabled = false;
   } else if (app_state == APP_STOPPED) {
     start_button.textContent = "Start";
     start_button.disabled = false;
     loopback_mode_select.disabled = false;
     click_bpm.disabled = false;
+  }
+
+  if (app_state == APP_RUNNING) {
+    window.micToggleButton.disabled = false;
+    window.speakerToggleButton.disabled = false;
   }
 }
 
@@ -384,13 +388,23 @@ function click_volume_change() {
   });
 }
 
-var paused = false;
-function toggle_pause() {
-  paused = !paused;
-  pause_button.innerText = paused ? "Unpause" : "Pause";
+var micPaused = false;
+function toggle_mic() {
+  micPaused = !micPaused;
+  window.micToggleButton.innerText = micPaused ? "Mic is Off" : "Mic is On";
   playerNode.port.postMessage({
-    "type": "pause_mode",
-    "enabled": paused
+    "type": "mic_pause_mode",
+    "enabled": micPaused
+  });
+}
+
+var speakerPaused = false;
+function toggle_speaker() {
+  speakerPaused = !speakerPaused;
+  window.speakerToggleButton.innerText = speakerPaused ? "Speaker is Off" : "Speaker is On";
+  playerNode.port.postMessage({
+    "type": "speaker_pause_mode",
+    "enabled": speakerPaused
   });
 }
 
@@ -1330,7 +1344,8 @@ async function stop() {
 }
 
 start_button.addEventListener("click", start_stop);
-pause_button.addEventListener("click", toggle_pause);
+window.micToggleButton.addEventListener("click", toggle_mic);
+window.speakerToggleButton.addEventListener("click", toggle_speaker);
 click_volume_slider.addEventListener("change", click_volume_change);
 audio_offset_text.addEventListener("change", audio_offset_change);
 
