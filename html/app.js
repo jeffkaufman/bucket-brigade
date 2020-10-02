@@ -1158,15 +1158,12 @@ async function handle_message(event) {
 
     // Defer touching the DOM, just to be safe.
     requestAnimationFrame(() => {
-      console.log("JTK " + song_start_clock + " " + client_read_clock);
       if (song_start_clock && song_start_clock > client_read_clock) {
-        window.startSingingCountdown.display = "block";
+        window.startSingingCountdown.style.display = "block";
         window.countdown.innerText = (
           (song_start_clock - client_read_clock) / server_sample_rate) + "s";
-        console.log("JTK should be visible");
       } else {
-        window.startSingingCountdown.display = "none";
-        console.log("no more");
+        window.startSingingCountdown.style.display = "none";
       }
 
       if (delay_seconds) {
