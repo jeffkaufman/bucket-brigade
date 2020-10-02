@@ -337,8 +337,9 @@ def handle_post(in_data_raw, query_params):
 
         in_data *= user.scaled_mic_volume
 
-        if song_start_clock:
-            # Don't keep any input unless someone has started a song.
+        # Don't keep any input unless a song is in progress.
+        if ((song_start_clock and client_write_clock > song_start_clock) or
+            (song_end_clock and client_write_clock - n_samples < song_end_clock)):
             wrap_assign(client_write_clock - n_samples,
                         wrap_get(client_write_clock - n_samples, n_samples) +
                         in_data)
