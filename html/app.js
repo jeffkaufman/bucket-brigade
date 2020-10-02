@@ -799,6 +799,7 @@ async function start() {
     window.initialInstructions.style.display = "none";
     window.calibration.style.display = "none";
     window.runningInstructions.style.display = "block";
+    window.latencyCalibrationInstructions.style.display = "none";
     try {
       await server_connection.start();
     } catch (e) {
@@ -1030,6 +1031,7 @@ async function handle_message(event) {
         window.initialInstructions.style.display = "none";
         window.calibration.style.display = "none";
         window.runningInstructions.style.display = "block";
+        window.latencyCalibrationInstructions.style.display = "none";
         set_estimate_latency_mode(false);
         if (!switch_app_state(APP_CALIBRATING, APP_RUNNING)) { return; }
         await server_connection.start();
@@ -1303,6 +1305,7 @@ async function stop() {
   window.initialInstructions.style.display = "block";
   window.calibration.style.display = "none";
   window.runningInstructions.style.display = "none";
+  window.latencyCalibrationInstructions.style.display = "block";
   window.noAudioInputInstructions.style.display = "none";
 
   window.estSamples.innerText = "...";
