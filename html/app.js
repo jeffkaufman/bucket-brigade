@@ -233,8 +233,8 @@ var client_read_slippage = document.getElementById('clientReadSlippage');
 
 function set_controls() {
   // Defaults, will be overridden below depending on state
-  window.micToggleButton.disabled = true;
-  window.speakerToggleButton.disabled = true;
+  window.micToggleButton.style.display = "none";
+  window.speakerToggleButton.style.display = "none";
   loopback_mode_select.disabled = true;
   click_bpm.disabled = true;
 
@@ -259,8 +259,8 @@ function set_controls() {
   }
 
   if (app_state == APP_RUNNING) {
-    window.micToggleButton.disabled = false;
-    window.speakerToggleButton.disabled = false;
+    window.micToggleButton.style.display = "inline-block";
+    window.speakerToggleButton.style.display = "inline-block";
   }
 }
 
@@ -391,7 +391,9 @@ function click_volume_change() {
 var micPaused = false;
 function toggle_mic() {
   micPaused = !micPaused;
-  window.micToggleButton.innerText = micPaused ? "Mic is Off" : "Mic is On";
+  window.micToggleImg.alt = micPaused ? "turn mic on" : "turn mic off";
+  window.micToggleImg.src =
+    "images/mic-" + (micPaused ? "off" : "on") + ".png";
   playerNode.port.postMessage({
     "type": "mic_pause_mode",
     "enabled": micPaused
@@ -401,7 +403,9 @@ function toggle_mic() {
 var speakerPaused = false;
 function toggle_speaker() {
   speakerPaused = !speakerPaused;
-  window.speakerToggleButton.innerText = speakerPaused ? "Speaker is Off" : "Speaker is On";
+  window.speakerToggleImg.alt = speakerPaused ? "turn speaker on" : "turn speaker off";
+  window.speakerToggleImg.src =
+    "images/speaker-" + (speakerPaused ? "off" : "on") + ".png";
   playerNode.port.postMessage({
     "type": "speaker_pause_mode",
     "enabled": speakerPaused

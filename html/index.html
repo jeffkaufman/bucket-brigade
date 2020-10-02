@@ -100,6 +100,10 @@ body {
   margin: 1em;
   display: inline-block;
 }
+
+#micToggleButton, #speakerToggleButton {
+  display: none;
+}
 </style>
 <h1>"Bucket Brigade" Audio Demo</h1>
 
@@ -213,8 +217,13 @@ key.</span>  Press "start" when ready.
 <p>
 
 <button id=startButton></button>
-<button id=micToggleButton disabled=true>Mic is On</button>
-<button id=speakerToggleButton disabled=true>Speaker is On</button>
+
+<p>
+
+<button id=micToggleButton><img id=micToggleImg
+   width=32 height=32 alt="turn off mic" src="images/mic-on.png"></button>
+<button id=speakerToggleButton><img id=speakerToggleImg
+   width=32 height=32 alt="turn off speaker" src="images/speaker-on.png"></button>
 
 <p>
 
