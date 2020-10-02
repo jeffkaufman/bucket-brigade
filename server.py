@@ -260,9 +260,11 @@ def handle_post(in_data_raw, query_params):
     if query_params.get("request_lead", None):
         assign_delays(userid)
         song_start_clock = None
+        song_end_clock = 0
 
     if query_params.get("mark_start_singing", None):
         song_start_clock = user.last_write_clock
+        song_end_clock = 0
 
     if query_params.get("mark_stop_singing", None):
         song_end_clock = user.last_write_clock
