@@ -1163,8 +1163,10 @@ async function handle_message(event) {
         window.startSingingCountdown.display = "block";
         window.countdown.innerText = (
           (song_start_clock - client_read_clock) / server_sample_rate) + "s";
+        console.log("JTK should be visible");
       } else {
         window.startSingingCountdown.display = "none";
+        console.log("no more");
       }
 
       if (delay_seconds) {
@@ -1308,7 +1310,7 @@ async function stop() {
   window.runningInstructions.style.display = "none";
   window.latencyCalibrationInstructions.style.display = "block";
   window.noAudioInputInstructions.style.display = "none";
-
+  
   window.estSamples.innerText = "...";
   window.est40to60.innerText = "...";
   window.estLatency.innerText = "...";
