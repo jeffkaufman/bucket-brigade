@@ -1225,7 +1225,7 @@ function update_active_users(user_summary, server_sample_rate) {
         leadButtonState = "start-singing";
         window.jumpToEnd.disabled = true;
       } else if (!imLeading && wasLeading) {
-        window.takeLead.textContent = "Take the Lead";
+        window.takeLead.textContent = "Lead a Song";
         leadButtonState = "take-lead";
         window.jumpToEnd.disabled = false;
       }
