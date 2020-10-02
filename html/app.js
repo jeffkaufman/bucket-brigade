@@ -800,6 +800,10 @@ async function start() {
   micNode.connect(playerNode);
   playerNode.connect(spkrNode);
 
+  window.pleaseBeKind.style.display = 'none';
+  window.inputSelector.style.display = 'none';
+  window.nameSelector.style.display = 'none';
+
   // XXX: This is not great, becase it will start the AudioWorklet, which will immediately proceed to start sending us audio, which we aren't ready for yet because we're about to go into calibration mode. However if we get enough to try to send to the server at this point, the ServerConnection will discard it anyway, since it hasn't been started yet.
   if (!switch_app_state(APP_STARTING, APP_RUNNING)) { return; }
   await reload_settings();
@@ -1325,7 +1329,7 @@ async function stop() {
   window.runningInstructions.style.display = "none";
   window.latencyCalibrationInstructions.style.display = "block";
   window.noAudioInputInstructions.style.display = "none";
-  
+
   window.estSamples.innerText = "...";
   window.est40to60.innerText = "...";
   window.estLatency.innerText = "...";

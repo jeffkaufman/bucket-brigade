@@ -107,7 +107,7 @@ body {
 </style>
 <h1>"Bucket Brigade" Audio Demo</h1>
 
-<div class=warning>
+<div class=warning id=pleaseBeKind>
 
 This is a prototype, currently only works in Chrome, and there is only
 one active instance. Please be kind! If you're a programmer, I would
@@ -178,17 +178,20 @@ interesting console messages.
   </div>
   </div>
 
-Enter your name and press enter:
-  <input id=userName></input>
+<div id=nameSelector>
+
+Enter your name and press enter: <input id=userName></input>
+
+</div>
 
 <div id=mainApp>
 
+<div id=inputSelector>
 Input device:
   <select id=inSelect disabled=true>
     <option>Loading...</option>
   </select>
-
-<p>
+</div>
 
 <div class=warning id=errorBox></div>
 
@@ -237,7 +240,7 @@ key.</span>  Press "start" when ready.
     <li>If you do hear beeps but <tt>#beeps detected</tt> is not counting up,
       turn up the volume.
     <li>If the beeps are very loud but it's still not counting up,
-      try changing your input device.
+      try refreshing the page and changing your input device.
     <li>If this is really not working, try clapping along on the beat.
     <li>If the system is still not registering your
       claps, try restarting your browser, or, if that fails,
