@@ -9,6 +9,9 @@ import numpy as np
 import random
 import opuslib
 import math
+import logging
+
+logging.basicConfig(filename='server.log',level=logging.DEBUG)
 
 FRAME_SIZE = 128
 
@@ -169,7 +172,7 @@ def unpack_multi(data):
         result.append(packet)
     return result
 
-def handle_post(in_data_raw, query_params):
+def handle_post(in_data_raw, query_params, headers):
     global last_request_clock
     global first_client_write_clock
     global first_client_total_samples
@@ -214,6 +217,10 @@ def handle_post(in_data_raw, query_params):
     username, = usernames
     if not userid or not username:
         raise ValueError("missing username/id")
+
+    if client_write_clock is None:
+        # New session, write some debug info to disk
+        logging.debug("*** New client:" + str(headers) + str(query_params) + "\n\n")
 
     # This indicates a new session, so flush everything. (There's probably a better way to handle this.)
     prev_last_write_clock = None
@@ -429,7 +436,7 @@ class OurHandler(BaseHTTPRequestHandler):
         userid = None
         try:
             userid, = query_params.get("userid", None)
-            data, x_audio_metadata = handle_post(in_data_raw, query_params)
+            data, x_audio_metadata = handle_post(in_data_raw, query_params, self.headers)
         except Exception as e:
             # Clear out stale session
             if userid and (userid in users):
