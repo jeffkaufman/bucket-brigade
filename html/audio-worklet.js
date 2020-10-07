@@ -337,14 +337,16 @@ class VolumeCalibrator {
       // About 5s.
       if (this.block_volumes.length == 18) {
         this.finished = true;
-        this.block_volumes.sort();
+        this.block_volumes.sort((a,b) => a-b);
 
         // 90th percentile volume
         const volume_90th =
               this.block_volumes[Math.trunc(this.block_volumes.length * .9)]
 
-        // Make the the 90th percentile average volume be 0.1.
-        input_gain_adjustment = 0.1 / volume_90th;
+        const target_avg = 0.0001;
+        input_gain_adjustment = Math.min(0.0001 / volume_90th, 10);
+        lib.log(LOG_INFO, "90th percentile avg volume: " + volume_90th +
+                "; input_gain_adjustment: " + input_gain_adjustment);
 
         return {
           "type": "volume_estimate",
