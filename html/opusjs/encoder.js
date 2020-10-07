@@ -373,7 +373,7 @@ var OpusEncoder = (function() {
       });
       return
     }
-    _opus_encoder_ctl(this.handle, /*OPUS_SET_BITRATE_REQUEST=*/4002, 131072);
+    console.log("OPUS_CTL: " + _opus_encoder_ctl(this.handle, /*OPUS_SET_BITRATE_REQUEST=*/4002, 131072));
     if (this.sampling_rate != this.codec_sampling_rate) {
       try {
         this.resampler = new SpeexResampler(this.channels, this.sampling_rate, this.codec_sampling_rate)
