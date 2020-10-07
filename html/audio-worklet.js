@@ -19,7 +19,7 @@ lib.log(LOG_INFO, "Audio worklet module loading");
 
 const FRAME_SIZE = 128;  // by Web Audio API spec
 
-let input_gain_adjustment = 1.0;
+let input_gain = 1.0;
 
 class ClockedRingBuffer {
   constructor(len_seconds, leadin_seconds, clock_reference) {
@@ -344,13 +344,13 @@ class VolumeCalibrator {
               this.block_volumes[Math.trunc(this.block_volumes.length * .9)]
 
         const target_avg = 0.0001;
-        input_gain_adjustment = Math.min(0.0001 / volume_90th, 10);
+        input_gain = Math.min(0.0001 / volume_90th, 10);
         lib.log(LOG_INFO, "90th percentile avg volume: " + volume_90th +
-                "; input_gain_adjustment: " + input_gain_adjustment);
+                "; input_gain: " + input_gain);
 
         return {
-          "type": "volume_estimate",
-          "volume": volume_90th
+          "type": "input_gain",
+          "input_gain": input_gain
         }
       } else {
         return {
@@ -517,7 +517,7 @@ class Player extends AudioWorkletProcessor {
         });
 
         for (var i = 0; i < input.length; i++) {
-          input[i] *= input_gain_adjustment;
+          input[i] *= input_gain;
         }
 
         mic_chunk = new AudioChunk({

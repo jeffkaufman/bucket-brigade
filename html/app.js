@@ -36,8 +36,6 @@ const MAX_MS_PER_BATCH = 900;
 // this must be 2.5, 5, 10, 20, 40, or 60.
 const OPUS_FRAME_MS = 60;
 
-var volume_adjustment = null;  // waiting for calibration
-
 lib.log(LOG_INFO, "Starting up");
 
 const myUserid = Math.round(Math.random()*100000000000)
@@ -1082,8 +1080,8 @@ async function handle_message(event) {
     window.reportedVolume.innerText =
       Math.round(100*human_readable_volume)/100 + "dB";
     return;
-  } else if (msg.type == "volume_estimate") {
-    volume_adjustment = msg.volume;
+  } else if (msg.type == "input_gain") {
+    window.inputGain.value = msg.input_gain;
     set_estimate_volume_mode(false);
     window.runningInstructions.style.display = "block";
     window.volumeCalibration.style.display = "none";
