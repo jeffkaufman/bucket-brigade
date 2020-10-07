@@ -35,7 +35,10 @@ OPUS_FRAME_BYTES = OPUS_FRAME_SAMPLES * CHANNELS * OPUS_BYTES_PER_SAMPLE
 # Leave this much space between users. Ideally this would be very
 # short, but it needs to be long enough to cover "client total time
 # consumed" or else people won't all hear each other.
-DELAY_INTERVAL = SAMPLE_RATE * 3  # 3s
+DELAY_INTERVAL = 3  # 3s
+
+# How many links to use for the chain of users before starting to double up.
+LAYERING_DEPTH = 8
 
 # If we have not heard from a user in N seconds, assume they are no longer
 # active.
@@ -44,6 +47,8 @@ USER_LIFETIME_SAMPLES = SAMPLE_RATE * 5
 # Force rounding to multiple of FRAME_SIZE
 queue = np.zeros((QUEUE_SECONDS * SAMPLE_RATE // FRAME_SIZE * FRAME_SIZE),
                  np.float32)
+
+max_position = DELAY_INTERVAL*LAYERING_DEPTH
 
 class User:
     def __init__(self, userid, name, last_heard_server_clock, delay_samples):
@@ -95,19 +100,24 @@ def wrap_assign(start, vals):
         queue[0:second_section_size] = vals[first_section_size:]
 
 def assign_delays(userid_lead):
+    global max_position
+
     users[userid_lead].delay_to_send = DELAY_INTERVAL
 
     positions = [x*DELAY_INTERVAL
-                 for x in range(2, 8)]
+                 for x in range(2, LAYERING_DEPTH)]
 
     # Randomly shuffle the remaining users, and assign them to positions. If we
     # have more users then positions, then double up.
     # TODO: perhaps we should prefer to double up from the end?
+    max_position = DELAY_INTERVAL*2
     for i, (_, userid) in enumerate(sorted(
             [(random.random(), userid)
              for userid in users
              if userid != userid_lead])):
-        users[userid].delay_to_send = positions[i % len(positions)]
+        position = positions[i % len(positions)]
+        users[userid].delay_to_send = position
+        max_position = max(position, max_position)
 
 def update_users(userid, username, server_clock, client_read_clock):
     # Delete expired users BEFORE adding us to the list, so that our session
@@ -277,7 +287,7 @@ def handle_post(in_data_raw, query_params, headers):
         song_end_clock = user.last_write_clock
 
         # They're done singing, send them to the end.
-        user.delay_to_send = 115 * SAMPLE_RATE
+        user.delay_to_send = max_position
 
     in_data = np.frombuffer(in_data_raw, dtype=np.uint8)
 
@@ -335,7 +345,7 @@ def handle_post(in_data_raw, query_params, headers):
                     f'{user.last_seen_write_clock} = '
                     f'{client_write_clock - n_samples - user.last_seen_write_clock})')
             if user.last_write_clock <= song_end_clock <= client_write_clock:
-                user.delay_to_send = 115 * SAMPLE_RATE
+                user.delay_to_send = max_position
 
         user.last_seen_write_clock = client_write_clock
         if client_write_clock is not None:
@@ -392,7 +402,7 @@ def handle_post(in_data_raw, query_params, headers):
         "client_write_clock": client_write_clock,
         "user_summary": user_summary(),
         "chats": user.chats_to_send,
-        "delay_samples": user.delay_to_send,
+        "delay_seconds": user.delay_to_send,
         "song_start_clock": song_start_clock,
         # Both the following uses units of 128-sample frames
         "queue_size": len(queue) / FRAME_SIZE,

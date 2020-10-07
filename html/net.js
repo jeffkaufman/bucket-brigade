@@ -117,16 +117,6 @@ export class ServerConnection extends ServerConnectionBase {
     check(saved_write_clock === null || saved_write_clock == metadata.client_write_clock, "wrong write clock from server");
     this.last_server_clock = metadata.server_clock;
 
-    // This is a bit of a hack; it would be better if we just passed around seconds in the first place.
-    if ("delay_samples" in metadata) {
-      var delay_samples = parseInt(metadata.delay_samples, 10);
-      if (Number.isInteger(delay_samples) && delay_samples > 0) {
-        metadata.delay_seconds = Math.round(delay_samples / this.clock_reference.sample_rate);
-        lib.log(LOG_DEBUG, "Got command from server to delay by (samples, seconds):", delay_samples, metadata.delay_seconds);
-      }
-      delete metadata.delay_samples;
-    }
-
     var result_interval = new ClockInterval({
       reference: this.clock_reference,
       end: saved_read_clock,
