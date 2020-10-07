@@ -98,7 +98,7 @@ def assign_delays(userid_lead):
     users[userid_lead].delay_to_send = DELAY_INTERVAL
 
     positions = [x*DELAY_INTERVAL
-                 for x in range(2, 15)]
+                 for x in range(2, 8)]
 
     # Randomly shuffle the remaining users, and assign them to positions. If we
     # have more users then positions, then double up.
