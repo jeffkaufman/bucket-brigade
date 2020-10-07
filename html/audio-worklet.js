@@ -19,6 +19,8 @@ lib.log(LOG_INFO, "Audio worklet module loading");
 
 const FRAME_SIZE = 128;  // by Web Audio API spec
 
+let input_gain_adjustment = 1.0;
+
 class ClockedRingBuffer {
   constructor(len_seconds, leadin_seconds, clock_reference) {
     if (leadin_seconds > len_seconds) {
@@ -305,6 +307,61 @@ class LatencyCalibrator {
   }
 }
 
+class VolumeCalibrator {
+  constructor() {
+    this.volumes = [];
+    this.block_volumes = [];
+    this.finished = false;
+  }
+
+  process_volume_measurement(input) {
+    if (this.finished) {
+      return null;
+    }
+
+    let volume = 0;
+    for (var i = 0 ; i < input.length; i++) {
+      volume += Math.abs(input[i]);
+    }
+    this.volumes.push(volume / input.length);
+
+    if (this.volumes.length == 100) {
+      var block_volume = 0;
+      for (var i = 0; i < this.volumes.length; i++) {
+        block_volume += this.volumes[i];
+      }
+      block_volume = block_volume / this.volumes.length;
+      this.block_volumes.push(block_volume / this.volumes.length);
+      this.volumes = [];
+
+      // About 5s.
+      if (this.block_volumes.length == 18) {
+        this.finished = true;
+        this.block_volumes.sort();
+
+        // 90th percentile volume
+        const volume_90th =
+              this.block_volumes[Math.trunc(this.block_volumes.length * .9)]
+
+        // Make the the 90th percentile average volume be 0.1.
+        input_gain_adjustment = 0.1 / volume_90th;
+
+        return {
+          "type": "volume_estimate",
+          "volume": volume_90th
+        }
+      } else {
+        return {
+          "type": "current_volume",
+          "volume": block_volume
+        }
+      }
+    }
+
+    return null;
+  }
+}
+
 class Player extends AudioWorkletProcessor {
   constructor () {
     lib.log(LOG_INFO, "Audio worklet object constructing");
@@ -334,6 +391,7 @@ class Player extends AudioWorkletProcessor {
         // Reset and/or set up everything.
         this.latency_calibrator = null;
         this.latency_measurement_mode = false;
+        this.volume_measurement_mode = false;
 
         this.epoch = msg.epoch;
 
@@ -361,6 +419,14 @@ class Player extends AudioWorkletProcessor {
           this.latency_calibrator = new LatencyCalibrator();
         } else {
           this.latency_calibrator = null;
+        }
+        return;
+      } else if (msg.type == "volume_estimation_mode") {
+        this.volume_measurement_mode = msg.enabled;
+        if (this.volume_measurement_mode) {
+          this.volume_calibrator = new VolumeCalibrator();
+        } else {
+          this.volume_calibrator = null;
         }
         return;
       } else if (msg.type == "mic_pause_mode") {
@@ -447,6 +513,11 @@ class Player extends AudioWorkletProcessor {
           //   that aligns them.
           end: play_chunk.end - this.local_latency,
         });
+
+        for (var i = 0; i < input.length; i++) {
+          input[i] *= input_gain_adjustment;
+        }
+
         mic_chunk = new AudioChunk({
           data: input,
           interval
@@ -528,6 +599,12 @@ class Player extends AudioWorkletProcessor {
           this.port.postMessage(calibration_result);
         }
         // Don't even send or receive audio in this mode.
+      } else if (this.volume_measurement_mode) {
+        var calibration_result = this.volume_calibrator.process_volume_measurement(input);
+        if (calibration_result !== null) {
+          this.port.postMessage(calibration_result);
+        }
+        output = new Float32Array(output.length);
       } else {
         if (this.mic_pause_mode) {
           // Mute the microphone by replacing the input with zeros.

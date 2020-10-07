@@ -36,6 +36,8 @@ const MAX_MS_PER_BATCH = 900;
 // this must be 2.5, 5, 10, 20, 40, or 60.
 const OPUS_FRAME_MS = 60;
 
+var volume_adjustment = null;  // waiting for calibration
+
 lib.log(LOG_INFO, "Starting up");
 
 const myUserid = Math.round(Math.random()*100000000000)
@@ -248,7 +250,9 @@ function set_controls() {
     in_select.disabled = false;
   }
 
-  if (app_state == APP_RUNNING || app_state == APP_CALIBRATING) {
+  if (app_state == APP_RUNNING ||
+      app_state == APP_CALIBRATING_LATENCY ||
+      app_state == APP_CALIBRATING_VOLUME) {
     start_button.textContent = "Stop";
     start_button.disabled = false;
   } else if (app_state == APP_STOPPED) {
@@ -329,7 +333,8 @@ const APP_INITIALIZING = "initializing";
 const APP_STOPPED = "stopped";
 const APP_STARTING = "starting";
 const APP_RUNNING = "running";
-const APP_CALIBRATING = "calibrating";
+const APP_CALIBRATING_LATENCY = "calibrating_latency";
+const APP_CALIBRATING_VOLUME = "calibrating_volume";
 const APP_STOPPING = "stopping";
 const APP_RESTARTING = "restarting";
 const APP_CRASHED = "crashed";
@@ -377,6 +382,13 @@ var max_sample_batch_size;
 function set_estimate_latency_mode(mode) {
   playerNode.port.postMessage({
     "type": "latency_estimation_mode",
+    "enabled": mode
+  });
+}
+
+function set_estimate_volume_mode(mode) {
+  playerNode.port.postMessage({
+    "type": "volume_estimation_mode",
     "enabled": mode
   });
 }
@@ -812,7 +824,7 @@ async function start() {
 
   if (!disable_latency_measurement_checkbox.checked) {
     set_estimate_latency_mode(true);
-    switch_app_state(APP_RUNNING, APP_CALIBRATING);
+    switch_app_state(APP_RUNNING, APP_CALIBRATING_LATENCY);
   } else {
     window.est40to60.innerText = "0ms";
     window.estLatency.innerText = "0ms";
@@ -834,7 +846,9 @@ async function start() {
 
 // Should really be named "restart everything", which is what it does.
 async function reload_settings(startup) {
-  if (app_state != APP_RUNNING && app_state != APP_CALIBRATING) {
+  if (app_state != APP_RUNNING &&
+      app_state != APP_CALIBRATING_LATENCY &&
+      app_state != APP_CALIBRATING_VOLUME) {
     lib.log(LOG_WARNING, "Tried to reload_settings while neither running nor calibrating, skipping.")
     return;
   }
@@ -1012,7 +1026,9 @@ function rebless(o) {
 async function handle_message(event) {
   var msg = event.data;
   lib.log(LOG_VERYSPAM, "onmessage in main thread received ", msg);
-  if (app_state != APP_RUNNING && app_state != APP_CALIBRATING) {
+  if (app_state != APP_RUNNING &&
+      app_state != APP_CALIBRATING_LATENCY &&
+      app_state != APP_CALIBRATING_VOLUME) {
     lib.log(LOG_WARNING, "Ending message handler early because not running or calibrating");
     return;
   }
@@ -1052,13 +1068,26 @@ async function handle_message(event) {
         send_local_latency();
         window.initialInstructions.style.display = "none";
         window.calibration.style.display = "none";
-        window.runningInstructions.style.display = "block";
         window.latencyCalibrationInstructions.style.display = "none";
         set_estimate_latency_mode(false);
-        if (!switch_app_state(APP_CALIBRATING, APP_RUNNING)) { return; }
-        await server_connection.start();
+
+        window.volumeCalibration.style.display = "block";
+        switch_app_state(APP_CALIBRATING_LATENCY, APP_CALIBRATING_VOLUME);
       }
     }
+    return;
+  } else if (msg.type == "current_volume") {
+    // Inverse of Math.exp(6.908 * linear_volume)/1000;
+    const human_readable_volume = Math.log(msg.volume * 1000) / 6.908;
+    window.reportedVolume.innerText = Math.round(100*human_readable_volume);
+    return;
+  } else if (msg.type == "volume_estimate") {
+    volume_adjustment = msg.volume;
+    set_estimate_volume_mode(false);
+    window.runningInstructions.style.display = "block";
+    window.volumeCalibration.style.display = "none";
+    switch_app_state(APP_CALIBRATING_VOLUME, APP_RUNNING);
+    await server_connection.start();
     return;
   } else if (msg.type == "bluetooth_bug_restart") {
     // God help us, the following is a workaround for an issue we see on gwillen's machine:
@@ -1319,7 +1348,9 @@ async function try_increase_batch_size_and_reload() {
 }
 
 async function stop() {
-  if (app_state != APP_RUNNING && app_state != APP_CALIBRATING) {
+  if (app_state != APP_RUNNING &&
+      app_state != APP_CALIBRATING_LATENCY &&
+      app_state != APP_CALIBRATING_VOLUME) {
     lib.log(LOG_WARNING, "Trying to stop, but current state is not running or calibrating? Stopping anyway.");
   }
   switch_app_state(app_state, APP_STOPPING);
@@ -1328,6 +1359,7 @@ async function stop() {
   window.calibration.style.display = "none";
   window.runningInstructions.style.display = "none";
   window.latencyCalibrationInstructions.style.display = "block";
+  window.volumeCalibration.style.display = "none";
   window.noAudioInputInstructions.style.display = "none";
 
   window.estSamples.innerText = "...";
@@ -1356,6 +1388,11 @@ window.micToggleButton.addEventListener("click", toggle_mic);
 window.speakerToggleButton.addEventListener("click", toggle_speaker);
 click_volume_slider.addEventListener("change", click_volume_change);
 audio_offset_text.addEventListener("change", audio_offset_change);
+
+window.startVolumeCalibration.addEventListener("click", () => {
+  window.startVolumeCalibration.disabled = true;
+  set_estimate_volume_mode(true);
+});
 
 let globalVolumeToSend = null;
 window.globalVolumeControl.addEventListener("change", () => {

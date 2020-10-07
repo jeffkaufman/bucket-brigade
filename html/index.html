@@ -104,6 +104,10 @@ body {
 #micToggleButton, #speakerToggleButton {
   display: none;
 }
+
+#volumeCalibration {
+  display: none;
+}
 </style>
 <h1>"Bucket Brigade" Audio Demo</h1>
 
@@ -270,10 +274,26 @@ value=100>
 
 <p>
 
+<div id=volumeCalibration>
+  Your latency is now calibrated.  Next we need to calibrate your
+  singing volume.  Pick something you're comfortable singing, start
+  singing, and then click <button id=startVolumeCalibration>I've begun
+  singing</button>.
+
+  <p>
+
+  <div id=reportVolume>
+    Volume: <span id=reportedVolume>...</span>
+  </div>
+
+</div>
+
+<p>
+
 <div id=runningInstructions>
 
-You're calibrated now!  Talk to each other in chat and figure out
-who's going to lead the next song.  They should click the "Lead a
+You're fully calibrated now!  Talk to each other in chat and figure
+out who's going to lead the next song.  They should click the "Lead a
 Song" button.
 
 <p>
