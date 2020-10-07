@@ -326,6 +326,7 @@ var OpusEncoder = (function() {
       });
       return
     }
+    _opus_encoder_ctl(this.handle, /*OPUS_SET_BITRATE_REQUEST=*/4002, 65536);
   });
   OpusEncoder.prototype.setup = (function(config) {
     var request_id = config.request_id;
@@ -372,6 +373,7 @@ var OpusEncoder = (function() {
       });
       return
     }
+    _opus_encoder_ctl(this.handle, /*OPUS_SET_BITRATE_REQUEST=*/4002, 65536);
     if (this.sampling_rate != this.codec_sampling_rate) {
       try {
         this.resampler = new SpeexResampler(this.channels, this.sampling_rate, this.codec_sampling_rate)
