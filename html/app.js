@@ -1079,7 +1079,8 @@ async function handle_message(event) {
   } else if (msg.type == "current_volume") {
     // Inverse of Math.exp(6.908 * linear_volume)/1000;
     const human_readable_volume = Math.log(msg.volume * 1000) / 6.908;
-    window.reportedVolume.innerText = Math.round(100*human_readable_volume);
+    window.reportedVolume.innerText =
+      Math.round(100*human_readable_volume)/100 + "dB";
     return;
   } else if (msg.type == "volume_estimate") {
     volume_adjustment = msg.volume;
