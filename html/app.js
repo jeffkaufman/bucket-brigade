@@ -1083,6 +1083,7 @@ async function handle_message(event) {
   } else if (msg.type == "input_gain") {
     window.inputGain.value = msg.input_gain;
     set_estimate_volume_mode(false);
+    window.startVolumeCalibration.disabled = false;
     window.runningInstructions.style.display = "block";
     window.volumeCalibration.style.display = "none";
     switch_app_state(APP_CALIBRATING_VOLUME, APP_RUNNING);
