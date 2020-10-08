@@ -326,6 +326,7 @@ var OpusEncoder = (function() {
       });
       return
     }
+    // This doesn't work; maybe a varargs issue?
     _opus_encoder_ctl(this.handle, /*OPUS_SET_BITRATE_REQUEST=*/4002, 64000);
   });
   OpusEncoder.prototype.setup = (function(config) {
@@ -373,6 +374,7 @@ var OpusEncoder = (function() {
       });
       return
     }
+    // This doesn't work; maybe a varargs issue?
     console.log("OPUS_CTL: " + _opus_encoder_ctl(this.handle, /*OPUS_SET_BITRATE_REQUEST=*/4002, 64000));
     if (this.sampling_rate != this.codec_sampling_rate) {
       try {
