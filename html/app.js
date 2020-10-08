@@ -1365,8 +1365,12 @@ async function stop() {
   window.est40to60.innerText = "...";
   window.estLatency.innerText = "...";
 
-  if (paused) {
-    toggle_pause();
+  if (micPaused) {
+    toggle_mic();
+  }
+
+  if (speakerPaused) {
+    toggle_speaker();
   }
 
   lib.log(LOG_INFO, "Closing audio context and mic stream...");
