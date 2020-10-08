@@ -231,39 +231,61 @@ var peak_out_text = document.getElementById('peakOut');
 var client_total_time = document.getElementById('clientTotalTime');
 var client_read_slippage = document.getElementById('clientReadSlippage');
 
+function allStatesExcept(states) {
+  return [...ALL_STATES].filter(state => !states.includes(state));
+}
+
+
+function setVisibleIn(element, enabled_states, visible='block') {
+  element.style.display = enabled_states.includes(app_state) ? visible : 'none';
+}
+
+function setEnabledIn(element, enabled_states) {
+  element.disabled = !enabled_states.includes(app_state);
+}
+
+
 function set_controls() {
-  // Defaults, will be overridden below depending on state
-  window.micToggleButton.style.display = "none";
-  window.speakerToggleButton.style.display = "none";
-  loopback_mode_select.disabled = true;
-  click_bpm.disabled = true;
+  setVisibleIn(window.micToggleButton, [APP_RUNNING]);
+  setVisibleIn(window.speakerToggleButton, [APP_RUNNING]);
 
-  in_select.disabled = true;
+  setEnabledIn(loopback_mode_select, [APP_STOPPED])
+  setEnabledIn(click_bpm, allStatesExcept([APP_STOPPED]));
 
-  start_button.disabled = true;
+  setEnabledIn(in_select, allStatesExcept([APP_INITIALIZING]));
+  setEnabledIn(start_button, allStatesExcept([APP_INITIALIZING]));
+
   start_button.textContent = ". . .";
-
-
-  if (app_state != APP_INITIALIZING) {
-    in_select.disabled = false;
-  }
-
-  if (app_state == APP_RUNNING ||
-      app_state == APP_CALIBRATING_LATENCY ||
-      app_state == APP_CALIBRATING_VOLUME) {
-    start_button.textContent = "Stop";
-    start_button.disabled = false;
-  } else if (app_state == APP_STOPPED) {
+  if (app_state == APP_STOPPED) {
     start_button.textContent = "Start";
-    start_button.disabled = false;
-    loopback_mode_select.disabled = false;
-    click_bpm.disabled = false;
+  } else if (app_state != APP_INITIALIZING) {
+    start_button.textContent = "Stop";
   }
 
-  if (app_state == APP_RUNNING) {
-    window.micToggleButton.style.display = "inline-block";
-    window.speakerToggleButton.style.display = "inline-block";
-  }
+  setVisibleIn(window.pleaseBeKind, allStatesExcept(ACTIVE_STATES));
+  setVisibleIn(window.inputSelector, allStatesExcept(ACTIVE_STATES));
+  setVisibleIn(window.nameSelector, allStatesExcept(ACTIVE_STATES));
+
+  setVisibleIn(window.micToggleButton, [APP_RUNNING], "inline-block");
+  setVisibleIn(window.speakerToggleButton, [APP_RUNNING], "inline-block");
+
+  setVisibleIn(window.initialInstructions, [
+    APP_INITIALIZING, APP_CALIBRATING_LATENCY, APP_STOPPING]);
+  setVisibleIn(window.latencyCalibrationInstructions, [
+    APP_INITIALIZING, APP_CALIBRATING_LATENCY, APP_STOPPING]);
+
+  setVisibleIn(window.calibration, [APP_CALIBRATING_LATENCY]);
+
+  setVisibleIn(window.volumeCalibration, [APP_CALIBRATING_VOLUME]);
+  setEnabledIn(window.startVolumeCalibration, [APP_CALIBRATING_VOLUME]);
+
+  setVisibleIn(window.runningInstructions, [APP_RUNNING]);
+
+  setVisibleIn(window.noAudioInputInstructions, []);
+
+  window.estSamples.innerText = "...";
+  window.est40to60.innerText = "...";
+  window.estLatency.innerText = "...";
 }
 
 function in_select_change() {
@@ -339,19 +361,21 @@ const APP_CRASHED = "crashed";
 
 var app_state = APP_INITIALIZING;
 
-function switch_app_state(oldstate, newstate) {
-  lib.log(LOG_INFO, "Changing app state from", oldstate, "to", newstate, ".");
+const ALL_STATES = [
+  APP_INITIALIZING, APP_STOPPED, APP_STARTING, APP_RUNNING,
+  APP_CALIBRATING_LATENCY, APP_CALIBRATING_VOLUME, APP_STOPPING,
+  APP_RESTARTING, APP_CRASHED];
 
-  if (app_state != oldstate) {
-    lib.log(LOG_WARNING, "Changed app state from", oldstate, "to", newstate, ", but current state is actually", app_state, ".");
-    app_state = newstate;
-    return false;
-  }
+const ACTIVE_STATES = [
+  APP_RUNNING, APP_CALIBRATING_LATENCY, APP_CALIBRATING_VOLUME
+];
 
+function switch_app_state(newstate) {
+  lib.log(LOG_INFO, "Changing app state from", app_state, "to", newstate, ".");
   app_state = newstate;
   set_controls();
-  return true;
 }
+set_controls();
 
 // Used to coordinate changes to various parameters while messages may still be in flight.
 var epoch = 0;
@@ -715,7 +739,7 @@ class AudioDecoder {
 }
 
 async function start() {
-  if (!switch_app_state(APP_STOPPED, APP_STARTING)) { return; }
+  switch_app_state(APP_STARTING);
 
   if (audioCtx) {
     lib.log(LOG_ERROR, "NOT RUNNING, BUT ALREADY HAVE AUDIOCTX?");
@@ -810,28 +834,16 @@ async function start() {
   micNode.connect(playerNode);
   playerNode.connect(spkrNode);
 
-  window.pleaseBeKind.style.display = 'none';
-  window.inputSelector.style.display = 'none';
-  window.nameSelector.style.display = 'none';
-
   // XXX: This is not great, becase it will start the AudioWorklet, which will immediately proceed to start sending us audio, which we aren't ready for yet because we're about to go into calibration mode. However if we get enough to try to send to the server at this point, the ServerConnection will discard it anyway, since it hasn't been started yet.
-  if (!switch_app_state(APP_STARTING, APP_RUNNING)) { return; }
   await reload_settings();
-
-  window.calibration.style.display = "block";
 
   if (!disable_latency_measurement_checkbox.checked) {
     set_estimate_latency_mode(true);
-    switch_app_state(APP_RUNNING, APP_CALIBRATING_LATENCY);
+    switch_app_state(APP_CALIBRATING_LATENCY);
   } else {
-    window.est40to60.innerText = "0ms";
-    window.estLatency.innerText = "0ms";
-    window.msClientLatency.value = "0ms";
+    switch_app_state(APP_RUNNING);
     send_local_latency();
-    window.initialInstructions.style.display = "none";
-    window.calibration.style.display = "none";
-    window.runningInstructions.style.display = "block";
-    window.latencyCalibrationInstructions.style.display = "none";
+
     try {
       await server_connection.start();
     } catch (e) {
@@ -844,13 +856,14 @@ async function start() {
 
 // Should really be named "restart everything", which is what it does.
 async function reload_settings(startup) {
-  if (app_state != APP_RUNNING &&
+  if (app_state != APP_STARTING &&
+      app_state != APP_RUNNING &&
       app_state != APP_CALIBRATING_LATENCY &&
       app_state != APP_CALIBRATING_VOLUME) {
     lib.log(LOG_WARNING, "Tried to reload_settings while neither running nor calibrating, skipping.")
     return;
   }
-  switch_app_state(app_state, APP_RESTARTING);
+  switch_app_state(APP_RESTARTING);
 
   lib.log(LOG_INFO, "Resetting the world! Old epoch was:", epoch);
   epoch +=1;
@@ -905,7 +918,7 @@ async function reload_settings(startup) {
   }
   // This will reset the audio worklett, flush its buffer, and start it up again.
   playerNode.port.postMessage(audio_params);
-  switch_app_state(APP_RESTARTING, APP_RUNNING);
+  switch_app_state(APP_RUNNING);
 }
 
 function send_local_latency() {
@@ -1064,13 +1077,8 @@ async function handle_message(event) {
         // standards for close enough, figuring that they're having
         // trouble clapping on the beat.
         send_local_latency();
-        window.initialInstructions.style.display = "none";
-        window.calibration.style.display = "none";
-        window.latencyCalibrationInstructions.style.display = "none";
         set_estimate_latency_mode(false);
-
-        window.volumeCalibration.style.display = "block";
-        switch_app_state(APP_CALIBRATING_LATENCY, APP_CALIBRATING_VOLUME);
+        switch_app_state(APP_CALIBRATING_VOLUME);
       }
     }
     return;
@@ -1083,10 +1091,7 @@ async function handle_message(event) {
   } else if (msg.type == "input_gain") {
     window.inputGain.value = msg.input_gain;
     set_estimate_volume_mode(false);
-    window.startVolumeCalibration.disabled = false;
-    window.runningInstructions.style.display = "block";
-    window.volumeCalibration.style.display = "none";
-    switch_app_state(APP_CALIBRATING_VOLUME, APP_RUNNING);
+    switch_app_state(APP_RUNNING);
     await server_connection.start();
     return;
   } else if (msg.type == "bluetooth_bug_restart") {
@@ -1353,18 +1358,7 @@ async function stop() {
       app_state != APP_CALIBRATING_VOLUME) {
     lib.log(LOG_WARNING, "Trying to stop, but current state is not running or calibrating? Stopping anyway.");
   }
-  switch_app_state(app_state, APP_STOPPING);
-
-  window.initialInstructions.style.display = "block";
-  window.calibration.style.display = "none";
-  window.runningInstructions.style.display = "none";
-  window.latencyCalibrationInstructions.style.display = "block";
-  window.volumeCalibration.style.display = "none";
-  window.noAudioInputInstructions.style.display = "none";
-
-  window.estSamples.innerText = "...";
-  window.est40to60.innerText = "...";
-  window.estLatency.innerText = "...";
+  switch_app_state(APP_STOPPING);
 
   if (micPaused) {
     toggle_mic();
@@ -1384,7 +1378,7 @@ async function stop() {
     micStream = undefined;
   }
   lib.log(LOG_INFO, "...closed.");
-  switch_app_state(APP_STOPPING, APP_STOPPED);
+  switch_app_state(APP_STOPPED);
 }
 
 start_button.addEventListener("click", start_stop);
@@ -1448,7 +1442,7 @@ async function initialize() {
     }
   }
 
-  switch_app_state(APP_INITIALIZING, APP_STOPPED);
+  switch_app_state(APP_STOPPED);
 }
 
 function hide_buttons_and_append_answer(element, answer) {
