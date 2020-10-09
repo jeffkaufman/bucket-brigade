@@ -301,7 +301,7 @@ def handle_post(in_data_raw, query_params, headers):
     #   future" as of the last request, and we never touch the future,
     #   so nothing has touched it yet "this time around".
     if last_request_clock is not None:
-        clear_samples = min(server_clock - last_request_clock, len(queue))
+        clear_samples = min(server_clock - last_request_clock, QUEUE_LENGTH)
         wrap_assign(
             audio_queue, last_request_clock, np.zeros(clear_samples, np.float32))
         wrap_assign(
@@ -339,7 +339,7 @@ def handle_post(in_data_raw, query_params, headers):
 
     if client_write_clock is None:
         pass
-    elif client_write_clock - n_samples < server_clock - len(queue):
+    elif client_write_clock - n_samples < server_clock - QUEUE_LENGTH:
         # Client is too far behind and going to wrap the buffer. :-(
         raise ValueError("Client's write clock is too far in the past")
     else:
@@ -433,7 +433,7 @@ def handle_post(in_data_raw, query_params, headers):
         "delay_seconds": user.delay_to_send,
         "song_start_clock": song_start_clock,
         # Both the following uses units of 128-sample frames
-        "queue_size": len(queue) / FRAME_SIZE,
+        "queue_size": QUEUE_LENGTH / FRAME_SIZE,
     })
 
     user.chats_to_send.clear()
