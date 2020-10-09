@@ -366,13 +366,13 @@ def handle_post(in_data_raw, query_params, headers):
              client_write_clock - n_samples < song_end_clock)):
             old_audio = wrap_get(
                 audio_queue, client_write_clock - n_samples, n_samples)
-            new_audio = existing + in_data
+            new_audio = old_audio + in_data
             wrap_assign(
                 audio_queue, client_write_clock - n_samples, new_audio)
 
             old_n_people = wrap_get(
                 n_people_queue, client_write_clock - n_samples, n_samples)
-            new_n_people = existing_n_people + np.ones(n_samples, np.int16)
+            new_n_people = old_n_people + np.ones(n_samples, np.int16)
             wrap_assign(
                 n_people_queue, client_write_clock - n_samples, new_n_people)
 
