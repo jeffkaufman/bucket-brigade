@@ -45,10 +45,15 @@ LAYERING_DEPTH = 8
 USER_LIFETIME_SAMPLES = SAMPLE_RATE * 5
 
 # Force rounding to multiple of FRAME_SIZE
-queue = np.zeros((QUEUE_SECONDS * SAMPLE_RATE // FRAME_SIZE * FRAME_SIZE),
-                 np.float32)
+QUEUE_LENGTH = (QUEUE_SECONDS * SAMPLE_RATE // FRAME_SIZE * FRAME_SIZE)
+
+audio_queue = np.zeros(QUEUE_LENGTH, np.float32)
+n_people_queue = np.zeros(QUEUE_LENGTH, np.int16)
 
 max_position = DELAY_INTERVAL*LAYERING_DEPTH
+
+# For volume scaling.
+N_PHANTOM_PEOPLE = 2
 
 class User:
     def __init__(self, userid, name, last_heard_server_clock, delay_samples):
@@ -68,7 +73,7 @@ class User:
 
 users = {} # userid -> User
 
-def wrap_get(start, len_vals):
+def wrap_get(queue, start, len_vals):
     start_in_queue = start % len(queue)
 
     if start_in_queue + len_vals <= len(queue):
@@ -84,7 +89,7 @@ def wrap_get(start, len_vals):
             queue[0:second_section_size]
             ])
 
-def wrap_assign(start, vals):
+def wrap_assign(queue, start, vals):
     assert len(vals) <= len(queue)
     start_in_queue = start % len(queue)
 
@@ -296,9 +301,11 @@ def handle_post(in_data_raw, query_params, headers):
     #   future" as of the last request, and we never touch the future,
     #   so nothing has touched it yet "this time around".
     if last_request_clock is not None:
-        n_zeros = min(server_clock - last_request_clock, len(queue))
-        zeros = np.zeros(n_zeros, np.float32)
-        wrap_assign(last_request_clock, zeros)
+        clear_samples = min(server_clock - last_request_clock, len(queue))
+        wrap_assign(
+            audio_queue, last_request_clock, np.zeros(clear_samples, np.float32))
+        wrap_assign(
+            n_people_queue, last_request_clock, np.zeros(clear_samples, np.int16))
 
     saved_last_request_clock = last_request_clock
     last_request_clock = server_clock
@@ -357,9 +364,17 @@ def handle_post(in_data_raw, query_params, headers):
         if (song_start_clock and client_write_clock > song_start_clock and
             (not song_end_clock or
              client_write_clock - n_samples < song_end_clock)):
-            wrap_assign(client_write_clock - n_samples,
-                        wrap_get(client_write_clock - n_samples, n_samples) +
-                        in_data)
+            old_audio = wrap_get(
+                audio_queue, client_write_clock - n_samples, n_samples)
+            new_audio = existing + in_data
+            wrap_assign(
+                audio_queue, client_write_clock - n_samples, new_audio)
+
+            old_n_people = wrap_get(
+                n_people_queue, client_write_clock - n_samples, n_samples)
+            new_n_people = existing_n_people + np.ones(n_samples, np.int16)
+            wrap_assign(
+                n_people_queue, client_write_clock - n_samples, new_n_people)
 
     # Why subtract n_samples above and below? Because the future is to the
     #   right. So when a client asks for n samples at time t, what they
@@ -384,7 +399,20 @@ def handle_post(in_data_raw, query_params, headers):
     if query_params.get("loopback", [None])[0] == "true":
         data = in_data
     else:
-        data = wrap_get(client_read_clock - n_samples, n_samples)
+        data = wrap_get(audio_queue, client_read_clock - n_samples, n_samples)
+        n_people = wrap_get(
+            n_people_queue, client_read_clock - n_samples, n_samples)
+
+        # We could scale volume by having n_people be the number of
+        # earlier people and then scale by a simple 1/n_people.  But a
+        # curve of (1 + X) / (n_people + X) falls a bit less
+        # dramatically and should sound better.
+        #
+        # Compare:
+        #   https://www.wolframalpha.com/input/?i=graph+%281%29+%2F+%28x%29+from+1+to+10
+        #   https://www.wolframalpha.com/input/?i=graph+%281%2B3%29+%2F+%28x%2B3%29+from+1+to+10
+        data = data * (1 + N_PHANTOM_PEOPLE) / (n_people + N_PHANTOM_PEOPLE)
+
         data *= global_volume
 
     packets = data.reshape([-1, OPUS_FRAME_SAMPLES])
