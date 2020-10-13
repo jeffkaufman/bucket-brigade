@@ -48,12 +48,17 @@ export class ServerConnection extends ServerConnectionBase {
       return;
     }
 
-    var { server_clock, server_sample_rate } = await query_server_clock(this.target_url);
+    const server_clock_data = await query_server_clock(this.target_url);
+    if (!server_clock_data) {
+      return false;
+    }
+    var { server_clock, server_sample_rate } = server_clock_data;
 
     this.clock_reference = new ServerClockReference({ sample_rate: server_sample_rate });
     this.audio_offset = this.audio_offset_seconds * server_sample_rate;
     this.read_clock = server_clock - this.audio_offset;
     this.running = true;
+    return true;
   }
 
   stop() {
@@ -150,11 +155,12 @@ export class FakeServerConnection extends ServerConnectionBase {
   async start() {
     if (this.running) {
       lib.log(LOG_WARNING, "FakeServerConnection already started");
-      return;
+      return false;
     }
 
     this.running = true;
     this.read_clock = Math.round(Date.now() / 1000 * this.clock_reference.sample_rate);
+    return true;
   }
 
   stop() {
@@ -211,7 +217,12 @@ export async function query_server_clock(target_url) {
   var fetch_result = await fetch(target_url, {
     method: "get",  // default
     cache: "no-store",
-  });
+  }).catch(() => Promise.reject({
+    message: 'Could not connect to the server. ' +
+      'This is probably a problem with your internet connection. ' +
+      'Please refresh and try again.',
+    unpreventable: true,
+  }));
   // We need one-way latency; dividing by 2 is unprincipled but probably close enough.
   // XXX: This is not actually correct. We should really be using the roundtrip latency here. Because we want to know not "what is the server clock now", but "what will the server clock be by the time my request reaches the server."
   // Proposed alternative:
@@ -241,74 +252,72 @@ export async function samples_to_server(outdata, target_url, send_metadata) {
     outdata = new Uint8Array();
   }
 
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
     var xhr = new XMLHttpRequest();
+    xhr.onerror = () => {
+      resolve(null);
+    }
     xhr.onreadystatechange = () => {
       if (xhr.readyState == 4 /* done*/) {
-        handle_xhr_result(xhr, resolve, reject);
+        handle_xhr_result(xhr, resolve);
       }
     };
     xhr.debug_id = Date.now();
 
-    try {
-      var params = new URLSearchParams();
+    var params = new URLSearchParams();
 
-      params.set('read_clock', read_clock);
-      params.set('n_samples', n_samples);
-      if (write_clock !== null) {
-        params.set('write_clock', write_clock);
-      }
-      if (loopback_mode == "server") {
-        params.set('loopback', true);
-        lib.log(LOG_SPAM, "looping back samples at server");
-      }
-      params.set('username', username);
-      params.set('userid', userid);
-      if (chatsToSend.length) {
-        params.set('chat', JSON.stringify(chatsToSend));
-      }
-      if (requestedLeadPosition) {
-        params.set('request_lead', '1');
-      }
-      if (markStartSinging) {
-        params.set('mark_start_singing', '1');
-      }
-      if (markStopSinging) {
-        params.set('mark_stop_singing', '1');
-      }
-      if (globalVolumeToSend != null) {
-        params.set('volume', globalVolumeToSend);
-      }
-      if (micVolumesToSend.length > 0) {
-        params.set('mic_volume', JSON.stringify(micVolumesToSend));
-      }
-      if (backingTrackToSend) {
-        params.set('track', backingTrackToSend);
-      }
-
-      target_url.search = params.toString();
-
-      // Arbitrary cap; browser cap is 8(?) after which they queue
-      if (xhrs_inflight >= 4) {
-        lib.log(LOG_WARNING, "NOT SENDING XHR w/ ID:", xhr.debug_id, " due to limit -- already in flight:", xhrs_inflight);
-        return reject(Error("Too many XHRs in flight."));
-      }
-
-      lib.log(LOG_SPAM, "Sending XHR w/ ID:", xhr.debug_id, "already in flight:", xhrs_inflight++, "; data size:", outdata.length);
-      xhr.open("POST", target_url, true);
-      xhr.setRequestHeader("Content-Type", "application/octet-stream");
-      xhr.responseType = "arraybuffer";
-      xhr.send(outdata);
-      lib.log(LOG_SPAM, "... XHR sent.");
-    } catch(e) {
-      lib.log(LOG_ERROR, "Failed to make XHR:", e);
-      return reject(new Error("Failed to make XHR."));
+    params.set('read_clock', read_clock);
+    params.set('n_samples', n_samples);
+    if (write_clock !== null) {
+      params.set('write_clock', write_clock);
     }
+    if (loopback_mode == "server") {
+      params.set('loopback', true);
+      lib.log(LOG_SPAM, "looping back samples at server");
+    }
+    params.set('username', username);
+    params.set('userid', userid);
+    if (chatsToSend.length) {
+      params.set('chat', JSON.stringify(chatsToSend));
+    }
+    if (requestedLeadPosition) {
+      params.set('request_lead', '1');
+    }
+    if (markStartSinging) {
+      params.set('mark_start_singing', '1');
+    }
+    if (markStopSinging) {
+      params.set('mark_stop_singing', '1');
+    }
+    if (globalVolumeToSend != null) {
+      params.set('volume', globalVolumeToSend);
+    }
+    if (micVolumesToSend.length > 0) {
+      params.set('mic_volume', JSON.stringify(micVolumesToSend));
+    }
+    if (backingTrackToSend) {
+      params.set('track', backingTrackToSend);
+    }
+
+    target_url.search = params.toString();
+
+    // Arbitrary cap; browser cap is 8(?) after which they queue
+    if (xhrs_inflight >= 4) {
+      lib.log(LOG_WARNING, "NOT SENDING XHR w/ ID:", xhr.debug_id, " due to limit -- already in flight:", xhrs_inflight);
+      resolve(null);
+    }
+
+    lib.log(LOG_SPAM, "Sending XHR w/ ID:", xhr.debug_id, "already in flight:", xhrs_inflight++, "; data size:", outdata.length);
+    xhr.open("POST", target_url, true);
+    xhr.setRequestHeader("Content-Type", "application/octet-stream");
+    xhr.responseType = "arraybuffer";
+    xhr.send(outdata);
+    lib.log(LOG_SPAM, "... XHR sent.");
   });
 }
 
 // Only called when readystate is 4 (done)
-function handle_xhr_result(xhr, resolve, reject) {
+function handle_xhr_result(xhr, resolve) {
   /* XXX: this state is no longer shared with us easily
   if (!running) {
     lib.log(LOG_WARNING, "Got XHR onreadystatechange w/ID:", xhr.debug_id, "for xhr:", xhr, " when done running; still in flight:", --xhrs_inflight);
@@ -322,7 +331,7 @@ function handle_xhr_result(xhr, resolve, reject) {
     lib.log(LOG_SPAM, "Got XHR response w/ ID:", xhr.debug_id, "result:", xhr.response, " -- still in flight:", --xhrs_inflight);
     if (metadata["kill_client"]) {
       lib.log(LOG_ERROR, "Received kill from server");
-      return reject(new Error("Received kill from server"));
+      resolve(null);
     }
 
     return resolve({
@@ -331,6 +340,6 @@ function handle_xhr_result(xhr, resolve, reject) {
     });
   } else {
     lib.log(LOG_ERROR, "XHR failed w/ ID:", xhr.debug_id, "stopping:", xhr, " -- still in flight:", --xhrs_inflight);
-    return reject(new Error("XHR failed"));
+    resolve(null);
   }
 }

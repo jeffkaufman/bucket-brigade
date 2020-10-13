@@ -366,97 +366,110 @@ class VolumeCalibrator {
 
 class Player extends AudioWorkletProcessor {
   constructor () {
-    lib.log(LOG_INFO, "Audio worklet object constructing");
     super();
-    this.ready = false;
-    this.port.onmessage = this.handle_message.bind(this);
-    this.clock_reference = new ClientClockReference({ sample_rate: sampleRate });
-    this.local_latency = 150;  // rough initial guess; XXX pretty sure this is wrong units
-    this.click_volume = 0;
+    this.try_do(() => {
+      lib.log(LOG_INFO, "Audio worklet object constructing");
+      this.ready = false;
+      this.port.onmessage = (event) => {
+        this.try_do(() => {
+          this.handle_message(event);
+        });
+      };
+      this.clock_reference = new ClientClockReference({ sample_rate: sampleRate });
+      this.local_latency = 150;  // rough initial guess; XXX pretty sure this is wrong units
+      this.click_volume = 0;  
+    })
+  }
+
+  try_do(callback) {
+    try {
+      callback();
+    } catch (err) {
+      let {name, message, stack, unpreventable} = err ?? {};
+      [name, message, stack] = [name, message, stack].map(String);
+      unpreventable = Boolean(unpreventable);
+      this.port.postMessage({
+        type: "exception",
+        exception: {name, message, stack, unpreventable},
+      });
+    }
   }
 
   handle_message(event) {
-    try {
-      var msg = event.data;
-      lib.log(LOG_VERYSPAM, "handle_message in audioworklet:", msg);
+    var msg = event.data;
+    lib.log(LOG_VERYSPAM, "handle_message in audioworklet:", msg);
 
-      if (msg.type == "log_params") {
-        if (msg.log_level) {
-          lib.set_log_level(msg.log_level);
-        }
-        if (msg.session_id) {
-          lib.set_logging_session_id(msg.session_id);
-          lib.log(LOG_INFO, "Audio worklet logging ready");
-        }
-        return;
-      } else if (msg.type == "audio_params") {
-        // Reset and/or set up everything.
-        this.latency_calibrator = null;
-        this.latency_measurement_mode = false;
-        this.volume_measurement_mode = false;
-
-        this.epoch = msg.epoch;
-
-        this.synthetic_source = msg.synthetic_source;
-        this.click_interval = msg.click_interval;
-        this.loopback_mode = msg.loopback_mode;
-
-        // This is _extra_ slack on top of the size of the server request.
-        this.client_slack = 1; // XXX .500;  // 500ms
-
-        // 15 seconds of total buffer, `this.client_slack` seconds of leadin
-        this.play_buffer = new ClockedRingBuffer(15, this.client_slack, this.clock_reference);
-
-        this.ready = true;
-        return;
-      } else if (msg.type == "stop") {
-        this.ready = false;
-        return;
-      } else if (msg.type == "local_latency") {
-        this.local_latency = msg.local_latency;
-        return;
-      } else if (msg.type == "latency_estimation_mode") {
-        this.latency_measurement_mode = msg.enabled;
-        if (this.latency_measurement_mode) {
-          this.latency_calibrator = new LatencyCalibrator();
-        } else {
-          this.latency_calibrator = null;
-        }
-        return;
-      } else if (msg.type == "volume_estimation_mode") {
-        this.volume_measurement_mode = msg.enabled;
-        if (this.volume_measurement_mode) {
-          this.volume_calibrator = new VolumeCalibrator();
-        } else {
-          this.volume_calibrator = null;
-        }
-        return;
-      } else if (msg.type == "mic_pause_mode") {
-        this.mic_pause_mode = msg.enabled;
-        return;
-      } else if (msg.type == "speaker_pause_mode") {
-        this.speaker_pause_mode = msg.enabled;
-        return;
-      } else if (msg.type == "click_volume_change") {
-        this.set_click_volume(msg.value/100);
-        return;
-      } else if (!this.ready) {
-        lib.log(LOG_ERROR, "received message before ready:", msg);
-        return;
-      } else if (msg.type != "samples_in") {
-        lib.log(LOG_ERROR, "Unknown message:", msg);
-        return;
+    if (msg.type == "log_params") {
+      if (msg.log_level) {
+        lib.set_log_level(msg.log_level);
       }
+      if (msg.session_id) {
+        lib.set_logging_session_id(msg.session_id);
+        lib.log(LOG_INFO, "Audio worklet logging ready");
+      }
+      return;
+    } else if (msg.type == "audio_params") {
+      // Reset and/or set up everything.
+      this.latency_calibrator = null;
+      this.latency_measurement_mode = false;
+      this.volume_measurement_mode = false;
 
-      var chunk = rebless(msg.chunk);
-      this.play_buffer.write_chunk(chunk);
-      lib.log(LOG_VERYSPAM, "new play buffer:", this.play_buffer);
-    } catch (ex) {
-      this.port.postMessage({
-        type: "exception",
-        exception: ex
-      });
+      this.epoch = msg.epoch;
+
+      this.synthetic_source = msg.synthetic_source;
+      this.click_interval = msg.click_interval;
+      this.loopback_mode = msg.loopback_mode;
+
+      // This is _extra_ slack on top of the size of the server request.
+      this.client_slack = 1; // XXX .500;  // 500ms
+
+      // 15 seconds of total buffer, `this.client_slack` seconds of leadin
+      this.play_buffer = new ClockedRingBuffer(15, this.client_slack, this.clock_reference);
+
+      this.ready = true;
+      return;
+    } else if (msg.type == "stop") {
+      this.ready = false;
+      return;
+    } else if (msg.type == "local_latency") {
+      this.local_latency = msg.local_latency;
+      return;
+    } else if (msg.type == "latency_estimation_mode") {
+      this.latency_measurement_mode = msg.enabled;
+      if (this.latency_measurement_mode) {
+        this.latency_calibrator = new LatencyCalibrator();
+      } else {
+        this.latency_calibrator = null;
+      }
+      return;
+    } else if (msg.type == "volume_estimation_mode") {
+      this.volume_measurement_mode = msg.enabled;
+      if (this.volume_measurement_mode) {
+        this.volume_calibrator = new VolumeCalibrator();
+      } else {
+        this.volume_calibrator = null;
+      }
+      return;
+    } else if (msg.type == "mic_pause_mode") {
+      this.mic_pause_mode = msg.enabled;
+      return;
+    } else if (msg.type == "speaker_pause_mode") {
+      this.speaker_pause_mode = msg.enabled;
+      return;
+    } else if (msg.type == "click_volume_change") {
+      this.set_click_volume(msg.value/100);
+      return;
+    } else if (!this.ready) {
+      lib.log(LOG_ERROR, "received message before ready:", msg);
+      return;
+    } else if (msg.type != "samples_in") {
+      lib.log(LOG_ERROR, "Unknown message:", msg);
+      return;
     }
+
+    var chunk = rebless(msg.chunk);
+    this.play_buffer.write_chunk(chunk);
+    lib.log(LOG_VERYSPAM, "new play buffer:", this.play_buffer);
   }
 
   set_click_volume(linear_volume) {
@@ -580,20 +593,22 @@ class Player extends AudioWorkletProcessor {
   }
 
   process(inputs, outputs) {
-    // Gather some stats, and restart if things look wonky for too long.
-    this.profile_web_audio()
+    let keep_alive = false;
+    this.try_do(() => {
+      // Gather some stats, and restart if things look wonky for too long.
+      this.profile_web_audio()
 
-    if (this.killed) {
-      return false;
-    }
-    if (!this.ready) {
-      return true;
-    }
+      if (this.killed) {
+        return;
+      }
+      if (!this.ready) {
+        keep_alive = true;
+        return;
+      }
 
-    var input = inputs[0][0];
-    var output = outputs[0][0];
+      var input = inputs[0][0];
+      var output = outputs[0][0];
 
-    try {
       if (this.latency_measurement_mode) {
         var calibration_result = this.latency_calibrator.process_latency_measurement(input, output, this.click_volume);
         if (calibration_result !== null) {
@@ -618,18 +633,13 @@ class Player extends AudioWorkletProcessor {
         }
         this.process_normal(input, output);
       }
-    } catch (ex) {
-      this.port.postMessage({
-        type: "exception",
-        exception: ex
-      });
-      // Don't rethrow here, which seems to kill the worklet.
-    }
-    // Handle stereo output by cloning mono output.
-    for (var chan = 1; chan < outputs[0].length; chan++) {
-      outputs[0][chan].set(outputs[0][0]);
-    }
-    return true;
+      // Handle stereo output by cloning mono output.
+      for (var chan = 1; chan < outputs[0].length; chan++) {
+        outputs[0][chan].set(outputs[0][0]);
+      }
+      keep_alive = true;
+    });
+    return keep_alive;
   }
 }
 

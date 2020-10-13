@@ -10,6 +10,25 @@ import {AudioChunk, CompressedAudioChunk, PlaceholderChunk, concat_chunks, Clock
 //   by forcing this to load up top, before we try to 'addModule' it.
 import './audio-worklet.js';
 
+addEventListener('error', (event) => {
+  if (document.getElementById('crash').style.display) {
+    return;
+  }
+  event.preventDefault();
+  document.getElementById('crash').style.display = 'block';
+  const {name, message, stack, unpreventable} = event.error ?? {};
+  if (unpreventable) {
+    document.getElementById('crashMessage').textContent = message;
+  } else {
+    document.getElementById('crashBug').style.display = 'block';
+    document.getElementById('crashTrace').textContent = `${name}: ${message}\n${stack}`;
+  }
+});
+addEventListener('unhandledrejection', (event) => {
+  event.preventDefault();
+  throw event.reason;
+});
+
 const session_id = Math.floor(Math.random() * 2**32).toString(16);
 lib.set_logging_session_id(session_id);
 lib.set_logging_context_id("main");
@@ -61,16 +80,14 @@ async function force_permission_prompt() {
 }
 
 async function wait_for_mic_permissions() {
-  try {
-    var perm_status = await navigator.permissions.query({name: "microphone"});
-    if (perm_status.state == "granted" || perm_status.state == "denied") {
-      return;
-    }
-  } catch {
-    await force_permission_prompt();
+  var perm_status = await navigator.permissions.query({name: "microphone"}).catch(() => null);
+  if (!perm_status) {
+    force_permission_prompt();
     return;
   }
-
+  if (perm_status.state == "granted" || perm_status.state == "denied") {
+    return;
+  }
   force_permission_prompt();
   return new Promise((resolve, reject) => {
     perm_status.onchange = (e) => {
@@ -490,6 +507,9 @@ class AudioEncoder {
   }
 
   handle_message(ev) {
+    if (ev.data?.type === 'exception') {
+      throw ev.data.exception;
+    }
     var queue_entry = this.request_queue.shift();
     var response_id = ev.data.request_id;
     check(queue_entry[0] == response_id, "Responses out of order", queue_entry, ev.data);
@@ -626,6 +646,9 @@ class AudioDecoder {
   }
 
   handle_message(ev) {
+    if (ev.data?.type === 'exception') {
+      throw ev.data.exception;
+    }
     var queue_entry = this.request_queue.shift();
     var response_id = ev.data.request_id;
     check(queue_entry[0] == response_id, "Responses out of order", queue_entry, ev.data);
@@ -774,8 +797,6 @@ async function start() {
   //XXX: the AudioWorkletProcessor just seems to get leaked here, every time we stop and restart. I'm not sure if there's a way to prevent that without reloading the page... (or avoiding reallocating it when we stop and start.)
   await audioCtx.audioWorklet.addModule('audio-worklet.js');
   playerNode = new AudioWorkletNode(audioCtx, 'player');
-  // Stop if there is an exception inside the worklet.
-  playerNode.addEventListener("processorerror", stop);
   playerNode.port.postMessage({
     type: "log_params",
     session_id: session_id,
@@ -784,7 +805,7 @@ async function start() {
 
   // Avoid starting more than one copy of the encoder/decoder workers.
   if (!encoder) {
-    encoder = new AudioEncoder('opusjs/encoder.js');
+    encoder = new AudioEncoder('worker-encoder.js');
     var enc_cfg = {
         sampling_rate: audioCtx.sampleRate,  // This instructs the encoder what sample rate we're giving it. If necessary (i.e. if not equal to 48000), it will resample.
         num_of_channels: 1,
@@ -819,7 +840,7 @@ async function start() {
   encoder.reset();
 
   if (!decoder) {
-    decoder = new AudioDecoder('opusjs/decoder.js')
+    decoder = new AudioDecoder('worker-decoder.js')
     var dec_cfg = {
         sampling_rate: audioCtx.sampleRate,  // This instructs the decoder what sample rate we want from it. If necessary (i.e. if not equal to 48000), it will resample.
         num_of_channels: 1,
@@ -846,13 +867,7 @@ async function start() {
     switch_app_state(APP_RUNNING);
     send_local_latency();
 
-    try {
-      await server_connection.start();
-    } catch (e) {
-      lib.log(LOG_ERROR, "Failed to connect to server:", e);
-      await stop();
-      return;
-    }
+    await server_connection.start();
   }
 }
 
@@ -1038,6 +1053,9 @@ function rebless(o) {
 
 async function handle_message(event) {
   var msg = event.data;
+  if (msg.type === "exception") {
+    throw msg.exception;
+  }
   lib.log(LOG_VERYSPAM, "onmessage in main thread received ", msg);
   if (app_state != APP_RUNNING &&
       app_state != APP_CALIBRATING_LATENCY &&
@@ -1050,14 +1068,7 @@ async function handle_message(event) {
     return;
   }
 
-  if (msg.type == "exception") {
-    lib.log(LOG_ERROR, "Exception thrown in audioworklet:", msg.exception);
-    if (app_state == APP_RUNNING) {
-      await reload_settings();
-      await server_connection.start();
-    }
-    return;
-  } else if (msg.type == "no_mic_input") {
+  if (msg.type == "no_mic_input") {
     window.noAudioInputInstructions.style.display = "block";
     return;
   } else if (msg.type == "latency_estimate") {
@@ -1173,14 +1184,14 @@ async function handle_message(event) {
 
     server_connection.set_metadata(send_metadata);
     // XXX: interesting, it does not seem that these promises are guaranteed to resolve in order... and the worklet's buffer uses the first chunk's timestamp to decide where to start playing back, so if the first two chunks are swapped it has a big problem.
-    try {
-      var { metadata, chunk: response_chunk, epoch: server_epoch } = await server_connection.send(encoded_chunk);
-    } catch (e) {
+    const response = await server_connection.send(encoded_chunk);
+    if (!response) {
       // Server connection failed. If we got a client kill, really we should not increase the batch size here, but I'm honestly not clear on when it's ever a good idea to increase it.
-      lib.log(LOG_ERROR, "Resetting server connection due to caught exception:", e);
+      lib.log(LOG_ERROR, "Resetting server connection due to network failure");
       await try_increase_batch_size_and_reload();
       return;
     }
+    var { metadata, chunk: response_chunk, epoch: server_epoch } = response;
     if (our_epoch != epoch) {
       lib.log(LOG_WARNING, "Ending message handler early due to stale epoch");
       return;
