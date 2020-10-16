@@ -26,6 +26,8 @@ song_start_clock = None
 QUEUE_SECONDS = 120
 
 SAMPLE_RATE = 48000
+VOLUME_FRAME_SIZE = SAMPLE_RATE//2
+
 CHANNELS = 1
 OPUS_FRAME_MS = 60
 OPUS_FRAME_SAMPLES = SAMPLE_RATE // 1000 * OPUS_FRAME_MS
@@ -46,6 +48,7 @@ USER_LIFETIME_SAMPLES = SAMPLE_RATE * 5
 
 # Force rounding to multiple of FRAME_SIZE
 QUEUE_LENGTH = (QUEUE_SECONDS * SAMPLE_RATE // FRAME_SIZE * FRAME_SIZE)
+VOLUME_QUEUE_LENGTH = QUEUE_LENGTH // VOLUME_FRAME_SIZE
 
 audio_queue = np.zeros(QUEUE_LENGTH, np.float32)
 n_people_queue = np.zeros(QUEUE_LENGTH, np.int16)
@@ -67,6 +70,7 @@ class User:
         self.mic_volume = 1.0
         self.scaled_mic_volume = 1.0
         self.last_write_clock = None
+        self.volume_queue = np.zeros(VOLUME_QUEUE_LENGTH, np.float16)
         # For debugging purposes only
         self.last_seen_read_clock = None
         self.last_seen_write_clock = None
@@ -145,14 +149,21 @@ def clean_users(server_clock):
     for userid in to_delete:
         del users[userid]
 
-def user_summary():
+def user_summary(user_read_clock):
     summary = []
     for userid, user in users.items():
+        if user_read_clock:
+            user_volume, = wrap_get(user.volume_queue, user_read_clock//VOLUME_FRAME_SIZE, 1)
+        else: 
+            user_volume = 0
+
         summary.append((
             round(user.delay_samples / SAMPLE_RATE),
             user.name,
             user.mic_volume,
-            userid))
+            userid,
+            float(user_volume)
+            ))
     summary.sort()
     return summary
 
@@ -306,7 +317,7 @@ def handle_post(in_data_raw, query_params, headers):
             audio_queue, last_request_clock, np.zeros(clear_samples, np.float32))
         wrap_assign(
             n_people_queue, last_request_clock, np.zeros(clear_samples, np.int16))
-
+    
     saved_last_request_clock = last_request_clock
     last_request_clock = server_clock
 
@@ -376,6 +387,12 @@ def handle_post(in_data_raw, query_params, headers):
             wrap_assign(
                 n_people_queue, client_write_clock - n_samples, new_n_people)
 
+            n_volume_frames = math.ceil(n_samples//VOLUME_FRAME_SIZE)
+            # compute root mean square volume
+            current_user_volume = np.sqrt(np.mean(in_data**2)) 
+            wrap_assign(
+                user.volume_queue, client_write_clock//VOLUME_FRAME_SIZE, np.ones(n_volume_frames, np.float16)*current_user_volume)
+
     # Why subtract n_samples above and below? Because the future is to the
     #   right. So when a client asks for n samples at time t, what they
     #   actually want is "the time interval ending at t", i.e. [t-n, t). Since
@@ -428,7 +445,7 @@ def handle_post(in_data_raw, query_params, headers):
         "last_request_clock": saved_last_request_clock,
         "client_read_clock": client_read_clock,
         "client_write_clock": client_write_clock,
-        "user_summary": user_summary(),
+        "user_summary": user_summary(client_read_clock),
         "chats": user.chats_to_send,
         "delay_seconds": user.delay_to_send,
         "song_start_clock": song_start_clock,

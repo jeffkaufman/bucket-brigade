@@ -1271,6 +1271,7 @@ function update_active_users(user_summary, server_sample_rate) {
     const name = user_summary[i][1];
     const mic_volume = user_summary[i][2];
     const userid = user_summary[i][3];
+    // const user_volume = user_summary[i][4];
 
     if (i === 0) {
       const wasLeading = imLeading;
