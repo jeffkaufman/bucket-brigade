@@ -55,6 +55,10 @@ max_position = DELAY_INTERVAL*LAYERING_DEPTH
 # For volume scaling.
 N_PHANTOM_PEOPLE = 2
 
+def start():
+    server = http.server.HTTPServer(('', 8081), OurHandler)
+    server.serve_forever()
+
 class User:
     def __init__(self, userid, name, last_heard_server_clock, delay_samples):
         self.userid = userid
@@ -500,5 +504,4 @@ class OurHandler(BaseHTTPRequestHandler):
         self.wfile.write(data)
 
 if __name__ == "__main__":
-    server = http.server.HTTPServer(('', 8081), OurHandler)
-    server.serve_forever()
+    start()
