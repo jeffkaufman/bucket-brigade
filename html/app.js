@@ -1313,13 +1313,13 @@ function update_active_users(user_summary, server_sample_rate) {
         window.takeLead.textContent = "Start Singing";
         leadButtonState = "start-singing";
         window.jumpToEnd.disabled = true;
-        window.backingTrack.display = "block";
+        window.backingTrack.style.display = "block";
         window.backingTrack.selectedIndex = 0;
       } else if (!imLeading && wasLeading) {
         window.takeLead.textContent = "Lead a Song";
         leadButtonState = "take-lead";
         window.jumpToEnd.disabled = false;
-        window.backingTrack.display = "none";
+        window.backingTrack.style.display = "none";
       }
     }
 

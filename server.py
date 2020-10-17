@@ -333,6 +333,9 @@ def handle_post(in_data_raw, query_params, headers):
             run_backing_track()
 
     if query_params.get("mark_stop_singing", None):
+        # stop the backing track from playing, if it's still going
+        backing_track_index = len(backing_track)
+
         song_end_clock = user.last_write_clock
 
         # They're done singing, send them to the end.
