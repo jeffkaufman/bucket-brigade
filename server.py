@@ -232,6 +232,7 @@ def handle_post(in_data_raw, query_params, headers):
     global song_end_clock
     global song_start_clock
     global requested_track
+    global backing_track_index
 
     # NOTE NOTE NOTE:
     # * All `clock` variables are measured in samples.
