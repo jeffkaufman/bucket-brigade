@@ -286,6 +286,8 @@ function set_controls() {
   window.estSamples.innerText = "...";
   window.est40to60.innerText = "...";
   window.estLatency.innerText = "...";
+
+  window.backingTrack.display = "none";
 }
 
 function in_select_change() {
@@ -1153,6 +1155,7 @@ async function handle_message(event) {
       loopback_mode,
       globalVolumeToSend,
       micVolumesToSend,
+      backingTrackToSend,
     };
     if (requestedLeadPosition) {
       requestedLeadPosition = false;
@@ -1166,6 +1169,7 @@ async function handle_message(event) {
     chatsToSend = [];
     globalVolumeToSend = null;
     micVolumesToSend = [];
+    backingTrackToSend = null;
 
     server_connection.set_metadata(send_metadata);
     // XXX: interesting, it does not seem that these promises are guaranteed to resolve in order... and the worklet's buffer uses the first chunk's timestamp to decide where to start playing back, so if the first two chunks are swapped it has a big problem.
@@ -1206,6 +1210,7 @@ async function handle_message(event) {
 
     var queue_size = metadata["queue_size"];
     var user_summary = metadata["user_summary"] || [];
+    var tracks = metadata["tracks"] || [];
     var chats = metadata["chats"] || [];
     var delay_seconds = metadata["delay_seconds"];
     var server_sample_rate = metadata["server_sample_rate"];
@@ -1222,6 +1227,7 @@ async function handle_message(event) {
         window.startSingingCountdown.style.display = "none";
       }
 
+
       if (delay_seconds) {
         if (delay_seconds > 0) {
           audio_offset_text.value = delay_seconds;
@@ -1234,6 +1240,7 @@ async function handle_message(event) {
       // XXX: DOM stuff below this line.
       update_active_users(user_summary, server_sample_rate);
       chats.forEach((msg) => receiveChatMessage(msg[0], msg[1]));
+      update_backing_tracks(tracks);
 
       // This is how closely it's safe to follow behind us, if you get as unlucky as possible (and try to read _just_ before we write).
       client_total_time.value = server_connection.client_window_time + play_chunk.length_seconds;
@@ -1248,6 +1255,32 @@ if (isNaN(peak_out)) {
   peak_out = 0.0;
 }
 
+let previous_backing_track_str = "";
+function update_backing_tracks(tracks) {
+  if (JSON.stringify(tracks) == previous_backing_track_str) {
+    return;
+  }
+  previous_backing_track_str = JSON.stringify(tracks);
+
+  while (window.backingTrack.firstChild) {
+    window.backingTrack.removeChild(window.backingTrack.firstChild);
+  }
+
+  const initialOption = document.createElement('option');
+  initialOption.textContent = "[optional] backing track";
+  window.backingTrack.appendChild(initialOption);
+
+  for (var i = 0; i < tracks.length; i++) {
+    const option = document.createElement('option');
+    option.textContent = tracks[i];
+    window.backingTrack.appendChild(option);
+  }
+}
+
+let backingTrackToSend = null;
+window.backingTrack.addEventListener("change", (e) => {
+  backingTrackToSend = window.backingTrack.value;
+});
 
 let previous_user_summary_str = "";
 let previous_mic_volume_inputs_str = "";
@@ -1280,10 +1313,13 @@ function update_active_users(user_summary, server_sample_rate) {
         window.takeLead.textContent = "Start Singing";
         leadButtonState = "start-singing";
         window.jumpToEnd.disabled = true;
+        window.backingTrack.display = "block";
+        window.backingTrack.selectedIndex = 0;
       } else if (!imLeading && wasLeading) {
         window.takeLead.textContent = "Lead a Song";
         leadButtonState = "take-lead";
         window.jumpToEnd.disabled = false;
+        window.backingTrack.display = "none";
       }
     }
 

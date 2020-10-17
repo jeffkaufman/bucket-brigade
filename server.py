@@ -9,7 +9,9 @@ import numpy as np
 import random
 import opuslib
 import math
+import os
 import logging
+import wave
 
 logging.basicConfig(filename='server.log',level=logging.DEBUG)
 
@@ -22,6 +24,7 @@ first_client_value = None
 global_volume = 1
 song_end_clock = 0
 song_start_clock = None
+requested_track = None
 
 QUEUE_SECONDS = 120
 
@@ -55,7 +58,17 @@ max_position = DELAY_INTERVAL*LAYERING_DEPTH
 # For volume scaling.
 N_PHANTOM_PEOPLE = 2
 
+tracks = []
+def populate_tracks():
+    for track in sorted(os.listdir("audio")):
+        if track != "README":
+            tracks.append(track)
+
 def start():
+    populate_tracks()
+    start_server()
+
+def start_server():
     server = http.server.HTTPServer(('', 8081), OurHandler)
     server.serve_forever()
 
@@ -107,6 +120,25 @@ def wrap_assign(queue, start, vals):
 
         queue[start_in_queue:(start_in_queue+first_section_size)] = vals[:first_section_size]
         queue[0:second_section_size] = vals[first_section_size:]
+
+backing_track = []
+backing_track_index = 0
+def run_backing_track():
+    global backing_track
+    if requested_track in tracks:
+        with wave.open(os.path.join("audio", requested_track)) as inf:
+            if inf.getnchannels() != 1:
+                raise Exception(
+                    "wrong number of channels on %s" % requested_track)
+            if inf.getsampwidth() != 2:
+                raise Exception(
+                    "wrong sample width on %s" % requested_track)
+            if inf.getframerate() != 48000:
+                raise Exception(
+                    "wrong sample rate on %s" % requested_track)
+
+            backing_track = np.frombuffer(
+                inf.readframes(-1), np.int16).astype(np.float32) / (2**15)
 
 def assign_delays(userid_lead):
     global max_position
@@ -199,6 +231,7 @@ def handle_post(in_data_raw, query_params, headers):
     global global_volume
     global song_end_clock
     global song_start_clock
+    global requested_track
 
     # NOTE NOTE NOTE:
     # * All `clock` variables are measured in samples.
@@ -283,6 +316,10 @@ def handle_post(in_data_raw, query_params, headers):
                 users[other_userid].scaled_mic_volume = math.exp(
                     6.908 * new_mic_volume * .5) / math.exp(6.908 * 0.5)
 
+    requested_tracks = query_params.get("track", None)
+    if requested_tracks and not song_start_clock:
+        requested_track, = requested_tracks
+
     if query_params.get("request_lead", None):
         assign_delays(userid)
         song_start_clock = None
@@ -291,12 +328,15 @@ def handle_post(in_data_raw, query_params, headers):
     if query_params.get("mark_start_singing", None):
         song_start_clock = user.last_write_clock
         song_end_clock = 0
+        if requested_track:
+            run_backing_track()
 
     if query_params.get("mark_stop_singing", None):
         song_end_clock = user.last_write_clock
 
         # They're done singing, send them to the end.
         user.delay_to_send = max_position
+
 
     in_data = np.frombuffer(in_data_raw, dtype=np.uint8)
 
@@ -306,10 +346,24 @@ def handle_post(in_data_raw, query_params, headers):
     #   so nothing has touched it yet "this time around".
     if last_request_clock is not None:
         clear_samples = min(server_clock - last_request_clock, QUEUE_LENGTH)
+        clear_index = last_request_clock
         wrap_assign(
-            audio_queue, last_request_clock, np.zeros(clear_samples, np.float32))
-        wrap_assign(
-            n_people_queue, last_request_clock, np.zeros(clear_samples, np.int16))
+            n_people_queue, clear_index, np.zeros(clear_samples, np.int16))
+
+        max_backing_track_samples = len(backing_track) - backing_track_index
+        backing_track_samples = min(max_backing_track_samples, clear_samples)
+        if backing_track_samples > 0:
+            wrap_assign(
+                audio_queue, clear_index, backing_track[
+                    backing_track_index :
+                    backing_track_index + backing_track_samples])
+            backing_track_index += backing_track_samples
+            clear_samples -= backing_track_samples
+            clear_index += backing_track_samples
+
+        if clear_samples > 0:
+            wrap_assign(
+                audio_queue, clear_index, np.zeros(clear_samples, np.float32))
 
     saved_last_request_clock = last_request_clock
     last_request_clock = server_clock
@@ -426,6 +480,7 @@ def handle_post(in_data_raw, query_params, headers):
         encoded.append(e)
     data = pack_multi(encoded).tobytes()
 
+    # TODO: We could skip some of these keys when the values are null.
     x_audio_metadata = json.dumps({
         "server_clock": server_clock,
         "server_sample_rate": SAMPLE_RATE,
@@ -436,6 +491,9 @@ def handle_post(in_data_raw, query_params, headers):
         "chats": user.chats_to_send,
         "delay_seconds": user.delay_to_send,
         "song_start_clock": song_start_clock,
+        # It's kind of wasteful to send this on every response, but
+        # it's not very many bytes, and let's just move on.
+        "tracks": tracks,
         # Both the following uses units of 128-sample frames
         "queue_size": QUEUE_LENGTH / FRAME_SIZE,
     })
