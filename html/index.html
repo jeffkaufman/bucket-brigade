@@ -110,6 +110,19 @@ body {
 }
 
 #backingTrack { display: none; }
+
+#crash {
+  display: none;
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background-color: white;
+}
+#crashBug {
+  display: none;
+}
 </style>
 <h1>"Bucket Brigade" Audio Demo</h1>
 
@@ -420,6 +433,15 @@ choose a new one. Enter a number between 6 and 115:
 <br>
 <br>
 
+</div>
+
+<div id="crash">
+  <h1 id="crashMessage">This app has crashed because of a bug. We're really sorry :-(</h1>
+  <div id="crashBug">
+    <h2>Please send the following information to the developers; it will help them fix the bug.</h2>
+    <textarea id="crashTrace" readonly></textarea>
+    <h2>Then refresh the page and try again.</h2>
+  </div>
 </div>
 
 <script type="module" src="./app.js"></script>
