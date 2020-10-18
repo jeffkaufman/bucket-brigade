@@ -399,6 +399,10 @@ def handle_post(in_data_raw, query_params, headers):
             clear_samples -= backing_track_samples
             clear_index += backing_track_samples
 
+            if backing_track_index == len(backing_track):
+                # the song has ended, mark it so
+                song_end_clock = clear_index
+
         if clear_samples > 0:
             wrap_assign(
                 audio_queue, clear_index, np.zeros(clear_samples, np.float32))
