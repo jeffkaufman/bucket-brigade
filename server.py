@@ -134,6 +134,10 @@ backing_track = []
 backing_track_index = 0
 def run_backing_track():
     global backing_track
+    global backing_track_index
+
+    backing_track_index = 0
+
     if requested_track in tracks:
         with wave.open(os.path.join("audio", requested_track)) as inf:
             if inf.getnchannels() != 1:
