@@ -1393,10 +1393,16 @@ window.monitorUserToggle.addEventListener("click", (e) => {
   window.monitorUserToggle.innerText = window.monitorUserToggle.amMonitoring ?
     "End Monitoring" : "Begin Monitoring";
   if (window.monitorUserToggle.amMonitoring) {
+    if (!micPaused) {
+      toggleMic();
+    }
     monitoredUserIdToSend = option.userid;
     window.micVolumeSetting.userid = option.userid;
     window.micVolumeSetting.value = option.mic_volume;
   } else {
+    if (micPaused) {
+      toggleMic();
+    }
     monitoredUserIdToSend = "end";
   }
 });
