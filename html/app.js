@@ -1303,9 +1303,10 @@ let imLeading = false;
 function update_active_users(user_summary, server_sample_rate) {
   for (var i = 0; i < user_summary.length; i++) {
     const userid = user_summary[i][3];
-    if (userid == myUserid) {
+    if (userid != myUserid) {
       const is_monitoring = user_summary[i][4];
-      if (window.monitorUserToggle.amMonitoring && !is_monitoring) {
+      if (window.monitorUserToggle.amMonitoring && is_monitoring) {
+        // If someone else has started monitoring, we're done.
         endMonitoring();
       }
     }
