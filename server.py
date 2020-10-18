@@ -91,6 +91,8 @@ class User:
         self.last_seen_read_clock = None
         self.last_seen_write_clock = None
 
+        print("Rebuilt " + name)
+
 users = {} # userid -> User
 
 def wrap_get(queue, start, len_vals):
