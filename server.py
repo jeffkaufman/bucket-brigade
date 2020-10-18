@@ -91,8 +91,6 @@ class User:
         self.last_seen_read_clock = None
         self.last_seen_write_clock = None
 
-        print("Rebuilt " + name)
-
 users = {} # userid -> User
 
 def wrap_get(queue, start, len_vals):
@@ -193,8 +191,6 @@ def setup_monitoring(monitoring_userid, monitored_userid):
 
     # We turn off monitoring by asking to monitor an invalid user ID.
     if monitored_userid not in users:
-        print("Turning off monitoring because asked to monitor %r" %
-              monitored_userid)
         return
 
     users[monitoring_userid].is_monitoring = True
@@ -499,10 +495,6 @@ def handle_post(in_data_raw, query_params, headers):
                 f'{user.last_seen_read_clock} = '
                 f'{client_read_clock - n_samples - user.last_seen_read_clock})')
     user.last_seen_read_clock = client_read_clock
-
-    for any_user in users.values():
-        print("%s: is_monitoring=%s is_monitored=%s" % (
-            any_user.name, any_user.is_monitoring, any_user.is_monitored))
 
     if query_params.get("loopback", [None])[0] == "true":
         data = in_data
