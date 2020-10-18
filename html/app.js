@@ -1301,6 +1301,16 @@ let previous_mic_volume_inputs_str = "";
 let imLeading = false;
 
 function update_active_users(user_summary, server_sample_rate) {
+  for (var i = 0; i < user_summary.length; i++) {
+    const userid = user_summary[i][3];
+    if (userid == myUserid) {
+      const is_monitoring = user_summary[i][4];
+      if (window.monitorUserToggle.amMonitoring && !is_monitoring) {
+        endMonitoring();
+      }
+    }
+  }
+
   if (window.monitorUserToggle.amMonitoring) {
     return;
   }
@@ -1377,6 +1387,25 @@ function update_active_users(user_summary, server_sample_rate) {
 }
 
 let monitoredUserIdToSend = null;
+
+function endMonitoring() {
+  if (micPaused) {
+    toggle_mic();
+  }
+  window.monitorUserToggle.innerText = "Begin Monitoring";
+  window.monitorUserToggle.amMonitoring = false;
+}
+function beginMonitoring(option) {
+  if (!micPaused) {
+    toggle_mic();
+  }
+  window.micVolumeSetting.userid = option.userid;
+  window.micVolumeSetting.value = option.mic_volume;
+  window.monitorUserToggle.innerText = "End Monitoring";
+  window.monitorUserToggle.amMonitoring = true;
+}
+
+
 window.monitorUserToggle.addEventListener("click", (e) => {
   if (window.monitorUserSelect.selectedIndex < 0) {
     return;
@@ -1388,21 +1417,11 @@ window.monitorUserToggle.addEventListener("click", (e) => {
     return;
   }
 
-  window.monitorUserToggle.amMonitoring = !window.monitorUserToggle.amMonitoring;
-
-  window.monitorUserToggle.innerText = window.monitorUserToggle.amMonitoring ?
-    "End Monitoring" : "Begin Monitoring";
-  if (window.monitorUserToggle.amMonitoring) {
-    if (!micPaused) {
-      toggle_mic();
-    }
+  if (!window.monitorUserToggle.amMonitoring) {
+    beginMonitoring();
     monitoredUserIdToSend = option.userid;
-    window.micVolumeSetting.userid = option.userid;
-    window.micVolumeSetting.value = option.mic_volume;
   } else {
-    if (micPaused) {
-      toggle_mic();
-    }
+    endMonitoring();
     monitoredUserIdToSend = "end";
   }
 });

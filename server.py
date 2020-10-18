@@ -206,7 +206,9 @@ def user_summary():
             round(user.delay_samples / SAMPLE_RATE),
             user.name,
             user.mic_volume,
-            userid))
+            userid,
+            user.is_monitoring,
+            user.is_monitored))
     summary.sort()
     return summary
 
