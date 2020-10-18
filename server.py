@@ -488,6 +488,10 @@ def handle_post(in_data_raw, query_params, headers):
                 f'{client_read_clock - n_samples - user.last_seen_read_clock})')
     user.last_seen_read_clock = client_read_clock
 
+    for any_user in users.values():
+        print("%s: is_monitoring=%s is_monitored=%s" % (
+            any_user.name, any_user.is_monitoring, any_user.is_monitored))
+
     if query_params.get("loopback", [None])[0] == "true":
         data = in_data
     elif user.is_monitoring:
