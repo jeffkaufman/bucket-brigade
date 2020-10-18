@@ -193,6 +193,8 @@ def setup_monitoring(monitoring_userid, monitored_userid):
 
     # We turn off monitoring by asking to monitor an invalid user ID.
     if monitored_userid not in users:
+        print("Turning off monitoring because asked to monitor %r" %
+              monitored_userid)
         return
 
     users[monitoring_userid].is_monitoring = True
