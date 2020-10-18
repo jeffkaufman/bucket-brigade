@@ -372,7 +372,8 @@ def handle_post(in_data_raw, query_params, headers):
     monitor_userids = query_params.get("monitor", None)
     if monitor_userids:
         monitor_userid, = monitor_userids
-        setup_monitoring(userid, monitor_userid)
+        if monitor_userid:
+            setup_monitoring(userid, monitor_userid)
 
     in_data = np.frombuffer(in_data_raw, dtype=np.uint8)
 
