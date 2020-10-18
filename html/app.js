@@ -1171,6 +1171,7 @@ async function handle_message(event) {
       markStopSinging,
       loopback_mode,
       globalVolumeToSend,
+      backingVolumeToSend,
       micVolumesToSend,
       backingTrackToSend,
       monitoredUserIdToSend,
@@ -1186,6 +1187,7 @@ async function handle_message(event) {
     }
     chatsToSend = [];
     globalVolumeToSend = null;
+    backingVolumeToSend = null;
     micVolumesToSend = [];
     backingTrackToSend = null;
     monitoredUserIdToSend = null;
@@ -1501,6 +1503,11 @@ window.startVolumeCalibration.addEventListener("click", () => {
 let globalVolumeToSend = null;
 window.globalVolumeControl.addEventListener("change", () => {
   globalVolumeToSend = window.globalVolumeControl.value;
+});
+
+let backingVolumeToSend = null;
+window.backingVolumeControl.addEventListener("change", () => {
+  backingVolumeToSend = window.backingVolumeControl.value;
 });
 
 log_level_select.addEventListener("change", () => {

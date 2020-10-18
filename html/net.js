@@ -259,8 +259,9 @@ var xhrs_inflight = 0;
 export async function samples_to_server(outdata, target_url, send_metadata) {
   // Not a tremendous improvement over having too many parameters, but a bit.
   var { read_clock, write_clock, username, userid, chatsToSend, requestedLeadPosition, markStartSinging, markStopSinging,
-      loopback_mode, n_samples, globalVolumeToSend,  micVolumesToSend,
-      backingTrackToSend, monitoredUserIdToSend } = send_metadata;
+        loopback_mode, n_samples, globalVolumeToSend, backingVolumeToSend,
+        micVolumesToSend, backingTrackToSend, monitoredUserIdToSend,
+      } = send_metadata;
   if (outdata === null) {
     outdata = new Uint8Array();
   }
@@ -304,6 +305,9 @@ export async function samples_to_server(outdata, target_url, send_metadata) {
     }
     if (globalVolumeToSend != null) {
       params.set('volume', globalVolumeToSend);
+    }
+    if (backingVolumeToSend != null) {
+      params.set('backing_volume', backingVolumeToSend);
     }
     if (micVolumesToSend.length > 0) {
       params.set('mic_volume', JSON.stringify(micVolumesToSend));

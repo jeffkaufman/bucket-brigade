@@ -22,6 +22,7 @@ first_client_write_clock = None
 first_client_total_samples = None
 first_client_value = None
 global_volume = 1
+backing_volume = 1
 song_end_clock = 0
 song_start_clock = None
 requested_track = None
@@ -260,6 +261,7 @@ def handle_post(in_data_raw, query_params, headers):
     global first_client_total_samples
     global first_client_value
     global global_volume
+    global backing_volume
     global song_end_clock
     global song_start_clock
     global requested_track
@@ -317,6 +319,11 @@ def handle_post(in_data_raw, query_params, headers):
     if volumes:
         volume, = volumes
         global_volume = math.exp(6.908 * float(volume)) / 1000
+
+    backing_volumes = query_params.get("backing_volume", None)
+    if backing_volumes:
+        backing_volume, = backing_volumes
+        backing_volume = math.exp(6.908 * float(backing_volume)) / 1000
 
     msg_chats = query_params.get("chat", None)
     if msg_chats:
@@ -394,7 +401,8 @@ def handle_post(in_data_raw, query_params, headers):
             wrap_assign(
                 audio_queue, clear_index, backing_track[
                     backing_track_index :
-                    backing_track_index + backing_track_samples])
+                    backing_track_index + backing_track_samples]
+                * backing_volume)
             backing_track_index += backing_track_samples
             clear_samples -= backing_track_samples
             clear_index += backing_track_samples
