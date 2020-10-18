@@ -187,7 +187,7 @@ def clean_users(server_clock):
         del users[userid]
 
 def setup_monitoring(monitoring_userid, monitored_userid):
-    for userid, user in users.items():
+    for user in users.values():
         user.is_monitoring = False
         user.is_monitered = False
 
