@@ -91,7 +91,7 @@ class User:
         self.last_seen_read_clock = None
         self.last_seen_write_clock = None
 
-    def flush():
+    def flush(self):
         """Delete any state that shouldn't be persisted across reconnects"""
         self.opus_state = None
 
