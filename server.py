@@ -189,6 +189,11 @@ def setup_monitoring(monitoring_userid, monitored_userid):
         user.is_monitoring = False
         user.is_monitered = False
 
+    print(users.keys())
+    print(monitoring_userid)
+    print(monitored_userid)
+    print(monitored_userid not in users)
+        
     # We turn off monitoring by asking to monitor an invalid user ID.
     if monitored_userid not in users:
         return
