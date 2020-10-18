@@ -597,7 +597,9 @@ class AudioEncoder {
     // NOTE: We have to use chunk.end here, and not this.client_clock, which may have moved on while we were waiting for the decoder.
     lib.log(LOG_SPAM, "net sample rate clock error:", chunk.end - client_clock_hypothetical);
     if (Math.abs(chunk.end - client_clock_hypothetical) > 5 /* arbitrary */) {
-      throw new Error("sample rate clock slippage excessive; what happened?");
+      lib.log(LOG_WARNING, "Sample rate clock slippage excessive in encoder; why is this happening?", chunk.end, client_clock_hypothetical, this.server_clock, buffered_samples, server_clock_adjusted, this.server_clock_reference.sample_rate, this.client_clock_reference.sample_rate);
+      // TODO: Is this error always spurious? What should we do here, or how should we prevent it?
+      // throw new Error("sample rate clock slippage excessive; what happened?");
     }
 
     var enc_buf = [];
@@ -1068,7 +1070,11 @@ async function handle_message(event) {
     return;
   }
 
-  if (msg.type == "no_mic_input") {
+  if (msg.type === "underflow") {
+    await reload_settings();
+    await server_connection.start();
+    return;
+  } else if (msg.type == "no_mic_input") {
     window.noAudioInputInstructions.style.display = "block";
     return;
   } else if (msg.type == "latency_estimate") {
@@ -1194,6 +1200,9 @@ async function handle_message(event) {
       return;
     }
     var { metadata, chunk: response_chunk, epoch: server_epoch } = response;
+    if (!response_chunk) {
+      return;
+    }
     if (our_epoch != epoch) {
       lib.log(LOG_WARNING, "Ending message handler early due to stale epoch");
       return;
@@ -1231,6 +1240,7 @@ async function handle_message(event) {
     var client_read_clock = metadata["client_read_clock"];
 
     // Defer touching the DOM, just to be safe.
+    const connection_as_of_message = server_connection;
     requestAnimationFrame(() => {
       if (song_start_clock && song_start_clock > client_read_clock) {
         window.startSingingCountdown.style.display = "block";
@@ -1256,9 +1266,9 @@ async function handle_message(event) {
       update_backing_tracks(tracks);
 
       // This is how closely it's safe to follow behind us, if you get as unlucky as possible (and try to read _just_ before we write).
-      client_total_time.value = server_connection.client_window_time + play_chunk.length_seconds;
+      client_total_time.value = connection_as_of_message.client_window_time + play_chunk.length_seconds;
       // This is how far behind our target place in the audio stream we are. This must be added to the value above, to find out how closely it's safe to follow behind where we are _aiming_ to be. This value should be small and relatively stable, or something has gone wrong.
-      client_read_slippage.value = server_connection.client_read_slippage;
+      client_read_slippage.value = connection_as_of_message.client_read_slippage;
     });
   }
 }
