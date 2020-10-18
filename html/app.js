@@ -1351,25 +1351,27 @@ function update_active_users(user_summary, server_sample_rate) {
     window.activeUsers.appendChild(tr);
   }
 
-  mic_volume_inputs.sort();
-  if (JSON.stringify(mic_volume_inputs) != previous_mic_volume_inputs_str) {
-    while (window.monitorUserSelect.firstChild) {
-      window.monitorUserSelect.removeChild(window.monitorUserSelect.lastChild);
-    }
-    const initialOption = document.createElement('option');
-    initialOption.textContent = "Select User";
-    window.monitorUserSelect.appendChild(initialOption);
+  if (!window.monitorUserToggle.amMonitoring) {
+    mic_volume_inputs.sort();
+    if (JSON.stringify(mic_volume_inputs) != previous_mic_volume_inputs_str) {
+      while (window.monitorUserSelect.firstChild) {
+        window.monitorUserSelect.removeChild(window.monitorUserSelect.lastChild);
+      }
+      const initialOption = document.createElement('option');
+      initialOption.textContent = "Select User";
+      window.monitorUserSelect.appendChild(initialOption);
 
-    for (var i = 0; i < mic_volume_inputs.length; i++) {
-      const option = document.createElement('option');
-      option.textContent = mic_volume_inputs[i][0];;
-      option.userid = mic_volume_inputs[i][1];
-      option.mic_volume = mic_volume_inputs[i][2];
+      for (var i = 0; i < mic_volume_inputs.length; i++) {
+        const option = document.createElement('option');
+        option.textContent = mic_volume_inputs[i][0];;
+        option.userid = mic_volume_inputs[i][1];
+        option.mic_volume = mic_volume_inputs[i][2];
 
-      window.monitorUserSelect.appendChild(option);
+        window.monitorUserSelect.appendChild(option);
+      }
     }
+    previous_mic_volume_inputs_str = JSON.stringify(mic_volume_inputs);
   }
-  previous_mic_volume_inputs_str = JSON.stringify(mic_volume_inputs);
 }
 
 let monitoredUserIdToSend = null;
