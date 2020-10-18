@@ -1070,6 +1070,7 @@ async function handle_message(event) {
 
   if (msg.type === "underflow") {
     await reload_settings();
+    await server_connection.start();
     return;
   } else if (msg.type == "no_mic_input") {
     window.noAudioInputInstructions.style.display = "block";
