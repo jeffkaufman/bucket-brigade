@@ -458,7 +458,7 @@ def handle_post(in_data_raw, query_params, headers):
 
             if user.is_monitored:
                 wrap_assign(
-                    monitor_queue, client_write_clock - n_samples, new_audio)
+                    monitor_queue, client_write_clock - n_samples, in_data)
 
             old_n_people = wrap_get(
                 n_people_queue, client_write_clock - n_samples, n_samples)
