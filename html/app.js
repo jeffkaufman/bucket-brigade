@@ -1418,7 +1418,7 @@ window.monitorUserToggle.addEventListener("click", (e) => {
   }
 
   if (!window.monitorUserToggle.amMonitoring) {
-    beginMonitoring();
+    beginMonitoring(option);
     monitoredUserIdToSend = option.userid;
   } else {
     endMonitoring();
