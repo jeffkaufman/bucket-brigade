@@ -1207,7 +1207,7 @@ async function handle_message(event) {
       return;
     }
 
-    lib.log(LOG_SPAM, "Got chunk from server:", response_chunk.interval, response_chunk, metadata);
+    //lib.log(LOG_SPAM, "Got chunk from server:", response_chunk.interval, response_chunk, metadata);
     var play_chunk = await decoder.decode_chunk(response_chunk);
     if (our_epoch != epoch) {
       lib.log(LOG_WARNING, "Ending message handler early due to stale epoch");
