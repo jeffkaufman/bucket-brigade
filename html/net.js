@@ -107,6 +107,9 @@ export class ServerConnection extends ServerConnectionBase {
       n_samples: chunk.length,
       ... this.send_metadata
     });
+    if (!response) {
+      return null;
+    }
     if (!this.running) {
       lib.log(LOG_WARNING, "ServerConnection stopped while waiting for response from server");
       return {

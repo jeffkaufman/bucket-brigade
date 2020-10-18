@@ -22,7 +22,7 @@ const FRAME_SIZE = 128;  // by Web Audio API spec
 let input_gain = 1.0;
 
 class ClockedRingBuffer {
-  constructor(len_seconds, leadin_seconds, clock_reference) {
+  constructor(len_seconds, leadin_seconds, clock_reference, port) {
     if (leadin_seconds > len_seconds) {
       // Note that even getting close is likely to result in failure.
       lib.log(LOG_ERROR, "leadin time must not exceed size");
@@ -44,6 +44,8 @@ class ClockedRingBuffer {
       throw new Error("clock_reference has wrong sample rate in ClockedRingBuffer constructor");
     }
     this.clock_reference = clock_reference;
+
+    this.port = port;
 
     // For debugging, mostly
     this.buffered_data = 0;
@@ -93,14 +95,21 @@ class ClockedRingBuffer {
     });
     var chunk = new AudioChunk({ data: buf, interval });
     var errors = [];
+    let underflowed = false;
     for (var i = 0; i < chunk.data.length; i++) {
       var sample = this.read(chunk.interval.start + i);
-      if (typeof sample !== "number") {
+      if (typeof sample === "number") {
+        chunk.data[i] = sample;
+      } else if (sample === null) {
+        chunk.data[i] = 0;
+        underflowed = true;
+      } else {
         chunk.data[i] = 0;
         errors.push(sample);
-      } else {
-        chunk.data[i] = sample;
       }
+    }
+    if (underflowed) {
+      this.port.postMessage({type: "underflow"});
     }
     if (errors.length > 0) {
       var err_uniq = Array.from(new Set(errors));
@@ -127,7 +136,7 @@ class ClockedRingBuffer {
       lib.log_every(12800, "buf_read underflow", LOG_ERROR, "Buffer underflow :-( leadin_samples:", this.leadin_samples, "read_clock:", this.read_clock, "buffered_data:", this.buffered_data, "space_left:", this.space_left());
       this.read_clock++;
       this.buffered_data--;
-      return "underflow";
+      return null;
     }
     this.buf[this.real_offset(this.read_clock)] = NaN;  // Mostly for debugging
     this.read_clock++;
@@ -424,7 +433,7 @@ class Player extends AudioWorkletProcessor {
       this.client_slack = 1; // XXX .500;  // 500ms
 
       // 15 seconds of total buffer, `this.client_slack` seconds of leadin
-      this.play_buffer = new ClockedRingBuffer(15, this.client_slack, this.clock_reference);
+      this.play_buffer = new ClockedRingBuffer(15, this.client_slack, this.clock_reference, this.port);
 
       this.ready = true;
       return;
