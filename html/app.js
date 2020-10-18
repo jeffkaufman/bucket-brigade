@@ -597,7 +597,9 @@ class AudioEncoder {
     // NOTE: We have to use chunk.end here, and not this.client_clock, which may have moved on while we were waiting for the decoder.
     lib.log(LOG_SPAM, "net sample rate clock error:", chunk.end - client_clock_hypothetical);
     if (Math.abs(chunk.end - client_clock_hypothetical) > 5 /* arbitrary */) {
-      throw new Error("sample rate clock slippage excessive; what happened?");
+      lib.log(LOG_WARNING, "Sample rate clock slippage excessive in encoder; why is this happening?", chunk.end, client_clock_hypothetical, this.server_clock, buffered_samples, server_clock_adjusted, this.server_clock_reference.sample_rate, this.client_clock_reference.sample_rate);
+      // TODO: Is this error always spurious? What should we do here, or how should we prevent it?
+      // throw new Error("sample rate clock slippage excessive; what happened?");
     }
 
     var enc_buf = [];
