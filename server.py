@@ -94,6 +94,7 @@ class User:
     def flush(self):
         """Delete any state that shouldn't be persisted across reconnects"""
         self.opus_state = None
+        self.last_seen_read_clock = None
 
 users = {} # userid -> User
 
