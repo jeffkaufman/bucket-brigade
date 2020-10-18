@@ -226,6 +226,16 @@ export async function query_server_clock(target_url) {
       'Please refresh and try again.',
     unpreventable: true,
   }));
+
+  if (!fetch_result.ok) {
+    throw({
+      message: 'Server request gave an error. ' +
+        'Talk to whoever is running things, or ' +
+        'refresh and try again.',
+      unpreventable: true,
+    });
+  }
+
   // We need one-way latency; dividing by 2 is unprincipled but probably close enough.
   // XXX: This is not actually correct. We should really be using the roundtrip latency here. Because we want to know not "what is the server clock now", but "what will the server clock be by the time my request reaches the server."
   // Proposed alternative:
