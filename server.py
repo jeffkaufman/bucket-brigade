@@ -91,6 +91,10 @@ class User:
         self.last_seen_read_clock = None
         self.last_seen_write_clock = None
 
+    def flush():
+        """Delete any state that shouldn't be persisted across reconnects"""
+        self.opus_state = None
+
 users = {} # userid -> User
 
 def wrap_get(queue, start, len_vals):
@@ -296,23 +300,12 @@ def handle_post(in_data_raw, query_params, headers):
         # New session, write some debug info to disk
         logging.debug("*** New client:" + str(headers) + str(query_params) + "\n\n")
 
-    # This indicates a new session, so flush everything. (There's probably a better way to handle this.)
-    prev_last_write_clock = None
-    prev_is_monitored = None
-    prev_is_monitoring = None
-    if (client_write_clock is None) and (userid in users):
-        prev_last_write_clock = users[userid].last_write_clock
-        prev_is_monitored = users[userid].is_monitored
-        prev_is_monitoring = users[userid].is_monitoring
-        del users[userid]
+        if userid in users:
+            # Delete any state that shouldn't be persisted.
+            users[userid].flush()
 
     update_users(userid, username, server_clock, client_read_clock)
     user = users[userid]
-    if prev_is_monitored is not None and prev_is_monitoring is not None:
-        user.is_monitored = prev_is_monitored
-        user.is_monitoring = prev_is_monitoring
-    if user.last_write_clock is None:
-        user.last_write_clock = prev_last_write_clock
 
     volumes = query_params.get("volume", None)
     if volumes:
