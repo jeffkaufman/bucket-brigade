@@ -142,6 +142,7 @@ def run_backing_track():
 
             backing_track = np.frombuffer(
                 inf.readframes(-1), np.int16).astype(np.float32) / (2**15)
+            backing_track *= 0.8 # turn it down a bit
 
 def assign_delays(userid_lead):
     global max_position
