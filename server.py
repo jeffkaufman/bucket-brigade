@@ -51,6 +51,7 @@ USER_LIFETIME_SAMPLES = SAMPLE_RATE * 5
 QUEUE_LENGTH = (QUEUE_SECONDS * SAMPLE_RATE // FRAME_SIZE * FRAME_SIZE)
 
 audio_queue = np.zeros(QUEUE_LENGTH, np.float32)
+monitor_queue = np.zeros(QUEUE_LENGTH, np.float32)
 n_people_queue = np.zeros(QUEUE_LENGTH, np.int16)
 
 max_position = DELAY_INTERVAL*LAYERING_DEPTH
@@ -84,6 +85,8 @@ class User:
         self.mic_volume = 1.0
         self.scaled_mic_volume = 1.0
         self.last_write_clock = None
+        self.is_monitored = false
+        self.is_monitoring = false
         # For debugging purposes only
         self.last_seen_read_clock = None
         self.last_seen_write_clock = None
@@ -180,6 +183,21 @@ def clean_users(server_clock):
             to_delete.append(userid)
     for userid in to_delete:
         del users[userid]
+
+def setup_monitoring(monitoring_userid, monitored_userid):
+    for userid, user in users.items():
+        user.is_monitoring = False
+        user.is_monitered = False
+
+    # We turn off monitoring by asking to monitor an invalid user ID.
+    if monitored_userid not in users:
+        return
+
+    users[monitoring_userid].is_monitoring = True
+    users[monitored_userid].is_monitored = True
+
+    users[monitoring_userid].delay_to_send = round(
+        users[monitored_userid].delay_samples / SAMPLE_RATE) + DELAY_INTERVAL
 
 def user_summary():
     summary = []
@@ -341,6 +359,10 @@ def handle_post(in_data_raw, query_params, headers):
         # They're done singing, send them to the end.
         user.delay_to_send = max_position
 
+    monitor_userids = query_params.get("monitor", None)
+    if monitor_userids:
+        monitor_userid, = monitor_userids
+        setup_monitoring(userid, monitor_userid)
 
     in_data = np.frombuffer(in_data_raw, dtype=np.uint8)
 
@@ -353,6 +375,8 @@ def handle_post(in_data_raw, query_params, headers):
         clear_index = last_request_clock
         wrap_assign(
             n_people_queue, clear_index, np.zeros(clear_samples, np.int16))
+        wrap_assign(
+            monitor_queue, clear_index, np.zeros(clear_samples, np.float32))
 
         max_backing_track_samples = len(backing_track) - backing_track_index
         backing_track_samples = min(max_backing_track_samples, clear_samples)
@@ -432,6 +456,10 @@ def handle_post(in_data_raw, query_params, headers):
             wrap_assign(
                 audio_queue, client_write_clock - n_samples, new_audio)
 
+            if user.is_monitored:
+                wrap_assign(
+                    monitor_queue, client_write_clock - n_samples, new_audio)
+
             old_n_people = wrap_get(
                 n_people_queue, client_write_clock - n_samples, n_samples)
             new_n_people = old_n_people + np.ones(n_samples, np.int16)
@@ -460,6 +488,8 @@ def handle_post(in_data_raw, query_params, headers):
 
     if query_params.get("loopback", [None])[0] == "true":
         data = in_data
+    elif user.is_monitoring:
+        data = wrap_get(monitor_queue, client_read_clock - n_samples, n_samples)
     else:
         data = wrap_get(audio_queue, client_read_clock - n_samples, n_samples)
         n_people = wrap_get(

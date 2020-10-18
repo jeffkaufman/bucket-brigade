@@ -1167,6 +1167,7 @@ async function handle_message(event) {
       globalVolumeToSend,
       micVolumesToSend,
       backingTrackToSend,
+      monitoredUserIdToSend,
     };
     if (requestedLeadPosition) {
       requestedLeadPosition = false;
@@ -1181,6 +1182,7 @@ async function handle_message(event) {
     globalVolumeToSend = null;
     micVolumesToSend = [];
     backingTrackToSend = null;
+    monitoredUserIdToSend = null;
 
     server_connection.set_metadata(send_metadata);
     // XXX: interesting, it does not seem that these promises are guaranteed to resolve in order... and the worklet's buffer uses the first chunk's timestamp to decide where to start playing back, so if the first two chunks are swapped it has a big problem.
@@ -1351,12 +1353,12 @@ function update_active_users(user_summary, server_sample_rate) {
 
   mic_volume_inputs.sort();
   if (JSON.stringify(mic_volume_inputs) != previous_mic_volume_inputs_str) {
-    while (window.micVolumesUser.firstChild) {
-      window.micVolumesUser.removeChild(window.micVolumesUser.lastChild);
+    while (window.monitorUserSelect.firstChild) {
+      window.monitorUserSelect.removeChild(window.monitorUserSelect.lastChild);
     }
     const initialOption = document.createElement('option');
     initialOption.textContent = "Select User";
-    window.micVolumesUser.appendChild(initialOption);
+    window.monitorUserSelect.appendChild(initialOption);
 
     for (var i = 0; i < mic_volume_inputs.length; i++) {
       const option = document.createElement('option');
@@ -1364,22 +1366,39 @@ function update_active_users(user_summary, server_sample_rate) {
       option.userid = mic_volume_inputs[i][1];
       option.mic_volume = mic_volume_inputs[i][2];
 
-      window.micVolumesUser.appendChild(option);
+      window.monitorUserSelect.appendChild(option);
     }
   }
   previous_mic_volume_inputs_str = JSON.stringify(mic_volume_inputs);
 }
 
-window.micVolumesUser.addEventListener("change", (e) => {
-  const option = window.micVolumesUser.children[window.micVolumesUser.selectedIndex];
-  if (option.userid) {
+let monitoredUserIdToSend = null;
+window.monitorUserToggle.addEventListener("click", (e) => {
+  if (window.monitorUserSelect.selectedIndex < 0) {
+    return;
+  }
+  const option = window.monitorUserSelect.children[
+    window.monitorUserSelect.selectedIndex];
+  if (!window.monitorUserToggle.amMonitoring && !option.userid) {
+    // Not monitoring and no one to monitor, nothing to do.
+    return;
+  }
+
+  window.monitorUserToggle.amMonitoring = !window.monitorUserToggle.amMonitoring;
+
+  window.monitorUserToggle.innerText = window.monitorUserToggle.amMonitoring ?
+    "End Monitoring" : "Begin Monitoring";
+  if (window.monitorUserToggle.amMonitoring) {
+    monitoredUserIdToSend = option.userid;
     window.micVolumeSetting.userid = option.userid;
     window.micVolumeSetting.value = option.mic_volume;
+  } else {
+    monitoredUserIdToSend = "end";
   }
 });
 
 let micVolumesToSend = [];
-window.micVolumeSetting.addEventListener("change", (e) => {
+window.micVolumeApply.addEventListener("click", (e) => {
   micVolumesToSend.push([window.micVolumeSetting.userid,
                          parseFloat(window.micVolumeSetting.value)]);
 });

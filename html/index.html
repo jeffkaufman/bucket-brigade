@@ -123,6 +123,13 @@ body {
 #crashBug {
   display: none;
 }
+#monitoring {
+  border: 1px solid black;
+  padding-top: 1em;
+  padding-left: 1em;
+  margin-top: 1em;
+  border-radius: 0.25em;
+}
 </style>
 <h1>"Bucket Brigade" Audio Demo</h1>
 
@@ -395,9 +402,16 @@ choose a new one. Enter a number between 6 and 115:
     Global Volume Control:
     <input type=text id=globalVolumeControl>
     <br>
-    Set Mic Volumes (0-2):
-    <select id=micVolumesUser></select>
-    <input type=text id=micVolumeSetting></input>
+    <div id=monitoring>
+    Monitoring
+    <p>
+    Select User:  <select id=monitorUserSelect></select>
+    <button id=monitorUserToggle>Begin Monitoring</button>
+    <br>
+    Set Mic Volume (0-2): <input type=text id=micVolumeSetting></input>
+    <button id=micVolumeApply>Apply Volume</button>
+    </div>
+
 </div>
 <h3>Debug info:</h3>
   Sample rate:

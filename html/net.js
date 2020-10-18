@@ -247,7 +247,7 @@ export async function samples_to_server(outdata, target_url, send_metadata) {
   // Not a tremendous improvement over having too many parameters, but a bit.
   var { read_clock, write_clock, username, userid, chatsToSend, requestedLeadPosition, markStartSinging, markStopSinging,
       loopback_mode, n_samples, globalVolumeToSend,  micVolumesToSend,
-      backingTrackToSend } = send_metadata;
+      backingTrackToSend, monitoredUserIdToSend } = send_metadata;
   if (outdata === null) {
     outdata = new Uint8Array();
   }
@@ -297,6 +297,9 @@ export async function samples_to_server(outdata, target_url, send_metadata) {
     }
     if (backingTrackToSend) {
       params.set('track', backingTrackToSend);
+    }
+    if (monitoredUserIdToSend) {
+      params.set('monitor', monitoredUserIdToSend);
     }
 
     target_url.search = params.toString();
