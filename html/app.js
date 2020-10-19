@@ -1394,7 +1394,7 @@ function update_active_users(user_summary, server_sample_rate) {
       const userid = mic_volume_inputs[i][1];
       const vol = mic_volume_inputs[i][2];
 
-      option.textContent = (vol === 1.0) ? name : (name + " &mdash; " + vol);
+      option.textContent = (vol === 1.0) ? name : (name + " -- " + vol);
       option.username = name;
       option.userid = userid;
       option.mic_volume = vol;
@@ -1470,7 +1470,7 @@ window.micVolumeApply.addEventListener("click", (e) => {
   const option = window.monitorUserSelect.children[
     window.monitorUserSelect.selectedIndex];
   option.mic_volume = window.micVolumeSetting.value;
-  option.textContent = option.username + " &mdash; " + option.mic_volume;
+  option.textContent = option.username + " -- " + option.mic_volume;
   micVolumesToSend.push([window.micVolumeSetting.userid,
                          parseFloat(window.micVolumeSetting.value)]);
 });
