@@ -1319,7 +1319,7 @@ function update_active_users(user_summary, server_sample_rate) {
       const is_monitoring = user_summary[i][4];
       if (window.monitorUserToggle.amMonitoring && is_monitoring) {
         // If someone else has started monitoring, we're done.
-        endMonitoring();
+        endMonitoring(/*server_initiated=*/true);
       }
     }
   }
@@ -1401,23 +1401,45 @@ function update_active_users(user_summary, server_sample_rate) {
 
 let monitoredUserIdToSend = null;
 
-function endMonitoring() {
+function endMonitoring(server_initiated) {
   if (micPaused) {
     toggle_mic();
   }
   window.monitorUserToggle.innerText = "Begin Monitoring";
   window.monitorUserToggle.amMonitoring = false;
+  if (!server_initiated) {
+    monitoredUserIdToSend = "end";
+  }
 }
+
 function beginMonitoring(option) {
   if (!micPaused) {
     toggle_mic();
   }
-  window.micVolumeSetting.userid = option.userid;
-  window.micVolumeSetting.value = option.mic_volume;
   window.monitorUserToggle.innerText = "End Monitoring";
   window.monitorUserToggle.amMonitoring = true;
+  startMonitoringUser(option);
 }
 
+function startMonitoringUser(option) {
+  window.micVolumeSetting.userid = option.userid;
+  window.micVolumeSetting.value = option.mic_volume;
+  monitoredUserIdToSend = option.userid;
+}
+
+window.monitorUserSelect.addEventListener("change", (e) => {
+  if (window.monitorUserToggle.amMonitoring) {
+    if (window.monitorUserSelect.selectedIndex > 0) {
+      const option = window.monitorUserSelect.children[
+        window.monitorUserSelect.selectedIndex];
+      if (option.userid) {
+        startMonitoringUser(option);
+        return;
+      }
+    }
+    endMonitoring(/*server_initiated=*/false);
+  }
+});
 
 window.monitorUserToggle.addEventListener("click", (e) => {
   if (window.monitorUserSelect.selectedIndex < 0) {
@@ -1432,15 +1454,16 @@ window.monitorUserToggle.addEventListener("click", (e) => {
 
   if (!window.monitorUserToggle.amMonitoring) {
     beginMonitoring(option);
-    monitoredUserIdToSend = option.userid;
   } else {
-    endMonitoring();
-    monitoredUserIdToSend = "end";
+    endMonitoring(/*server_initiated=*/false);
   }
 });
 
 let micVolumesToSend = [];
 window.micVolumeApply.addEventListener("click", (e) => {
+  const option = window.monitorUserSelect.children[
+    window.monitorUserSelect.selectedIndex];
+  option.mic_volume = window.micVolumeSetting.value;
   micVolumesToSend.push([window.micVolumeSetting.userid,
                          parseFloat(window.micVolumeSetting.value)]);
 });
