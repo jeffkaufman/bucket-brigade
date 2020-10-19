@@ -136,6 +136,7 @@ backing_track_index = 0
 def run_backing_track():
     global backing_track
     global backing_track_index
+    global requested_track
 
     backing_track_index = 0
 
@@ -154,6 +155,9 @@ def run_backing_track():
             backing_track = np.frombuffer(
                 inf.readframes(-1), np.int16).astype(np.float32) / (2**15)
             backing_track *= 0.8 # turn it down a bit
+
+    # Backing track is used only once.
+    requested_track = None
 
 def assign_delays(userid_lead):
     global max_position
