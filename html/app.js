@@ -1389,9 +1389,15 @@ function update_active_users(user_summary, server_sample_rate) {
 
     for (var i = 0; i < mic_volume_inputs.length; i++) {
       const option = document.createElement('option');
-      option.textContent = mic_volume_inputs[i][0];;
-      option.userid = mic_volume_inputs[i][1];
-      option.mic_volume = mic_volume_inputs[i][2];
+
+      const name = mic_volume_inputs[i][0];
+      const userid = mic_volume_inputs[i][1];
+      const vol = mic_volume_inputs[i][2];
+
+      option.textContent = (vol === 1.0) ? name : (name + " &mdash; " + vol);
+      option.username = name;
+      option.userid = userid;
+      option.mic_volume = vol;
 
       window.monitorUserSelect.appendChild(option);
     }
@@ -1464,6 +1470,7 @@ window.micVolumeApply.addEventListener("click", (e) => {
   const option = window.monitorUserSelect.children[
     window.monitorUserSelect.selectedIndex];
   option.mic_volume = window.micVolumeSetting.value;
+  option.textContent = option.username + " &mdash; " + option.mic_volume;
   micVolumesToSend.push([window.micVolumeSetting.userid,
                          parseFloat(window.micVolumeSetting.value)]);
 });
