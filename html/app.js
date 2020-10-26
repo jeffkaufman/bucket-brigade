@@ -59,15 +59,6 @@ lib.log(LOG_INFO, "Starting up");
 
 const myUserid = Math.round(Math.random()*100000000000)
 
-function set_error(msg) {
-  window.errorBox.innerText = msg;
-  window.errorBox.style.display = msg ? "block" : "none";
-}
-
-function clear_error() {
-  set_error("");
-}
-
 function close_stream(stream) {
   stream.getTracks().forEach((track) => track.stop());
 }
@@ -269,8 +260,8 @@ function set_controls() {
   setEnabledIn(loopback_mode_select, [APP_STOPPED])
   setEnabledIn(click_bpm, allStatesExcept([APP_STOPPED]));
 
-  setEnabledIn(in_select, allStatesExcept([APP_INITIALIZING]));
-  setEnabledIn(start_button, allStatesExcept([APP_INITIALIZING]));
+  setEnabledIn(in_select, allStatesExcept([APP_INITIALIZING, APP_RESTARTING]));
+  setEnabledIn(start_button, allStatesExcept([APP_INITIALIZING, APP_RESTARTING]));
 
   start_button.textContent = ". . .";
   if (app_state == APP_STOPPED) {
@@ -283,8 +274,12 @@ function set_controls() {
   setVisibleIn(window.inputSelector, allStatesExcept(ACTIVE_STATES));
   setVisibleIn(window.nameSelector, allStatesExcept(ACTIVE_STATES));
 
-  setVisibleIn(window.micToggleButton, [APP_RUNNING], "inline-block");
-  setVisibleIn(window.speakerToggleButton, [APP_RUNNING], "inline-block");
+  setEnabledIn(window.songControls, allStatesExcept([APP_RESTARTING]));
+  setEnabledIn(window.chatPost, allStatesExcept([APP_RESTARTING]));
+  setEnabledIn(audio_offset_text, allStatesExcept([APP_RESTARTING]));
+
+  setVisibleIn(window.micToggleButton, [APP_RUNNING, APP_RESTARTING], "inline-block");
+  setVisibleIn(window.speakerToggleButton, [APP_RUNNING, APP_RESTARTING], "inline-block");
 
   setVisibleIn(window.initialInstructions, [
     APP_INITIALIZING, APP_CALIBRATING_LATENCY, APP_STOPPING]);
@@ -296,7 +291,7 @@ function set_controls() {
   setVisibleIn(window.volumeCalibration, [APP_CALIBRATING_VOLUME]);
   setEnabledIn(window.startVolumeCalibration, [APP_CALIBRATING_VOLUME]);
 
-  setVisibleIn(window.runningInstructions, [APP_RUNNING]);
+  setVisibleIn(window.runningInstructions, [APP_RUNNING, APP_RESTARTING]);
 
   setVisibleIn(window.noAudioInputInstructions, []);
 
@@ -376,17 +371,16 @@ const APP_CALIBRATING_LATENCY = "calibrating_latency";
 const APP_CALIBRATING_VOLUME = "calibrating_volume";
 const APP_STOPPING = "stopping";
 const APP_RESTARTING = "restarting";
-const APP_CRASHED = "crashed";
 
 var app_state = APP_INITIALIZING;
 
 const ALL_STATES = [
   APP_INITIALIZING, APP_STOPPED, APP_STARTING, APP_RUNNING,
   APP_CALIBRATING_LATENCY, APP_CALIBRATING_VOLUME, APP_STOPPING,
-  APP_RESTARTING, APP_CRASHED];
+  APP_RESTARTING];
 
 const ACTIVE_STATES = [
-  APP_RUNNING, APP_CALIBRATING_LATENCY, APP_CALIBRATING_VOLUME
+  APP_RUNNING, APP_CALIBRATING_LATENCY, APP_CALIBRATING_VOLUME, APP_RESTARTING
 ];
 
 function switch_app_state(newstate) {
@@ -418,7 +412,6 @@ function batch_size_to_ms(batch_size) {
 // How many samples should we accumulate before sending to the server?
 // In units of 128 samples. Set in start() once we know the sample rate.
 var sample_batch_size;
-var max_sample_batch_size;
 
 function set_estimate_latency_mode(mode) {
   playerNode.port.postMessage({
@@ -480,8 +473,7 @@ async function audio_offset_change() {
   }
 
   if (app_state == APP_RUNNING) {
-    await reload_settings();
-    await server_connection.start();
+    await restart();
   }
 }
 
@@ -773,8 +765,6 @@ async function start() {
     return;
   }
 
-  clear_error();
-
   // Do NOT set the sample rate to a fixed value. We MUST let the audioContext use
   // whatever it thinks the native sample rate is. This is becuse:
   // * Firefox does not have a resampler, so it will refuse to operate if we try
@@ -790,7 +780,6 @@ async function start() {
 
   // XXX: this all gets kind of gross with 44100, nothing divides nicely.
   sample_batch_size = ms_to_batch_size(INITIAL_MS_PER_BATCH);
-  max_sample_batch_size = ms_to_batch_size(MAX_MS_PER_BATCH);
   window.msBatchSize.value = INITIAL_MS_PER_BATCH;
 
   var micNode = await configure_input_node(audioCtx);
@@ -875,15 +864,6 @@ async function start() {
 
 // Should really be named "restart everything", which is what it does.
 async function reload_settings(startup) {
-  if (app_state != APP_STARTING &&
-      app_state != APP_RUNNING &&
-      app_state != APP_CALIBRATING_LATENCY &&
-      app_state != APP_CALIBRATING_VOLUME) {
-    lib.log(LOG_WARNING, "Tried to reload_settings while neither running nor calibrating, skipping.")
-    return;
-  }
-  switch_app_state(APP_RESTARTING);
-
   lib.log(LOG_INFO, "Resetting the world! Old epoch was:", epoch);
   epoch +=1;
   lib.log(LOG_INFO, "New epoch is:", epoch);
@@ -937,7 +917,6 @@ async function reload_settings(startup) {
   }
   // This will reset the audio worklett, flush its buffer, and start it up again.
   playerNode.port.postMessage(audio_params);
-  switch_app_state(APP_RUNNING);
 }
 
 function send_local_latency() {
@@ -1071,8 +1050,8 @@ async function handle_message(event) {
   }
 
   if (msg.type === "underflow") {
-    await reload_settings();
-    await server_connection.start();
+    window.lostConnectivity.style.display = "block";
+    await restart();
     return;
   } else if (msg.type == "no_mic_input") {
     window.noAudioInputInstructions.style.display = "block";
@@ -1196,9 +1175,8 @@ async function handle_message(event) {
     // XXX: interesting, it does not seem that these promises are guaranteed to resolve in order... and the worklet's buffer uses the first chunk's timestamp to decide where to start playing back, so if the first two chunks are swapped it has a big problem.
     const response = await server_connection.send(encoded_chunk);
     if (!response) {
-      // Server connection failed. If we got a client kill, really we should not increase the batch size here, but I'm honestly not clear on when it's ever a good idea to increase it.
-      lib.log(LOG_ERROR, "Resetting server connection due to network failure");
-      await try_increase_batch_size_and_reload();
+      window.lostConnectivity.style.display = "block";
+      await restart();
       return;
     }
     var { metadata, chunk: response_chunk, epoch: server_epoch } = response;
@@ -1475,19 +1453,15 @@ window.micVolumeApply.addEventListener("click", (e) => {
                          parseFloat(window.micVolumeSetting.value)]);
 });
 
-async function try_increase_batch_size_and_reload() {
-  if (sample_batch_size < max_sample_batch_size) {
-    // Try increasing the batch size and restarting.
-    sample_batch_size *= 1.3;  // XXX: do we care that this may not be integral??
-    window.msBatchSize.value = batch_size_to_ms(sample_batch_size);
-    await reload_settings();
-    await server_connection.start();
-    return;
-  } else {
-    set_error("Failed to communicate with the server at a reasonable latency");
-    await stop();
+async function restart() {
+  if (app_state === APP_RESTARTING) {
     return;
   }
+  switch_app_state(APP_RESTARTING);
+  await reload_settings();
+  await server_connection.start();
+  window.lostConnectivity.style.display = "none";
+  switch_app_state(APP_RUNNING);
 }
 
 async function stop() {

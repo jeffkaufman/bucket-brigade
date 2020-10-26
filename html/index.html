@@ -30,6 +30,9 @@ body {
 #activeUsers {
   margin-left: 1em;
 }
+#songControls {
+  border: none;
+}
 #chatWindow {
   margin: 1em;
   background: #eee;
@@ -48,8 +51,10 @@ body {
 #chatEntry {
   width: calc(100% - 3em);
 }
-#errorBox {
+#lostConnectivity {
   display: none;
+  position: absolute;
+  background-color: white;
 }
 #noAudioInputInstructions {
   display: none;
@@ -219,8 +224,6 @@ Input device:
   </select>
 </div>
 
-<div class=warning id=errorBox></div>
-
 <div id=initialInstructions>
   <ul>
     <li style="display: none; color: red" id=bluetoothWarning><b>Your audio device (bluetooth headset?) is triggering a bug. Please let Glenn know you saw this. We will try to work around it automatically.</b>
@@ -319,11 +322,11 @@ You're fully calibrated now!  Talk to each other in chat and figure
 out who's going to lead the next song.  They should click the "Lead a
 Song" button.
 
-<p>
-
+<fieldset id=songControls>
 <button id=takeLead>Lead a Song</button>
 <button id=jumpToEnd>Jump To End</button>
-<select id=backingTrack><select>
+<select id=backingTrack></select>
+</fieldset>
 
 <div id=startSingingCountdown>
 
@@ -335,6 +338,7 @@ Song" button.
 
 <h4>Chat</h4>
 <div id=chatWindow>
+  <div class=warning id=lostConnectivity>Lost connectivity to the server. Trying to reconnect&hellip;</div>
   <div id=chatDisplay></div>
   <form id=chatForm><input type="text" id=chatEntry></input><input type="submit" id=chatPost value="Post"></input></form>
 </div>
