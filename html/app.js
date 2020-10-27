@@ -139,7 +139,7 @@ function takeLeadClick() {
     leadButtonState = "take-lead";
     window.jumpToEnd.disabled = false;
   } else {
-    throw "unknown state " + leadButtonState;
+    throw new Error("unknown state " + leadButtonState);
   }
 }
 
@@ -514,7 +514,7 @@ class AudioEncoder {
     var response_id = ev.data.request_id;
     check(queue_entry[0] == response_id, "Responses out of order", queue_entry, ev.data);
     if (ev.data.status != 0) {
-      throw { err: "AudioEncoder RPC failed", data: ev.data };
+      throw new Error("AudioEncoder RPC failed: " + JSON.stringify(ev.data));
     }
     queue_entry[1](ev.data);
   }
@@ -622,7 +622,7 @@ class AudioEncoder {
   async encode(in_data) {
     var data = await this.worker_rpc(in_data);
     if (data.packets === undefined) {
-      throw { err: "encode returned no packets", data };
+      throw new Error("encode returned no packets:" + JSON.stringify(data));
     }
     return data;
   }
@@ -655,7 +655,7 @@ class AudioDecoder {
     var response_id = ev.data.request_id;
     check(queue_entry[0] == response_id, "Responses out of order", queue_entry, ev.data);
     if (ev.data.status != 0) {
-      throw { err: "AudioDecoder RPC failed", data: ev.data };
+      throw new Error("AudioDecoder RPC failed: " + JSON.stringify(ev.data));
     }
     queue_entry[1](ev.data);
   }
@@ -769,7 +769,7 @@ async function start() {
   switch_app_state(APP_STARTING);
 
   if (audioCtx) {
-    lib.log(LOG_ERROR, "NOT RUNNING, BUT ALREADY HAVE AUDIOCTX?");
+    throw new Error("NOT RUNNING, BUT ALREADY HAVE AUDIOCTX?");
     return;
   }
 
@@ -1130,9 +1130,7 @@ async function handle_message(event) {
     await start();
     return;
   } else if (msg.type != "samples_out") {
-    lib.log(LOG_ERROR, "Got message of unknown type:", msg);
-    await stop();
-    return;
+    throw new Error("Got message of unknown type: " + JSON.stringify(msg));
   }
 
   // If we see this change at any point, that means stop what we're doing.
