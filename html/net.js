@@ -215,17 +215,21 @@ export class FakeServerConnection extends ServerConnectionBase {
   }
 }
 
+function fetch_with_retry(resource, init) {
+  return fetch(resource, init).catch(async () => {
+    await new Promise((resolve) => {
+      setTimeout(resolve, 1000);
+    });
+    return fetch_with_retry(resource, init);
+  });
+}
+
 export async function query_server_clock(target_url) {
   var request_time_ms = Date.now();
-  var fetch_result = await fetch(target_url, {
-    method: "get",  // default
-    cache: "no-store",
-  }).catch(() => Promise.reject({
-    message: 'Could not connect to the server. ' +
-      'This is probably a problem with your internet connection. ' +
-      'Please refresh and try again.',
-    unpreventable: true,
-  }));
+  const fetch_init = {method: "get", cache: "no-store"};
+  const fetch_result = await fetch(target_url, fetch_init)
+    // Retry immediately on first failure; wait one second after subsequent ones
+    .catch(() => fetch_with_retry(target_url, fetch_init));
 
   if (!fetch_result.ok) {
     throw({
