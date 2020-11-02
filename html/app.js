@@ -10,6 +10,16 @@ import {AudioChunk, CompressedAudioChunk, PlaceholderChunk, concat_chunks, Clock
 //   by forcing this to load up top, before we try to 'addModule' it.
 import './audio-worklet.js';
 
+const APP_TUTORIAL = "tutorial";
+const APP_INITIALIZING = "initializing";
+const APP_STOPPED = "stopped";
+const APP_STARTING = "starting";
+const APP_RUNNING = "running";
+const APP_CALIBRATING_LATENCY = "calibrating_latency";
+const APP_CALIBRATING_VOLUME = "calibrating_volume";
+const APP_STOPPING = "stopping";
+const APP_RESTARTING = "restarting";
+
 addEventListener('error', (event) => {
   if (document.getElementById('crash').style.display) {
     return;
@@ -169,7 +179,7 @@ persist_checkbox("disableLatencyMeasurement");
 // Persisting select boxes is harder, so we do it manually for inSelect.
 
 function setMainAppVisibility() {
-  if (window.userName.value) {
+  if (window.userName.value && app_state != APP_TUTORIAL) {
     window.mainApp.style.display = "block";
   }
 }
@@ -225,7 +235,6 @@ var audioCtx;
 
 var start_button = document.getElementById('startButton');
 var click_volume_slider = document.getElementById('clickVolumeSlider');
-var disable_tutorial_checkbox = document.getElementById('disableTutorial');
 var disable_latency_measurement_checkbox = document.getElementById('disableLatencyMeasurement');
 var loopback_mode_select = document.getElementById('loopbackMode');
 var server_path_text = document.getElementById('serverPath');
@@ -263,6 +272,10 @@ function set_controls() {
   setEnabledIn(in_select, allStatesExcept([APP_INITIALIZING, APP_RESTARTING]));
   setEnabledIn(start_button, allStatesExcept([APP_INITIALIZING, APP_RESTARTING]));
 
+  setVisibleIn(start_button, allStatesExcept([APP_TUTORIAL]));
+
+  setVisibleIn(window.tutorial, [APP_TUTORIAL]);
+
   start_button.textContent = ". . .";
   if (app_state == APP_STOPPED) {
     start_button.textContent = "Start";
@@ -271,9 +284,10 @@ function set_controls() {
   }
 
   setVisibleIn(window.pleaseBeKind, allStatesExcept(ACTIVE_STATES));
-  setVisibleIn(window.inputSelector, allStatesExcept(ACTIVE_STATES));
-  setVisibleIn(window.nameSelector, allStatesExcept(ACTIVE_STATES));
-
+  setVisibleIn(window.inputSelector,
+               allStatesExcept(ACTIVE_STATES.concat([APP_TUTORIAL])));
+  setVisibleIn(window.nameSelector,
+               allStatesExcept(ACTIVE_STATES.concat([APP_TUTORIAL])));
   setEnabledIn(window.songControls, allStatesExcept([APP_RESTARTING]));
   setEnabledIn(window.chatPost, allStatesExcept([APP_RESTARTING]));
   setEnabledIn(audio_offset_text, allStatesExcept([APP_RESTARTING]));
@@ -300,6 +314,8 @@ function set_controls() {
   window.estLatency.innerText = "...";
 
   window.backingTrack.display = "none";
+
+  setMainAppVisibility();
 }
 
 function in_select_change() {
@@ -363,19 +379,15 @@ var encoder;
 var decoder;
 var encoding_latency_ms;
 
-const APP_INITIALIZING = "initializing";
-const APP_STOPPED = "stopped";
-const APP_STARTING = "starting";
-const APP_RUNNING = "running";
-const APP_CALIBRATING_LATENCY = "calibrating_latency";
-const APP_CALIBRATING_VOLUME = "calibrating_volume";
-const APP_STOPPING = "stopping";
-const APP_RESTARTING = "restarting";
+var app_state = APP_TUTORIAL;
+if (window.disableTutorial.checked) {
+   app_state = APP_INITIALIZING;
+}
 
-var app_state = APP_INITIALIZING;
+var app_initialized = false;
 
 const ALL_STATES = [
-  APP_INITIALIZING, APP_STOPPED, APP_STARTING, APP_RUNNING,
+  APP_TUTORIAL, APP_INITIALIZING, APP_STOPPED, APP_STARTING, APP_RUNNING,
   APP_CALIBRATING_LATENCY, APP_CALIBRATING_VOLUME, APP_STOPPING,
   APP_RESTARTING];
 
@@ -1548,16 +1560,10 @@ async function initialize() {
     server_path_text.value = "http://localhost:8081/"
   }
 
-  var hash = window.location.hash;
-  if (hash && hash.length > 1) {
-    var set_audio_offset = parseInt(hash.substr(1), 10);
-    if (set_audio_offset >= 0 && set_audio_offset <= 60) {
-      audio_offset_text.value = set_audio_offset;
-      audio_offset_change();
-    }
+  app_initialized = true;
+  if (app_state != APP_TUTORIAL) {
+    switch_app_state(APP_STOPPED);
   }
-
-  switch_app_state(APP_STOPPED);
 }
 
 function hide_buttons_and_append_answer(element, answer) {
@@ -1596,15 +1602,19 @@ function tutorial_answer(button) {
   }
 }
 
+function hide_tutorial() {
+  window.tutorial.style.display = 'none';
+  window.nameSelector.display = 'block';
+  window.mainApp.display = 'block';
+}
+
+
 document.querySelectorAll(".dismiss_tutorial").forEach(
-  (button) => button.addEventListener(
-    "click", () => window.tutorial.style.display = 'none'));
+  (button) => button.addEventListener("click", () => {
+    switch_app_state(app_initialized ? APP_STOPPED : APP_INITIALIZING);
+  }));
 
 document.querySelectorAll("#tutorial_questions button").forEach(
   (button) => button.addEventListener("click", () => tutorial_answer(button)));
-
-if (disable_tutorial_checkbox.checked) {
-  window.tutorial.style.display = 'none';
-}
 
 initialize();

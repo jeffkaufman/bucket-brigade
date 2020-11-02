@@ -5,7 +5,8 @@ body {
   max-width: 40em;
 }
 .warning {
-  border: 1px solid red;
+  border: 1px dashed red;
+  border-radius: 0.25em;
   max-width: 30em;
   margin: 1em;
   padding: 1em;
@@ -70,15 +71,6 @@ body {
   left: 0;
   z-index: 2;
 }
-#tutorial {
-  width: 100%;
-  height: 100%;
-  position: fixed;
-  top: 0;
-  left: 0;
-  background: white;
-  z-index: 1;
-}
 #tutorial > div {
   margin: 1em;
 }
@@ -112,7 +104,7 @@ body {
 
 #volumeCalibration {
   display: none;
-}
+} 
 
 #backingTrack { display: none; }
 
@@ -135,25 +127,40 @@ body {
   margin-top: 1em;
   border-radius: 0.25em;
 }
+#nameSelector {
+  display: none;
+}
+#mainApp {
+  display: none;
+}
 </style>
-<h1>"Bucket Brigade" Audio Demo</h1>
+
+
+
+
+<h1>Bucket Brigade Singing</h1>
 
 <div class=warning id=pleaseBeKind>
 
-This is a prototype, currently only works in Chrome, and there is only
-one active instance. Please be kind! If you're a programmer, I would
-recommend opening up devtools so you can see if there are any
-interesting console messages.
+This is new and still has some issues. If you run into a problem, we
+would appreciate it if you would <a
+href="https://github.com/gwillen/solstice-audio-test/issues/new">tell
+us about it</a>.
 
 </div>
 
 <div id=notchrome>
-  It looks like you're not using Chrome.  Unfortunately, we haven't
-  yet put in the work to make this prototype work on other browsers. Sorry!
+  It looks like you're not using Chrome.  Unfortunately, this doesn't
+  yet work in other browsers:
 
-  <p>
+  <ul>
+  <li>Firefox does not yet support ES6 modules in worklets</li>
+  <li>Safari doesn't yet support AudioWorklet</li>
+  </ul>
 
-    While we don't recommend trying to continue anyway, because it will probably fail silently and just be frustrating for you, if you want you may continue:
+  While we don't recommend trying to continue anyway, because it will
+  probably fail silently and just be frustrating for you, if you want
+  you can continue:
 
     <button id=dismissNotChrome>dismiss</button>
 </div>
@@ -168,6 +175,12 @@ interesting console messages.
 
 <div id=tutorial>
   <div id=tutorial_questions>
+    Welcome!  This is a program for singing with people over the
+    Internet. Before we start, a few questions:
+
+<p>
+
+
     <div id=q_headphones_present>
       Are you using headphones?
       <button>Yes</button>
@@ -371,14 +384,7 @@ choose a new one. Enter a number between 6 and 115:
 <br>
 <br>
 <br>
-
 <hr>
-
-<h3>
-
-(<a href="full-instructions.html">background</a>)
-
-<br>
 
 <button type="button" data-otherlabel="Close debug settings" class="collapse">Open debug settings</button>
 <div style="display:none">
@@ -421,6 +427,11 @@ choose a new one. Enter a number between 6 and 115:
 
 </div>
 <h3>Debug info:</h3>
+
+<a href="https://github.com/gwillen/solstice-audio-test">source code</a>
+
+<p>
+
   Sample rate:
   <input type=text id=sampleRate value="(not available yet)" disabled>
 <br>
@@ -457,9 +468,9 @@ choose a new one. Enter a number between 6 and 115:
 </div>
 
 <div id="crash">
-  <h1 id="crashMessage">This app has crashed because of a bug. We're really sorry :-(</h1>
+  <h1 id="crashMessage">This app has crashed. We're really sorry :-(</h1>
   <div id="crashBug">
-    <h2>Please send the following information to the developers; it will help them fix the bug.</h2>
+    <h2>Please <a href="https://github.com/gwillen/solstice-audio-test/issues/new">file a bug</a> with the following information; it will help us fix it.</h2>
     <textarea id="crashTrace" rows="50" cols="160" readonly></textarea>
     <h2>Then refresh the page and try again.</h2>
   </div>
