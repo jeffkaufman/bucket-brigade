@@ -5,13 +5,15 @@ from http.server import BaseHTTPRequestHandler
 import json
 import urllib.parse
 import time
-import numpy as np
+import numpy as np  # type:ignore
 import random
-import opuslib
+import opuslib  # type:ignore
 import math
 import os
 import logging
 import wave
+
+from typing import Any, Dict, List, Tuple
 
 logging.basicConfig(filename='server.log',level=logging.DEBUG)
 
@@ -21,11 +23,11 @@ last_request_clock = None
 first_client_write_clock = None
 first_client_total_samples = None
 first_client_value = None
-global_volume = 1
-backing_volume = 1
+global_volume = 1.0
+backing_volume = 1.0
 song_end_clock = 0
 song_start_clock = None
-requested_track = None
+requested_track: Any = None
 
 QUEUE_SECONDS = 120
 
@@ -61,26 +63,26 @@ max_position = DELAY_INTERVAL*LAYERING_DEPTH
 N_PHANTOM_PEOPLE = 2
 
 tracks = []
-def populate_tracks():
+def populate_tracks() -> None:
     for track in sorted(os.listdir("audio")):
         if track != "README":
             tracks.append(track)
 
-def start():
+def start() -> None:
     populate_tracks()
     start_server()
 
-def start_server():
+def start_server() -> None:
     server = http.server.HTTPServer(('', 8081), OurHandler)
     server.serve_forever()
 
 class User:
-    def __init__(self, userid, name, last_heard_server_clock, delay_samples):
+    def __init__(self, userid, name, last_heard_server_clock, delay_samples) -> None:
         self.userid = userid
         self.name = name
         self.last_heard_server_clock = last_heard_server_clock
         self.delay_samples = delay_samples
-        self.chats_to_send = []
+        self.chats_to_send: List[Any] = []
         self.delay_to_send = None
         self.opus_state = None
         self.mic_volume = 1.0
@@ -92,15 +94,15 @@ class User:
         self.last_seen_read_clock = None
         self.last_seen_write_clock = None
 
-    def flush(self):
+    def flush(self) -> None:
         """Delete any state that shouldn't be persisted across reconnects"""
         self.opus_state = None
         self.last_seen_read_clock = None
         self.last_seen_write_clock = None
 
-users = {} # userid -> User
+users: Dict[str, Any] = {} # userid -> User
 
-def wrap_get(queue, start, len_vals):
+def wrap_get(queue, start, len_vals) -> Any:
     start_in_queue = start % len(queue)
 
     if start_in_queue + len_vals <= len(queue):
@@ -116,7 +118,7 @@ def wrap_get(queue, start, len_vals):
             queue[0:second_section_size]
             ])
 
-def wrap_assign(queue, start, vals):
+def wrap_assign(queue, start, vals) -> None:
     assert len(vals) <= len(queue)
     start_in_queue = start % len(queue)
 
@@ -131,9 +133,9 @@ def wrap_assign(queue, start, vals):
         queue[start_in_queue:(start_in_queue+first_section_size)] = vals[:first_section_size]
         queue[0:second_section_size] = vals[first_section_size:]
 
-backing_track = []
+backing_track: Any = np.zeros(0)
 backing_track_index = 0
-def run_backing_track():
+def run_backing_track() -> None:
     global backing_track
     global backing_track_index
     global requested_track
@@ -159,7 +161,7 @@ def run_backing_track():
     # Backing track is used only once.
     requested_track = None
 
-def assign_delays(userid_lead):
+def assign_delays(userid_lead) -> None:
     global max_position
 
     users[userid_lead].delay_to_send = DELAY_INTERVAL
@@ -179,7 +181,7 @@ def assign_delays(userid_lead):
         users[userid].delay_to_send = position
         max_position = max(position, max_position)
 
-def update_users(userid, username, server_clock, client_read_clock):
+def update_users(userid, username, server_clock, client_read_clock) -> None:
     # Delete expired users BEFORE adding us to the list, so that our session
     #   will correctly reset if we are the next customer after we've been gone
     #   for awhile.
@@ -191,7 +193,7 @@ def update_users(userid, username, server_clock, client_read_clock):
     users[userid].last_heard_server_clock = server_clock
     users[userid].delay_samples = delay_samples
 
-def clean_users(server_clock):
+def clean_users(server_clock) -> None:
     to_delete = []
     for userid, user in users.items():
         age_samples = server_clock - user.last_heard_server_clock
@@ -200,7 +202,7 @@ def clean_users(server_clock):
     for userid in to_delete:
         del users[userid]
 
-def setup_monitoring(monitoring_userid, monitored_userid):
+def setup_monitoring(monitoring_userid, monitored_userid) -> None:
     for user in users.values():
         user.is_monitoring = False
         user.is_monitored = False
@@ -215,7 +217,7 @@ def setup_monitoring(monitoring_userid, monitored_userid):
     users[monitoring_userid].delay_to_send = round(
         users[monitored_userid].delay_samples / SAMPLE_RATE) + DELAY_INTERVAL
 
-def user_summary():
+def user_summary() -> List[Any]:
     summary = []
     for userid, user in users.items():
         summary.append((
@@ -228,7 +230,7 @@ def user_summary():
     summary.sort()
     return summary
 
-def pack_multi(packets):
+def pack_multi(packets) -> Any:
     encoded_length = 1
     for p in packets:
         encoded_length += 2 + len(p)
@@ -245,7 +247,7 @@ def pack_multi(packets):
         idx += len(p)
     return outdata
 
-def unpack_multi(data):
+def unpack_multi(data) -> List[Any]:
     if data.dtype != np.uint8:
         raise Exception("unpack_multi only accepts uint8")
     packet_count = data[0]
@@ -259,7 +261,7 @@ def unpack_multi(data):
         result.append(packet)
     return result
 
-def handle_post(in_data_raw, query_params, headers):
+def handle_post(in_data_raw, query_params, headers) -> Tuple[Any, str]:
     global last_request_clock
     global first_client_write_clock
     global first_client_total_samples
@@ -564,13 +566,13 @@ def handle_post(in_data_raw, query_params, headers):
     return data, x_audio_metadata
 
 class OurHandler(BaseHTTPRequestHandler):
-    def do_OPTIONS(self):
+    def do_OPTIONS(self) -> None:
         self.send_response(200)
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
         self.end_headers()
 
-    def do_GET(self):
+    def do_GET(self) -> None:
         server_clock = int(time.time() * SAMPLE_RATE)
         self.send_response(200)
         self.send_header("Access-Control-Allow-Origin", "*")
@@ -580,11 +582,11 @@ class OurHandler(BaseHTTPRequestHandler):
             "server_clock": server_clock,
             "server_sample_rate": SAMPLE_RATE,
         }))
-        self.send_header("Content-Length", 0)
+        self.send_header("Content-Length", "0")
         self.send_header("Content-Type", "application/octet-stream")
         self.end_headers()
 
-    def do_POST(self):
+    def do_POST(self) -> None:
         content_length = int(self.headers["Content-Length"])
         in_data_raw = self.rfile.read(content_length)
 
@@ -595,7 +597,7 @@ class OurHandler(BaseHTTPRequestHandler):
 
         userid = None
         try:
-            userid, = query_params.get("userid", None)
+            userid, = query_params.get("userid", (None,))
             data, x_audio_metadata = handle_post(in_data_raw, query_params, self.headers)
         except Exception as e:
             # Clear out stale session
@@ -616,7 +618,7 @@ class OurHandler(BaseHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
         self.send_header("Access-Control-Expose-Headers", "X-Audio-Metadata")
         self.send_header("X-Audio-Metadata", x_audio_metadata)
-        self.send_header("Content-Length", len(data))
+        self.send_header("Content-Length", str(len(data)))
         self.send_header("Content-Type", "application/octet-stream")
         self.end_headers()
         self.wfile.write(data)
