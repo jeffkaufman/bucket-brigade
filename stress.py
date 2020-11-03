@@ -38,10 +38,13 @@ def stress(args):
   # avoid having everyone at the same offset
   time.sleep(random.random() * PACKET_INTERVAL)
 
+
+
   n_rounds, tmp_name = args
 
   userid = int(random.random()*10000000)
   timing = []
+  full_start = time.time()
   for i in range(n_rounds):
     start = time.time()
     send_request(tmp_name, userid)
@@ -50,8 +53,11 @@ def stress(args):
     duration = end-start
     timing.append(int(duration*1000))
 
-    if duration < PACKET_INTERVAL:
-      time.sleep(PACKET_INTERVAL - duration)
+    full_duration = end - full_start
+    expected_full_elapsed = i * PACKET_INTERVAL
+
+    if full_duration < expected_full_elapsed:
+      time.sleep(expected_full_elapsed - full_duration)
 
   return timing
 
