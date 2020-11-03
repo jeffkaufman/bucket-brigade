@@ -104,7 +104,7 @@ body {
 
 #volumeCalibration {
   display: none;
-} 
+}
 
 #backingTrack { display: none; }
 
@@ -133,12 +133,18 @@ body {
 #mainApp {
   display: none;
 }
+#calendar {
+  border: 1px dashed grey;
+  border-radius: 0.25em;
+  max-width: 30em;
+  margin: 1em;
+  padding: 1em;
+}
 </style>
 
 
-
-
 <h1>Bucket Brigade Singing</h1>
+<div id=currentEvent>loading...</div>
 
 <div class=warning id=pleaseBeKind>
 
@@ -146,6 +152,14 @@ This is new and still has some issues. If you run into a problem, we
 would appreciate it if you would <a
 href="https://github.com/gwillen/solstice-audio-test/issues/new">tell
 us about it</a>.
+
+</div>
+
+<div id=calendar>
+
+This only supports one event at a time. You may book time by sending a
+calendar invitation to
+<tt>gsc268k1lu78lbvfbhphdr0cs4@group.calendar.google.com</tt>. For example, you can add that email address as a guest for an event in google Calendar.  <a href="https://calendar.google.com/calendar/u/0/embed?src=gsc268k1lu78lbvfbhphdr0cs4@group.calendar.google.com">View Calendar</a>.
 
 </div>
 
@@ -176,7 +190,10 @@ us about it</a>.
 <div id=tutorial>
   <div id=tutorial_questions>
     Welcome!  This is a program for singing with people over the
-    Internet. Before we start, a few questions:
+    Internet. <span id=eventWelcome></span>
+    <p>
+
+    Before we start, a few questions:
 
 <p>
 

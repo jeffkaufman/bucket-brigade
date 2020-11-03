@@ -73,6 +73,84 @@ function close_stream(stream) {
   stream.getTracks().forEach((track) => track.stop());
 }
 
+function prettyTime(ms) {
+  if (ms < 1000) {
+    return "0s";
+  }
+  const sec = Math.round(ms / 1000);
+  if (sec < 60) {
+    return sec + "s";
+  }
+  const min = Math.round(sec / 60);
+  if (min < 60) {
+    return min + "m";
+  }
+  const hr = Math.round(min / 60);
+  if (hr < 24) {
+    return hr + "h";
+  }
+  const d = Math.round(hr / 24);
+  return d + "d";
+}
+
+function update_calendar() {
+  fetch('https://www.googleapis.com/calendar/v3/calendars/gsc268k1lu78lbvfbhphdr0cs4@group.calendar.google.com/events?key=AIzaSyCDAG5mJmnmi9EaR5SujP70x8kLKOau4Is')
+    .then(response => response.json())
+    .then(data => {
+      let currentEvent = null;
+      let upcomingEvent = null;
+      const now = Date.now();
+
+      data.items.forEach(item => {
+        // If an event is currently happening we want to check whether
+        // that's what people are here for. Similarly, if an event is
+        // going to be starting soon we should give people a heads up.
+        if (item.status === "confirmed") {
+          const msUntilStart = Date.parse(item.start.dateTime) - now;
+          const msUntilEnd = Date.parse(item.end.dateTime) - now;
+          const organizer = item.organizer.displayName || item.organizer.email;
+          console.log(item.summary + " [" + msUntilStart + ":" + msUntilEnd + "]");
+          if (msUntilStart <= 0 && msUntilEnd > 0) {
+            currentEvent = {
+              summary: item.summary,
+              remainingMs: msUntilEnd,
+              organizer: organizer,
+            };
+          } else if (msUntilStart > 0) {
+            if (!upcomingEvent || upcomingEvent.futureMs > msUntilStart) {
+              upcomingEvent = {
+                summary: item.summary,
+                futureMs: msUntilStart,
+                organizer: organizer,
+              }
+            }
+          }
+        }
+      });
+
+      if (currentEvent) {
+        window.currentEvent.innerText = "Current Event: " + currentEvent.summary;
+        window.eventWelcome.innerText =
+          "Right now " + currentEvent.organizer + " is running \"" +
+          currentEvent.summary + "\".  If you were invited to attend, great! " +
+          "Otherwise, please come back later.";
+      } else if (upcomingEvent) {
+        window.currentEvent.innerText = "Next Event: \"" + upcomingEvent.summary +
+          "\" in " + prettyTime(upcomingEvent.futureMs);
+        if (upcomingEvent.futureMs < 60*60*1000) {
+          window.eventWelcome.innerText =
+            "There are no events right now, but in " +
+            prettyTime(upcomingEvent.futureMs) + " " +
+            upcomingEvent.organizer + " is running \"" +
+            upcomingEvent.summary + "\".";
+        }
+      } else {
+        window.currentEvent.innerText = "No Events Scheduled";
+      }
+    });
+}
+update_calendar();
+
 async function force_permission_prompt() {
   // In order to enumerate devices, we must first force a permission prompt by opening a device and then closing it again.
   // See: https://stackoverflow.com/questions/60297972/navigator-mediadevices-enumeratedevices-returns-empty-labels
