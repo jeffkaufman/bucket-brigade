@@ -374,9 +374,9 @@ function set_controls() {
   setVisibleIn(window.speakerToggleButton, [APP_RUNNING, APP_RESTARTING], "inline-block");
 
   setVisibleIn(window.initialInstructions, [
-    APP_INITIALIZING, APP_CALIBRATING_LATENCY, APP_STOPPING]);
+    APP_INITIALIZING, APP_STOPPED, APP_CALIBRATING_LATENCY, APP_STOPPING]);
   setVisibleIn(window.latencyCalibrationInstructions, [
-    APP_INITIALIZING, APP_CALIBRATING_LATENCY, APP_STOPPING]);
+    APP_INITIALIZING, APP_STOPPED, APP_CALIBRATING_LATENCY, APP_STOPPING]);
 
   setVisibleIn(window.calibration, [APP_CALIBRATING_LATENCY]);
 
