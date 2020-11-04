@@ -23,7 +23,7 @@ def send_request(tmp_name, userid):
   cmd = [
     'curl',
     'https://echo.jefftk.com/api/?read_clock=%s&userid=%s&username=stress' % (
-      userid, ts),
+      ts, userid),
     '-H', 'Content-Type: application/octet-stream',
     '--data-binary', "@" + tmp_name,
     '--compressed',
