@@ -13,7 +13,8 @@ def run(n_workers, n_rounds):
   processes = []
   for i in range(n_workers):
     processes.append(subprocess.Popen(["python3", "stress_helper.py",
-                                       n_rounds], stdout=subprocess.PIPE))
+                                       n_rounds, "stress%s" % i],
+                                      stdout=subprocess.PIPE))
   timings = []
   for process in processes:
     process.wait()
