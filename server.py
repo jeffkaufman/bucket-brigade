@@ -574,6 +574,11 @@ class OurHandler(BaseHTTPRequestHandler):
 
     def maybe_print_status(self) -> None:
         now = time.time()
+        print("%s %s %s %s" % (
+            now,
+            self.last_status_ts,
+            now - self.last_status_ts,
+            STATUS_PRINT_INTERVAL_S))
         if now - self.last_status_ts < STATUS_PRINT_INTERVAL_S:
             return
 
