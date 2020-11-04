@@ -569,17 +569,13 @@ def handle_post(in_data_raw, query_params, headers) -> Tuple[Any, str]:
 
     return data, x_audio_metadata
 
+last_status_ts = 0
 class OurHandler(BaseHTTPRequestHandler):
-    last_status_ts = 0
 
     def maybe_print_status(self) -> None:
+        global last_status_ts
         now = time.time()
-        print("%s %s %s %s" % (
-            now,
-            self.last_status_ts,
-            now - self.last_status_ts,
-            STATUS_PRINT_INTERVAL_S))
-        if now - self.last_status_ts < STATUS_PRINT_INTERVAL_S:
+        if now - last_status_ts < STATUS_PRINT_INTERVAL_S:
             return
 
         print("-"*70)
@@ -593,7 +589,7 @@ class OurHandler(BaseHTTPRequestHandler):
                 "m" if is_monitored else " ",
                 "M" if is_monitoring else " "))
 
-        self.last_status_ts = now
+        last_status_ts = now
 
     def do_OPTIONS(self) -> None:
         self.send_response(200)
