@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+2#!/usr/bin/env python3
 
 import http.server
 from http.server import BaseHTTPRequestHandler
@@ -37,6 +37,10 @@ OPUS_FRAME_MS = 60
 OPUS_FRAME_SAMPLES = SAMPLE_RATE // 1000 * OPUS_FRAME_MS
 OPUS_BYTES_PER_SAMPLE = 4  # float32
 OPUS_FRAME_BYTES = OPUS_FRAME_SAMPLES * CHANNELS * OPUS_BYTES_PER_SAMPLE
+
+# How often to print status updates. With no requests are coming in no status
+# update will be printed.
+STATUS_PRINT_INTERVAL_S = 10
 
 # Leave this much space between users. Ideally this would be very
 # short, but it needs to be long enough to cover "client total time
@@ -566,6 +570,26 @@ def handle_post(in_data_raw, query_params, headers) -> Tuple[Any, str]:
     return data, x_audio_metadata
 
 class OurHandler(BaseHTTPRequestHandler):
+    last_status_ts = 0
+
+    def maybe_print_status(self) -> None:
+        now = time.time()
+        if now - self.last_status_ts < STATUS_PRINT_INTERVAL_S:
+            return
+
+        print("-"*70)
+
+        for delay, name, mic_volume, userid, is_monitored, \
+            is_monitoring in user_summary():
+            print ("%s %s vol=%.2f %s %s" % (
+                str(delay).rjust(3),
+                name.rjust(30),
+                mic_volume,
+                "m" if is_monitored else " ",
+                "M" if is_monitoring else " "))
+
+        self.last_status_ts = now
+
     def do_OPTIONS(self) -> None:
         self.send_response(200)
         self.send_header("Access-Control-Allow-Origin", "*")
@@ -573,6 +597,8 @@ class OurHandler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_GET(self) -> None:
+        self.maybe_print_status()
+
         server_clock = int(time.time() * SAMPLE_RATE)
         self.send_response(200)
         self.send_header("Access-Control-Allow-Origin", "*")
@@ -587,6 +613,8 @@ class OurHandler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_POST(self) -> None:
+        self.maybe_print_status()
+
         content_length = int(self.headers["Content-Length"])
         in_data_raw = self.rfile.read(content_length)
 
@@ -622,6 +650,11 @@ class OurHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "application/octet-stream")
         self.end_headers()
         self.wfile.write(data)
+
+    # Disable built-in logging, since that just duplicates
+    # /var/log/nginx/access.log
+    def log_request(self, format, *args):
+        return
 
 if __name__ == "__main__":
     start()
