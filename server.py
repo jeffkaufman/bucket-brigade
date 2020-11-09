@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 
-import http.server
-from http.server import BaseHTTPRequestHandler
+import os
+import pprint
+
 import json
 import urllib.parse
 import time
@@ -12,6 +13,7 @@ import math
 import os
 import logging
 import wave
+import traceback
 
 from typing import Any, Dict, List, Tuple
 
@@ -66,19 +68,19 @@ max_position = DELAY_INTERVAL*LAYERING_DEPTH
 # For volume scaling.
 N_PHANTOM_PEOPLE = 2
 
+AUDIO_DIR = os.path.join(os.path.dirname(__file__), "audio")
+
 tracks = []
 def populate_tracks() -> None:
-    for track in sorted(os.listdir("audio")):
+    for track in sorted(os.listdir(AUDIO_DIR)):
         if track != "README":
             tracks.append(track)
 
-def start() -> None:
-    populate_tracks()
-    start_server()
+populate_tracks()
 
-def start_server() -> None:
-    server = http.server.HTTPServer(('', 8081), OurHandler)
-    server.serve_forever()
+def server():
+    from wsgiref.simple_server import make_server
+    make_server('',8081,application).serve_forever()
 
 class User:
     def __init__(self, userid, name, last_heard_server_clock, delay_samples) -> None:
@@ -147,7 +149,7 @@ def run_backing_track() -> None:
     backing_track_index = 0
 
     if requested_track in tracks:
-        with wave.open(os.path.join("audio", requested_track)) as inf:
+        with wave.open(os.path.join(AUDIO_DIR, requested_track)) as inf:
             if inf.getnchannels() != 1:
                 raise Exception(
                     "wrong number of channels on %s" % requested_track)
@@ -265,7 +267,7 @@ def unpack_multi(data) -> List[Any]:
         result.append(packet)
     return result
 
-def handle_post(in_data_raw, query_params, headers) -> Tuple[Any, str]:
+def handle_post(in_data_raw, query_params, environ) -> Tuple[Any, str]:
     global last_request_clock
     global first_client_write_clock
     global first_client_total_samples
@@ -316,7 +318,7 @@ def handle_post(in_data_raw, query_params, headers) -> Tuple[Any, str]:
 
     if client_write_clock is None:
         # New session, write some debug info to disk
-        logging.debug("*** New client:" + str(headers) + str(query_params) + "\n\n")
+        logging.debug("*** New client:" + str(environ) + str(query_params) + "\n\n")
 
         if userid in users:
             # Delete any state that shouldn't be persisted.
@@ -570,92 +572,91 @@ def handle_post(in_data_raw, query_params, headers) -> Tuple[Any, str]:
     return data, x_audio_metadata
 
 last_status_ts = 0
-class OurHandler(BaseHTTPRequestHandler):
-
-    def maybe_print_status(self) -> None:
-        global last_status_ts
-        now = time.time()
-        if now - last_status_ts < STATUS_PRINT_INTERVAL_S:
-            return
-
-        print("-"*70)
-
-        for delay, name, mic_volume, userid, is_monitored, \
-            is_monitoring in user_summary():
-            print ("%s %s vol=%.2f %s %s" % (
-                str(delay).rjust(3),
-                name.rjust(30),
-                mic_volume,
-                "m" if is_monitored else " ",
-                "M" if is_monitoring else " "))
-
-        last_status_ts = now
-
-    def do_OPTIONS(self) -> None:
-        self.send_response(200)
-        self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
-        self.end_headers()
-
-    def do_GET(self) -> None:
-        self.maybe_print_status()
-
-        server_clock = int(time.time() * SAMPLE_RATE)
-        self.send_response(200)
-        self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
-        self.send_header("Access-Control-Expose-Headers", "X-Audio-Metadata")
-        self.send_header("X-Audio-Metadata", json.dumps({
-            "server_clock": server_clock,
-            "server_sample_rate": SAMPLE_RATE,
-        }))
-        self.send_header("Content-Length", "0")
-        self.send_header("Content-Type", "application/octet-stream")
-        self.end_headers()
-
-    def do_POST(self) -> None:
-        self.maybe_print_status()
-
-        content_length = int(self.headers["Content-Length"])
-        in_data_raw = self.rfile.read(content_length)
-
-        parsed_url = urllib.parse.urlparse(self.path)
-        query_params = {}
-        if parsed_url.query:
-            query_params = urllib.parse.parse_qs(parsed_url.query, strict_parsing=True)
-
-        userid = None
-        try:
-            userid, = query_params.get("userid", (None,))
-            data, x_audio_metadata = handle_post(in_data_raw, query_params, self.headers)
-        except Exception as e:
-            # Clear out stale session
-            if userid and (userid in users):
-                del users[userid]
-
-            x_audio_metadata = json.dumps({
-                "kill_client": True,
-                "message": str(e)
-            })
-            self.send_response(500)
-            self.send_header("X-Audio-Metadata", x_audio_metadata)
-            self.end_headers()
-            raise  # re-raise exception so we can see it on the console
-
-        self.send_response(200)
-        self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
-        self.send_header("Access-Control-Expose-Headers", "X-Audio-Metadata")
-        self.send_header("X-Audio-Metadata", x_audio_metadata)
-        self.send_header("Content-Length", str(len(data)))
-        self.send_header("Content-Type", "application/octet-stream")
-        self.end_headers()
-        self.wfile.write(data)
-
-    # Disable built-in logging, since that just duplicates
-    # /var/log/nginx/access.log
-    def log_request(self, format, *args):
+def maybe_print_status() -> None:
+    global last_status_ts
+    now = time.time()
+    if now - last_status_ts < STATUS_PRINT_INTERVAL_S:
         return
+
+    print("-"*70)
+
+    for delay, name, mic_volume, userid, is_monitored, \
+        is_monitoring in user_summary():
+        print ("%s %s vol=%.2f %s %s" % (
+            str(delay).rjust(3),
+            name.rjust(30),
+            mic_volume,
+            "m" if is_monitored else " ",
+            "M" if is_monitoring else " "))
+
+    last_status_ts = now
+
+def do_OPTIONS(environ, start_response) -> None:
+    start_response(
+        '200 OK',
+        [("Access-Control-Allow-Origin", "*"),
+         ("Access-Control-Allow-Headers", "Content-Type")])
+    return b'',
+
+def do_GET(environ, start_response) -> None:
+    maybe_print_status()
+
+    server_clock = int(time.time() * SAMPLE_RATE)
+    start_response(
+        '200 OK',
+        [("Access-Control-Allow-Origin", "*"),
+         ("Access-Control-Allow-Headers", "Content-Type"),
+         ("Access-Control-Expose-Headers", "X-Audio-Metadata"),
+         ("X-Audio-Metadata", json.dumps({
+             "server_clock": server_clock,
+             "server_sample_rate": SAMPLE_RATE,
+         })),
+         ("Content-Type", "application/octet-stream")])
+    return b'',
+
+def die500(start_response, e):
+    trb = "%s: %s\n\n%s" % (e.__class__.__name__, e, traceback.format_exc())
+
+    start_response('500 Internal Server Error', [
+        ('content-type', 'text/plain'),
+        ("X-Audio-Metadata", json.dumps({
+            "kill_client": True,
+            "message": str(e)
+        }))])
+    return trb,
+
+def do_POST(environ, start_response) -> None:
+    content_length = int(environ.get('CONTENT_LENGTH', 0))
+    in_data_raw = environ['wsgi.input'].read(content_length)
+
+    query_params = urllib.parse.parse_qs(environ['QUERY_STRING'], strict_parsing=True)
+
+    userid = None
+    try:
+        userid, = query_params.get("userid", (None,))
+        data, x_audio_metadata = handle_post(in_data_raw, query_params, environ)
+    except Exception as e:
+        # Clear out stale session
+        if userid and (userid in users):
+            del users[userid]
+        return die500(start_response, e)
+
+    maybe_print_status()
+
+    start_response(
+        '200 OK',
+        [("Access-Control-Allow-Origin", "*"),
+         ("Access-Control-Allow-Headers", "Content-Type"),
+         ("Access-Control-Expose-Headers", "X-Audio-Metadata"),
+         ("X-Audio-Metadata", x_audio_metadata),
+         ("Content-Type", "application/octet-stream")])
+    return data,
+
+def application(environ, start_response):
+    return {"GET": do_GET,
+            "POST": do_POST,
+            "OPTIONS": do_OPTIONS}[environ["REQUEST_METHOD"]](
+                environ, start_response)
 
 if __name__ == "__main__":
     start()

@@ -1632,9 +1632,8 @@ async function initialize() {
   await wait_for_mic_permissions();
   await enumerate_devices();
 
-  if (document.location.hostname == "localhost" ||
-      document.location.hostname == "www.jefftk.com") {
-    // Better default
+  if (document.location.hostname == "localhost") {
+    // Better default for debugging.
     server_path_text.value = "http://localhost:8081/"
   }
 
