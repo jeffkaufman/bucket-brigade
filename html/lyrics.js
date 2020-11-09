@@ -1,4 +1,7 @@
 import { start_hooks, stop_hooks, event_hooks, declare_event, init_events } from './app.js';
+import * as lib from './lib.js';
+import {LOG_VERYSPAM, LOG_SPAM, LOG_DEBUG, LOG_INFO, LOG_WARNING, LOG_ERROR} from './lib.js';
+
 
 let lyrics = "Hands chip the |flint, light the |fire, skin the |kill\n|Feet move the |tribe track the |herd with a |will \nHuman-|kind |struggles, on the |edge of histo |ry\n|Time to settle |down, time to |grow, time to |bree|eed..\n|Plow tills the |soil, plants the |seed, pray for |rain\n|Scythe reaps the | wheat, to the |mill, to grind the |grain\n|Towns.. and.. |cities spread to |empire over-|night\n|Hands keep |building as we |chant the ancient |rite...".split('|');
 
@@ -62,7 +65,11 @@ button.addEventListener("mousedown", ()=>{
 });
 
 event_hooks.push( (lid)=>{
+    lib.log(LOG_INFO, "event hook invoked "+lid);
     if (spans[lid]) {
         spans[lid].className='lyrics heard';
+        lib.log(LOG_INFO, "colored span "+lid);
+    } else {
+        lib.log(LOG_INFO, "no span "+lid);
     }
 });

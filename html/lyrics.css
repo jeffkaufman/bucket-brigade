@@ -14,8 +14,8 @@
 }
 
 .heard {
-    color: red;
-    text-shadow: 0 0 1px red;
+    color: black;
+    text-shadow: 1px 1px 1px red;
 }
 
 #lyriccontrols {

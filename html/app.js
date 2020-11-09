@@ -101,6 +101,12 @@ function update_calendar() {
       let upcomingEvent = null;
       const now = Date.now();
 
+      if ( ! data.items ) {
+        // TODO: Save the error code?
+        lib.log(LOG_WARNING, "No data from Google Calendar");
+        return;
+      }
+
       data.items.forEach(item => {
         // If an event is currently happening we want to check whether
         // that's what people are here for. Similarly, if an event is
@@ -335,7 +341,7 @@ var alarms_fired = {};
 var cur_clock_cbs = [];
 
 export function declare_event(evid, offset) {
-  cur_clock_cbs.push( (clock)=>{ event_data.push({evid,clock:clock-(offset||0)*sample_rate}); } );
+  cur_clock_cbs.push( (clock)=>{ event_data.push({evid,clock:clock-(offset||0)*audioCtx.sampleRate}); } );
   playerNode.port.postMessage({
     type: "request_cur_clock"
   });
@@ -1030,7 +1036,7 @@ async function reload_settings(startup) {
 }
 
 export function init_events() {
-  let target_url = server_path + "reset_events";
+  let target_url = server_path_text.value + "reset_events";
   let xhr = new XMLHttpRequest();
   xhr.open("POST", target_url, true);
   xhr.send();
@@ -1227,13 +1233,15 @@ async function handle_message(event) {
     return;
   } else if (msg.type == "alarm") {
     if ((msg.time in alarms) && ! (msg.time in alarms_fired)) {
+      lib.log(LOG_INFO,"calling alarm at "+msg.time)
       alarms[msg.time]();
-      alarms_fired[msg.time] = True;
+      alarms_fired[msg.time] = true;
     }
     return;
   } else if (msg.type == "cur_clock") {
     for (let cb of cur_clock_cbs) {
       cb(msg.clock);
+      lib.log(LOG_WARNING, "got clock "+msg.clock+" and event_data is now "+event_data);
     }
     cur_clock_cbs = [];
     return
