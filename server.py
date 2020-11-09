@@ -19,7 +19,7 @@ import cProfile
 import pstats
 import io
 
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Tuple, Iterable
 
 logging.basicConfig(filename='server.log',level=logging.DEBUG)
 pr = cProfile.Profile()
@@ -552,8 +552,8 @@ def handle_post(in_data_raw, query_params, environ) -> Tuple[Any, str]:
     packets = data.reshape([-1, OPUS_FRAME_SAMPLES])
     encoded = []
     for p in packets:
-        e = np.frombuffer(enc.encode_float(p.tobytes(), OPUS_FRAME_SAMPLES), np.uint8)
-        encoded.append(e)
+        ep = np.frombuffer(enc.encode_float(p.tobytes(), OPUS_FRAME_SAMPLES), np.uint8)
+        encoded.append(ep)
     data = pack_multi(encoded).tobytes()
 
     # TODO: We could skip some of these keys when the values are null.
@@ -579,7 +579,7 @@ def handle_post(in_data_raw, query_params, environ) -> Tuple[Any, str]:
 
     return data, x_audio_metadata
 
-last_status_ts = 0
+last_status_ts = 0.0
 def maybe_print_status() -> None:
     global last_status_ts
     now = time.time()
@@ -599,14 +599,14 @@ def maybe_print_status() -> None:
 
     last_status_ts = now
 
-def do_OPTIONS(environ, start_response) -> None:
+def do_OPTIONS(environ, start_response) -> Iterable[bytes]:
     start_response(
         '200 OK',
         [("Access-Control-Allow-Origin", "*"),
          ("Access-Control-Allow-Headers", "Content-Type")])
     return b'',
 
-def do_GET(environ, start_response) -> None:
+def do_GET(environ, start_response) -> Iterable[bytes]:
     global pr
     maybe_print_status()
 
@@ -640,8 +640,8 @@ def do_GET(environ, start_response) -> None:
          ("Content-Type", "application/octet-stream")])
     return b'',
 
-def die500(start_response, e):
-    trb = "%s: %s\n\n%s" % (e.__class__.__name__, e, traceback.format_exc())
+def die500(start_response, e) -> Iterable[bytes]:
+    trb = ("%s: %s\n\n%s" % (e.__class__.__name__, e, traceback.format_exc())).encode("utf-8")
 
     start_response('500 Internal Server Error', [
         ('content-type', 'text/plain'),
@@ -651,7 +651,7 @@ def die500(start_response, e):
         }))])
     return trb,
 
-def do_POST(environ, start_response) -> None:
+def do_POST(environ, start_response) -> Iterable[bytes]:
     content_length = int(environ.get('CONTENT_LENGTH', 0))
     in_data_raw = environ['wsgi.input'].read(content_length)
 
@@ -678,11 +678,11 @@ def do_POST(environ, start_response) -> None:
          ("Content-Type", "application/octet-stream")])
     return data,
 
-def application(environ, start_response):
+def application(environ, start_response) -> Any:
     return {"GET": do_GET,
             "POST": do_POST,
             "OPTIONS": do_OPTIONS}[environ["REQUEST_METHOD"]](
                 environ, start_response)
 
 if __name__ == "__main__":
-    start()
+    server()
