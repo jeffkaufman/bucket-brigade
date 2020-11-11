@@ -35,3 +35,19 @@ When the app is running in the mode. Chrome will be slightly upset that the stat
 The production approach is to use nginx as both a static fileserver, and a reverse proxy for the app server, on the same port. This eliminates the CORS issue, but if it's not running on localhost, it requires using https://, which requires a certificate. (Chrome will not allow a website served over http to use the microphone.)
 
 There's probably a workable configuration using nginx on localhost. The app isn't currently set up for that, but it could be.
+
+## Backing Tracks
+
+Backing tracks are 16-bit 1-channel 48k wav files.  You can make one with:
+
+    $ lame --decode input.mp3 intermediate-a.wav && \
+      sox intermediate-a.wav intermediate-b.wav remix 1 && \
+      sox intermediate-b.wav -r 48000 output.wav
+
+This should look like:
+
+    $ soxi output.wav
+    Channels       : 1
+    Sample Rate    : 48000
+    Precision      : 16-bit
+    Sample Encoding: 16-bit Signed Integer PCM
