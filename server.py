@@ -12,12 +12,15 @@ import math
 import os
 import logging
 import wave
+import threading
 
 import cProfile
 import pstats
 import io
 
 from typing import Any, Dict, List, Tuple, Iterable
+
+lock = threading.Lock()
 
 logging.basicConfig(filename='server.log',level=logging.DEBUG)
 pr = cProfile.Profile()
@@ -72,6 +75,10 @@ N_PHANTOM_PEOPLE = 2
 AUDIO_DIR = os.path.join(os.path.dirname(__file__), "audio")
 
 events: Dict[str, str] = {}
+
+def clear_events():
+    with lock:
+        events.clear()
 
 tracks = []
 def populate_tracks() -> None:
@@ -242,6 +249,10 @@ def user_summary() -> List[Any]:
     return summary
 
 def handle_post(in_data, new_events, query_string, print_status) -> Tuple[Any, str]:
+    with lock:
+        return handle_post_(in_data, new_events, query_string, print_status)
+
+def handle_post_(in_data, new_events, query_string, print_status) -> Tuple[Any, str]:
     global last_request_clock
     global first_client_write_clock
     global first_client_total_samples
@@ -398,7 +409,7 @@ def handle_post(in_data, new_events, query_string, print_status) -> Tuple[Any, s
     last_request_clock = server_clock
 
     n_samples = len(in_data)
-    
+
     if client_write_clock is None:
         pass
     elif client_write_clock - n_samples < server_clock - QUEUE_LENGTH:
@@ -515,7 +526,7 @@ def handle_post(in_data, new_events, query_string, print_status) -> Tuple[Any, s
 
     if print_status:
         maybe_print_status()
-    
+
     return data, x_audio_metadata
 
 last_status_ts = 0.0

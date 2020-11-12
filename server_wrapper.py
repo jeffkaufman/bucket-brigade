@@ -86,6 +86,7 @@ def handle_post(userid, n_samples, in_data_raw, new_events,
 
     # TODO: allow this to be replaced with an RPC
     # TODO: when we do that, figure out how errors will be handled
+    
     data, x_audio_metadata = server.handle_post(
         in_data, new_events, query_string, print_status)
     
@@ -158,8 +159,7 @@ def do_POST(environ, start_response) -> None:
     query_params = urllib.parse.parse_qs(query_string, strict_parsing=True)
 
     if environ.get('PATH_INFO', '') == "/reset_events":
-        # TODO: Make this fit the divided model
-        server.events.clear()
+        server.clear_events()
         start_response('204 No Content', [])
         return b'',
 
