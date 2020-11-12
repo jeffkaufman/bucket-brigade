@@ -57,10 +57,19 @@ class FakeDecoder:
   def decode_float(self, _, n_samples, **kwargs):
     return np.zeros(n_samples)
 
+class FakePacked:
+  def tobytes(self):
+    return ""
+
 def setup(args):
-  if args and args[0] == "noopus":
+  if "noopus" in args:
     opuslib.Encoder = FakeEncoder
     opuslib.Decoder = FakeDecoder
+
+  if "nopack" in args:
+    fake_packed = FakePacked()
+    server.pack_multi = lambda x : fake_packed
+    server.unpack_multi = lambda x: [fake_packed]
 
 if __name__ == "__main__":
   setup(sys.argv[1:])
