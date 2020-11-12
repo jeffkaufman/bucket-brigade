@@ -51,3 +51,70 @@ This should look like:
     Sample Rate    : 48000
     Precision      : 16-bit
     Sample Encoding: 16-bit Signed Integer PCM
+
+## uWSGI Server Setup
+
+### Nginx
+
+```
+location /api {
+   include uwsgi_params;
+   uwsgi_pass 127.0.0.1:7095;
+}
+```
+
+### uWSGI
+
+#### Installing
+
+Dependencies:
+
+```
+$ sudo apt install python3.6 python3.6-dev python3-distutils uwsgi uwsgi-src \
+                   uuid-dev libcap-dev libpcre3-dev
+```
+
+Build the python 3.6 UWSGI plug-in:
+
+```
+$ PYTHON=python3.6 uwsgi --build-plugin "/usr/src/uwsgi/plugins/python python36"
+```
+
+#### Config
+
+Create `/etc/systemd/system/uwsgi-echo.service` with:
+
+```
+[Unit]
+Description=uWSGI echo
+
+[Service]
+ExecStart=/usr/local/bin/uwsgi --plugin python36 --disable-logging --processes=1 --socket :7095 --wsgi-file /root/src/solstice-audio-test/server.py --logto /var/log/uwsgi-echo.log
+Restart=always
+KillSignal=SIGQUIT
+Type=notify
+NotifyAccess=all
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Then run, and re-run any time you edit the `.service` file:
+
+```
+$ systemctl daemon-reload
+```
+
+#### Updating
+
+Anytime you deploy you need to restart the daemon:
+
+```
+$ service uwsgi-echo restart
+```
+
+#### Logs
+
+```
+$ tail -f /var/log/uwsgi-echo.log
+```
