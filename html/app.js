@@ -104,6 +104,7 @@ function update_calendar() {
       if ( ! data.items ) {
         // TODO: Save the error code?
         lib.log(LOG_WARNING, "No data from Google Calendar");
+        window.currentEvent.innerText = "(Unable to communicate with Google Calendar.)";
         return;
       }
 
