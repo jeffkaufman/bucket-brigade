@@ -9,6 +9,7 @@ import tempfile
 import random
 from multiprocessing import Pool
 import time
+import json
 
 PACKET_INTERVAL = 0.6 # 600ms
 
@@ -17,20 +18,6 @@ enc = opuslib.Encoder(
   server.SAMPLE_RATE, server.CHANNELS, opuslib.APPLICATION_AUDIO)
 zeros = np.zeros(int(server.SAMPLE_RATE * PACKET_INTERVAL)).reshape(
   [-1, server.OPUS_FRAME_SAMPLES])
-
-def send_request(tmp_name, userid):
-  ts = int(time.time()) * server.SAMPLE_RATE
-
-  cmd = [
-    'curl',
-    'https://echo.jefftk.com/api/?read_clock=%s&userid=%s&username=stress' % (
-      ts, userid),
-    '-H', 'Content-Type: application/octet-stream',
-    '--data-binary', "@" + tmp_name,
-    '--compressed',
-    '-sS',
-    '-o', '/dev/null']
-  subprocess.check_call(cmd)
 
 def summarize(timing):
   return min(timing), max(timing), sum(timing)//len(timing)
@@ -46,7 +33,11 @@ def run(n_workers, n_rounds):
   timings = []
   for process in processes:
     process.wait()
-    timings.extend(json.loads(process.stdout.read()))
+    result_text = process.stdout.read()
+    try:
+      timings.extend(json.loads(result_text))
+    except:
+      print("Failure:", result_text)
 
   print ("[min=%s  max=%s  avg=%s]" % summarize(timings))
     

@@ -46,7 +46,7 @@ def stress(n_rounds, worker_name):
           'Accept-Encoding': 'gzip',
       })
     if resp.status_code != 200:
-      print("got: %s" % resp.status_code)
+      print("got: %s (%s)" % (resp.status_code, resp.content))
 
     end = time.time()
 
