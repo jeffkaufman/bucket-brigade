@@ -3,31 +3,47 @@ import time
 import random
 import numpy as np
 import server
+import server_wrapper
 import opuslib
 
 PACKET_INTERVAL = 0.6 # 600ms
 PACKET_SAMPLES = int(server.SAMPLE_RATE * PACKET_INTERVAL)
 
 enc = opuslib.Encoder(
-  server.SAMPLE_RATE, server.CHANNELS, opuslib.APPLICATION_AUDIO)
+  server.SAMPLE_RATE, server_wrapper.CHANNELS, opuslib.APPLICATION_AUDIO)
 zeros = np.zeros(PACKET_SAMPLES).reshape(
-  [-1, server.OPUS_FRAME_SAMPLES])
+  [-1, server_wrapper.OPUS_FRAME_SAMPLES])
 
-data = server.pack_multi([
+data = server_wrapper.pack_multi([
   np.frombuffer(
-    enc.encode_float(packet.tobytes(), server.OPUS_FRAME_SAMPLES),
+    enc.encode_float(packet.tobytes(), server_wrapper.OPUS_FRAME_SAMPLES),
     np.uint8)
   for packet in zeros]).tobytes()
 
 userid = int(random.random()*10000000)
 username = "unitstress"
 
-def fake_request():
-  server.handle_post(data, query_params = {
-    "read_clock": (str(int(time.time()) * server.SAMPLE_RATE),),
-    "userid": (userid,),
-    "username": (username,),
-  }, environ=None)
+def query_string():
+  return "read_clock=%s&userid=%s&username=%s" % (
+    (server.calculate_server_clock(),
+     userid,
+     username))
+
+def fake_outer_request():
+  server_wrapper.handle_post(
+    userid,
+    PACKET_SAMPLES,
+    data,
+    [],
+    query_string(),
+    print_status=False)
+
+def fake_inner_request():
+  server.handle_post(
+    data,
+    [],
+    query_string(),
+    print_status=False)
 
 def stress():
   for i in range(3):
@@ -43,33 +59,13 @@ def stress():
       each_s*1000,
       PACKET_INTERVAL/each_s))
 
-class FakeEncoder:
-  def __init__(*args):
-    pass
-
-  def encode_float(self, _, n_samples):
-    return np.zeros(n_samples)
-
-class FakeDecoder:
-  def __init__(*args):
-    pass
-
-  def decode_float(self, _, n_samples, **kwargs):
-    return np.zeros(n_samples)
-
-class FakePacked:
-  def tobytes(self):
-    return zeros
-
 def setup(args):
-  if "noopus" in args:
-    opuslib.Encoder = FakeEncoder
-    opuslib.Decoder = FakeDecoder
+  global fake_request
 
-  if "nopack" in args:
-    fake_packed = FakePacked()
-    server.pack_multi = lambda x : fake_packed
-    server.unpack_multi = lambda x: [fake_packed]
+  if "inner" in args:
+    fake_request = fake_inner_request
+  else:
+    fake_request = fake_outer_request
 
 if __name__ == "__main__":
   setup(sys.argv[1:])

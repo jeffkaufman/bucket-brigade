@@ -8,12 +8,10 @@ import urllib.parse
 import time
 import numpy as np  # type:ignore
 import random
-import opuslib  # type:ignore
 import math
 import os
 import logging
 import wave
-import traceback
 
 import cProfile
 import pstats
@@ -42,11 +40,6 @@ requested_track: Any = None
 QUEUE_SECONDS = 120
 
 SAMPLE_RATE = 48000
-CHANNELS = 1
-OPUS_FRAME_MS = 60
-OPUS_FRAME_SAMPLES = SAMPLE_RATE // 1000 * OPUS_FRAME_MS
-OPUS_BYTES_PER_SAMPLE = 4  # float32
-OPUS_FRAME_BYTES = OPUS_FRAME_SAMPLES * CHANNELS * OPUS_BYTES_PER_SAMPLE
 
 # How often to print status updates. With no requests are coming in no status
 # update will be printed.
@@ -88,9 +81,11 @@ def populate_tracks() -> None:
 
 populate_tracks()
 
-def server():
-    from wsgiref.simple_server import make_server
-    make_server('',8081,application).serve_forever()
+def calculate_server_clock():
+    # Note: This will eventually create a precision problem for the JS
+    #   clients, which are using floats. Specifically, at 44100 Hz, it will
+    #   fail on February 17, 5206.
+    return int(time.time() * SAMPLE_RATE)
 
 class User:
     def __init__(self, userid, name, last_heard_server_clock, delay_samples) -> None:
@@ -246,39 +241,7 @@ def user_summary() -> List[Any]:
     summary.sort()
     return summary
 
-def pack_multi(packets) -> Any:
-    encoded_length = 1
-    for p in packets:
-        encoded_length += 2 + len(p)
-    outdata = np.zeros(encoded_length, np.uint8)
-    outdata[0] = len(packets)
-    idx = 1
-    for p in packets:
-        if p.dtype != np.uint8:
-            raise Exception("pack_multi only accepts uint8")
-        outdata[idx] = len(p) >> 8
-        outdata[idx + 1] = len(p) % 256
-        idx += 2
-        outdata[idx:idx+len(p)] = p
-        idx += len(p)
-    return outdata
-
-def unpack_multi(data) -> List[Any]:
-    if data.dtype != np.uint8:
-        raise Exception("unpack_multi only accepts uint8")
-    packet_count = data[0]
-    data_idx = 1
-
-    result = []
-    for i in range(packet_count):
-        length = (data[data_idx] << 8) + data[data_idx + 1]
-        data_idx += 2
-        packet = data[data_idx:data_idx+length]
-        data_idx += length
-        result.append(packet)
-    return result
-
-def handle_post(in_data_raw, query_params, environ) -> Tuple[Any, str]:
+def handle_post(in_data, new_events, query_string, print_status) -> Tuple[Any, str]:
     global last_request_clock
     global first_client_write_clock
     global first_client_total_samples
@@ -290,13 +253,7 @@ def handle_post(in_data_raw, query_params, environ) -> Tuple[Any, str]:
     global requested_track
     global backing_track_index
 
-    try:
-        evh = environ["HTTP_X_EVENT_DATA"]
-        new_events = json.loads(evh)
-    except (KeyError, json.decoder.JSONDecodeError) as e:
-        new_events = []
-    if type(new_events) != list:
-        new_events = []
+    query_params = urllib.parse.parse_qs(query_string, strict_parsing=True)
 
     # NOTE NOTE NOTE:
     # * All `clock` variables are measured in samples.
@@ -304,10 +261,7 @@ def handle_post(in_data_raw, query_params, environ) -> Tuple[Any, str]:
     #   beginning. It's arbitrary which one to use, but you have to be
     #   consistent, and trust me that it's slightly nicer this way.
 
-    # Note: This will eventually create a precision problem for the JS
-    #   clients, which are using floats. Specifically, at 44100 Hz, it will
-    #   fail on February 17, 5206.
-    server_clock = int(time.time() * SAMPLE_RATE)
+    server_clock = calculate_server_clock()
 
     client_write_clock = query_params.get("write_clock", None)
     if client_write_clock is not None:
@@ -317,10 +271,6 @@ def handle_post(in_data_raw, query_params, environ) -> Tuple[Any, str]:
         client_read_clock = int(client_read_clock[0])
     else:
         raise ValueError("no client read clock")
-
-    n_samples = query_params.get("n_samples", None)
-    if n_samples is not None:
-        n_samples = int(n_samples[0])
 
     userid = None
     userids = query_params.get("userid", None)
@@ -337,7 +287,7 @@ def handle_post(in_data_raw, query_params, environ) -> Tuple[Any, str]:
 
     if client_write_clock is None:
         # New session, write some debug info to disk
-        logging.debug("*** New client:" + str(environ) + str(query_params) + "\n\n")
+        logging.debug("*** New client:" + str(query_params) + "\n\n")
 
         if userid in users:
             # Delete any state that shouldn't be persisted.
@@ -412,8 +362,6 @@ def handle_post(in_data_raw, query_params, environ) -> Tuple[Any, str]:
         if monitor_userid:
             setup_monitoring(userid, monitor_userid)
 
-    in_data = np.frombuffer(in_data_raw, dtype=np.uint8)
-
     # Audio from clients is summed, so we need to clear the circular
     #   buffer ahead of them. The range we are clearing was "in the
     #   future" as of the last request, and we never touch the future,
@@ -449,33 +397,8 @@ def handle_post(in_data_raw, query_params, environ) -> Tuple[Any, str]:
     saved_last_request_clock = last_request_clock
     last_request_clock = server_clock
 
-    if not user.opus_state:
-        # initialize
-        user.opus_state = (
-            opuslib.Encoder(SAMPLE_RATE, CHANNELS, opuslib.APPLICATION_AUDIO),
-            opuslib.Decoder(SAMPLE_RATE, CHANNELS)
-        )
-    (enc, dec) = user.opus_state
-
-    # If the user does not send us any data, we will treat it as silence of length n_samples. This is useful if they are just starting up.
-    if len(in_data) == 0:
-        if n_samples is None:
-            raise ValueError("Must provide either n_samples or data")
-        in_data = np.zeros(n_samples, np.float32)
-    else:
-        packets = unpack_multi(in_data)
-        decoded = []
-        for p in packets:
-            d = dec.decode_float(p.tobytes(), OPUS_FRAME_SAMPLES, decode_fec=False)
-            decoded.append(np.frombuffer(d, np.float32))
-        in_data = np.concatenate(decoded)
-
-    # Sending n_samples is optional if data is sent, but in case of both they must match
-    if n_samples is None:
-        n_samples = len(in_data)
-    if n_samples != len(in_data):
-        raise ValueError("Client is confused about how many samples it sent")
-
+    n_samples = len(in_data)
+    
     if client_write_clock is None:
         pass
     elif client_write_clock - n_samples < server_clock - QUEUE_LENGTH:
@@ -563,16 +486,9 @@ def handle_post(in_data_raw, query_params, environ) -> Tuple[Any, str]:
 
         data *= global_volume
 
-    packets = data.reshape([-1, OPUS_FRAME_SAMPLES])
-    encoded = []
-    for p in packets:
-        ep = np.frombuffer(enc.encode_float(p.tobytes(), OPUS_FRAME_SAMPLES), np.uint8)
-        encoded.append(ep)
-    data = pack_multi(encoded).tobytes()
-
     events_to_send_list = list(events.items())
     events_to_send = [ {"evid":i[0], "clock":i[1]} for i in events_to_send_list ]
-    print(events_to_send)
+    #print(events_to_send)
     # TODO: chop events that are too old to be relevant?
 
     # TODO: We could skip some of these keys when the values are null.
@@ -597,6 +513,9 @@ def handle_post(in_data_raw, query_params, environ) -> Tuple[Any, str]:
     user.chats_to_send.clear()
     user.delay_to_send = None
 
+    if print_status:
+        maybe_print_status()
+    
     return data, x_audio_metadata
 
 last_status_ts = 0.0
@@ -619,95 +538,5 @@ def maybe_print_status() -> None:
 
     last_status_ts = now
 
-def do_OPTIONS(environ, start_response) -> Iterable[bytes]:
-    start_response(
-        '200 OK',
-        [("Access-Control-Allow-Origin", "*"),
-         ("Access-Control-Allow-Headers", "Content-Type, X-Event-Data")])
-    return b'',
-
-def do_GET(environ, start_response) -> Iterable[bytes]:
-    global pr
-    maybe_print_status()
-
-    if environ.get('PATH_INFO', '') == "/start_profile":
-        pr.enable()
-        start_response('200 OK', [])
-        return b'profiling enabled',
-
-    if environ.get('PATH_INFO', '') == "/stop_profile":
-        pr.disable()
-        start_response('200 OK', [])
-        return b'profiling disabled',
-
-    if environ.get('PATH_INFO', '') == "/get_profile":
-        s = io.StringIO()
-        ps = pstats.Stats(pr, stream=s).sort_stats('tottime')
-        ps.print_stats()
-        start_response('200 OK', [])
-        return s.getvalue().encode("utf-8"),
-
-    server_clock = int(time.time() * SAMPLE_RATE)
-    start_response(
-        '200 OK',
-        [("Access-Control-Allow-Origin", "*"),
-         ("Access-Control-Allow-Headers", "Content-Type, X-Event-Data"),
-         ("Access-Control-Expose-Headers", "X-Audio-Metadata"),
-         ("X-Audio-Metadata", json.dumps({
-             "server_clock": server_clock,
-             "server_sample_rate": SAMPLE_RATE,
-         })),
-         ("Content-Type", "application/octet-stream")])
-    return b'',
-
-def die500(start_response, e) -> Iterable[bytes]:
-    trb = ("%s: %s\n\n%s" % (e.__class__.__name__, e, traceback.format_exc())).encode("utf-8")
-
-    start_response('500 Internal Server Error', [
-        ('content-type', 'text/plain'),
-        ("X-Audio-Metadata", json.dumps({
-            "kill_client": True,
-            "message": str(e)
-        }))])
-    return trb,
-
-def do_POST(environ, start_response) -> Iterable[bytes]:
-    content_length = int(environ.get('CONTENT_LENGTH', 0))
-    in_data_raw = environ['wsgi.input'].read(content_length)
-
-    if environ.get('PATH_INFO', '') == "/reset_events":
-        events.clear()
-        start_response('204 No Content', [])
-        return b'',
-
-    query_params = urllib.parse.parse_qs(environ['QUERY_STRING'], strict_parsing=True)
-
-    userid = None
-    try:
-        userid, = query_params.get("userid", (None,))
-        data, x_audio_metadata = handle_post(in_data_raw, query_params, environ)
-    except Exception as e:
-        # Clear out stale session
-        if userid and (userid in users):
-            del users[userid]
-        return die500(start_response, e)
-
-    maybe_print_status()
-
-    start_response(
-        '200 OK',
-        [("Access-Control-Allow-Origin", "*"),
-         ("Access-Control-Allow-Headers", "Content-Type, X-Event-Data"),
-         ("Access-Control-Expose-Headers", "X-Audio-Metadata"),
-         ("X-Audio-Metadata", x_audio_metadata),
-         ("Content-Type", "application/octet-stream")])
-    return data,
-
-def application(environ, start_response) -> Any:
-    return {"GET": do_GET,
-            "POST": do_POST,
-            "OPTIONS": do_OPTIONS}[environ["REQUEST_METHOD"]](
-                environ, start_response)
-
 if __name__ == "__main__":
-    server()
+    print("Run server_wrapper.py instead")

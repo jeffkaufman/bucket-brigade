@@ -95,7 +95,7 @@ Create `/etc/systemd/system/uwsgi-echo.service` with:
 Description=uWSGI echo
 
 [Service]
-ExecStart=/usr/local/bin/uwsgi --plugin python36 --disable-logging --processes=1 --socket :7095 --wsgi-file /root/src/solstice-audio-test/server.py --logto /var/log/uwsgi-echo.log
+ExecStart=/usr/local/bin/uwsgi --plugin python36 --disable-logging --processes=1 --socket :7095 --wsgi-file /root/src/solstice-audio-test/server_wrapper.py --logto /var/log/uwsgi-echo.log
 Restart=always
 KillSignal=SIGQUIT
 Type=notify
