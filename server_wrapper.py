@@ -55,12 +55,14 @@ def unpack_multi(data) -> List[Any]:
 
 def handle_post(userid, n_samples, in_data_raw, new_events,
                 query_string, print_status=True) -> Tuple[Any, str]:
-    if userid not in users:
-        users[userid] = (
-            opuslib.Encoder(server.SAMPLE_RATE, CHANNELS,
-                            opuslib.APPLICATION_AUDIO),
-            opuslib.Decoder(server.SAMPLE_RATE, CHANNELS))
-    enc, dec = users[userid]
+    try:
+        enc, dec = users[userid]
+    except KeyError:
+        enc = opuslib.Encoder(server.SAMPLE_RATE, CHANNELS,
+                              opuslib.APPLICATION_AUDIO)
+        dec = opuslib.Decoder(server.SAMPLE_RATE, CHANNELS)
+        users[userid] = enc, dec
+
     in_data = np.frombuffer(in_data_raw, dtype=np.uint8)
 
     # If the user does not send us any data, we will treat it as silence of length n_samples. This is useful if they are just starting up.
