@@ -101,6 +101,12 @@ function update_calendar() {
       let upcomingEvent = null;
       const now = Date.now();
 
+      if ( ! data.items ) {
+        // TODO: Save the error code?
+        lib.log(LOG_WARNING, "No data from Google Calendar");
+        return;
+      }
+
       data.items.forEach(item => {
         // If an event is currently happening we want to check whether
         // that's what people are here for. Similarly, if an event is
@@ -325,6 +331,21 @@ var peak_in_text = document.getElementById('peakIn');
 var peak_out_text = document.getElementById('peakOut');
 var client_total_time = document.getElementById('clientTotalTime');
 var client_read_slippage = document.getElementById('clientReadSlippage');
+
+export var start_hooks = [];
+export var stop_hooks = [];
+export var event_hooks = [];
+var event_data = [];
+var alarms = {};
+var alarms_fired = {};
+var cur_clock_cbs = [];
+
+export function declare_event(evid, offset) {
+  cur_clock_cbs.push( (clock)=>{ event_data.push({evid,clock:clock-(offset||0)*audioCtx.sampleRate}); } );
+  playerNode.port.postMessage({
+    type: "request_cur_clock"
+  });
+}
 
 function allStatesExcept(states) {
   return [...ALL_STATES].filter(state => !states.includes(state));
@@ -1007,6 +1028,18 @@ async function reload_settings(startup) {
   }
   // This will reset the audio worklett, flush its buffer, and start it up again.
   playerNode.port.postMessage(audio_params);
+
+  alarms_fired = {};
+  for (let hook of start_hooks) {
+    hook();
+  }
+}
+
+export function init_events() {
+  let target_url = server_path_text.value + "reset_events";
+  let xhr = new XMLHttpRequest();
+  xhr.open("POST", target_url, true);
+  xhr.send();
 }
 
 function send_local_latency() {
@@ -1198,6 +1231,20 @@ async function handle_message(event) {
     await stop();
     await start();
     return;
+  } else if (msg.type == "alarm") {
+    if ((msg.time in alarms) && ! (msg.time in alarms_fired)) {
+      lib.log(LOG_INFO,"calling alarm at "+msg.time)
+      alarms[msg.time]();
+      alarms_fired[msg.time] = true;
+    }
+    return;
+  } else if (msg.type == "cur_clock") {
+    for (let cb of cur_clock_cbs) {
+      cb(msg.clock);
+      lib.log(LOG_WARNING, "got clock "+msg.clock+" and event_data is now "+event_data);
+    }
+    cur_clock_cbs = [];
+    return
   } else if (msg.type != "samples_out") {
     throw new Error("Got message of unknown type: " + JSON.stringify(msg));
   }
@@ -1242,6 +1289,7 @@ async function handle_message(event) {
       micVolumesToSend,
       backingTrackToSend,
       monitoredUserIdToSend,
+      event_data,
     };
     if (requestedLeadPosition) {
       requestedLeadPosition = false;
@@ -1258,6 +1306,7 @@ async function handle_message(event) {
     micVolumesToSend = [];
     backingTrackToSend = null;
     monitoredUserIdToSend = null;
+    event_data = [];
 
     server_connection.set_metadata(send_metadata);
     // XXX: interesting, it does not seem that these promises are guaranteed to resolve in order... and the worklet's buffer uses the first chunk's timestamp to decide where to start playing back, so if the first two chunks are swapped it has a big problem.
@@ -1306,6 +1355,15 @@ async function handle_message(event) {
     var server_sample_rate = metadata["server_sample_rate"];
     var song_start_clock = metadata["song_start_clock"];
     var client_read_clock = metadata["client_read_clock"];
+
+    for (let ev of metadata["events"]) {
+      alarms[ev["clock"]] = () => event_hooks.map(f=>f(ev["evid"]));
+      lib.log(LOG_INFO, ev);
+      playerNode.port.postMessage({
+        type: "set_alarm",
+        time: ev["clock"]
+      });
+    }
 
     // Defer touching the DOM, just to be safe.
     const connection_as_of_message = server_connection;
@@ -1578,6 +1636,11 @@ async function stop() {
     micStream = undefined;
   }
   lib.log(LOG_INFO, "...closed.");
+
+  for (let hook of stop_hooks) {
+    hook();
+  }
+
   switch_app_state(APP_STOPPED);
 }
 

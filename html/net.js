@@ -265,6 +265,7 @@ export async function samples_to_server(outdata, target_url, send_metadata) {
   var { read_clock, write_clock, username, userid, chatsToSend, requestedLeadPosition, markStartSinging, markStopSinging,
         loopback_mode, n_samples, globalVolumeToSend, backingVolumeToSend,
         micVolumesToSend, backingTrackToSend, monitoredUserIdToSend,
+        event_data,
       } = send_metadata;
   if (outdata === null) {
     outdata = new Uint8Array();
@@ -334,6 +335,7 @@ export async function samples_to_server(outdata, target_url, send_metadata) {
     lib.log(LOG_SPAM, "Sending XHR w/ ID:", xhr.debug_id, "already in flight:", xhrs_inflight++, "; data size:", outdata.length);
     xhr.open("POST", target_url, true);
     xhr.setRequestHeader("Content-Type", "application/octet-stream");
+    xhr.setRequestHeader("X-Event-Data", JSON.stringify(event_data));
     xhr.responseType = "arraybuffer";
     xhr.send(outdata);
     lib.log(LOG_SPAM, "... XHR sent.");

@@ -78,6 +78,8 @@ N_PHANTOM_PEOPLE = 2
 
 AUDIO_DIR = os.path.join(os.path.dirname(__file__), "audio")
 
+events: Dict[str, str] = {}
+
 tracks = []
 def populate_tracks() -> None:
     for track in sorted(os.listdir(AUDIO_DIR)):
@@ -266,6 +268,7 @@ def unpack_multi(data) -> List[Any]:
         raise Exception("unpack_multi only accepts uint8")
     packet_count = data[0]
     data_idx = 1
+
     result = []
     for i in range(packet_count):
         length = (data[data_idx] << 8) + data[data_idx + 1]
@@ -286,6 +289,14 @@ def handle_post(in_data_raw, query_params, environ) -> Tuple[Any, str]:
     global song_start_clock
     global requested_track
     global backing_track_index
+
+    try:
+        evh = environ["HTTP_X_EVENT_DATA"]
+        new_events = json.loads(evh)
+    except (KeyError, json.decoder.JSONDecodeError) as e:
+        new_events = []
+    if type(new_events) != list:
+        new_events = []
 
     # NOTE NOTE NOTE:
     # * All `clock` variables are measured in samples.
@@ -486,6 +497,9 @@ def handle_post(in_data_raw, query_params, environ) -> Tuple[Any, str]:
         if client_write_clock is not None:
             user.last_write_clock = client_write_clock
 
+        for ev in new_events:
+            events[ev["evid"]] = ev["clock"]
+
         in_data *= user.scaled_mic_volume
 
         # Don't keep any input unless a song is in progress.
@@ -556,6 +570,11 @@ def handle_post(in_data_raw, query_params, environ) -> Tuple[Any, str]:
         encoded.append(ep)
     data = pack_multi(encoded).tobytes()
 
+    events_to_send_list = list(events.items())
+    events_to_send = [ {"evid":i[0], "clock":i[1]} for i in events_to_send_list ]
+    print(events_to_send)
+    # TODO: chop events that are too old to be relevant?
+
     # TODO: We could skip some of these keys when the values are null.
     x_audio_metadata = json.dumps({
         "server_clock": server_clock,
@@ -570,8 +589,9 @@ def handle_post(in_data_raw, query_params, environ) -> Tuple[Any, str]:
         # It's kind of wasteful to send this on every response, but
         # it's not very many bytes, and let's just move on.
         "tracks": tracks,
-        # Both the following uses units of 128-sample frames
+        # The following uses units of 128-sample frames
         "queue_size": QUEUE_LENGTH / FRAME_SIZE,
+        "events": events_to_send,
     })
 
     user.chats_to_send.clear()
@@ -603,7 +623,7 @@ def do_OPTIONS(environ, start_response) -> Iterable[bytes]:
     start_response(
         '200 OK',
         [("Access-Control-Allow-Origin", "*"),
-         ("Access-Control-Allow-Headers", "Content-Type")])
+         ("Access-Control-Allow-Headers", "Content-Type, X-Event-Data")])
     return b'',
 
 def do_GET(environ, start_response) -> Iterable[bytes]:
@@ -631,7 +651,7 @@ def do_GET(environ, start_response) -> Iterable[bytes]:
     start_response(
         '200 OK',
         [("Access-Control-Allow-Origin", "*"),
-         ("Access-Control-Allow-Headers", "Content-Type"),
+         ("Access-Control-Allow-Headers", "Content-Type, X-Event-Data"),
          ("Access-Control-Expose-Headers", "X-Audio-Metadata"),
          ("X-Audio-Metadata", json.dumps({
              "server_clock": server_clock,
@@ -655,6 +675,11 @@ def do_POST(environ, start_response) -> Iterable[bytes]:
     content_length = int(environ.get('CONTENT_LENGTH', 0))
     in_data_raw = environ['wsgi.input'].read(content_length)
 
+    if environ.get('PATH_INFO', '') == "/reset_events":
+        events.clear()
+        start_response('204 No Content', [])
+        return b'',
+
     query_params = urllib.parse.parse_qs(environ['QUERY_STRING'], strict_parsing=True)
 
     userid = None
@@ -672,7 +697,7 @@ def do_POST(environ, start_response) -> Iterable[bytes]:
     start_response(
         '200 OK',
         [("Access-Control-Allow-Origin", "*"),
-         ("Access-Control-Allow-Headers", "Content-Type"),
+         ("Access-Control-Allow-Headers", "Content-Type, X-Event-Data"),
          ("Access-Control-Expose-Headers", "X-Audio-Metadata"),
          ("X-Audio-Metadata", x_audio_metadata),
          ("Content-Type", "application/octet-stream")])
