@@ -15,9 +15,17 @@ import logging
 import wave
 import traceback
 
+import cProfile
+import pstats
+import io
+
 from typing import Any, Dict, List, Tuple
 
 logging.basicConfig(filename='server.log',level=logging.DEBUG)
+pr = cProfile.Profile()
+# enable for just a moment so the profile object isn't empty
+pr.enable()
+pr.disable()
 
 FRAME_SIZE = 128
 
@@ -599,7 +607,25 @@ def do_OPTIONS(environ, start_response) -> None:
     return b'',
 
 def do_GET(environ, start_response) -> None:
+    global pr
     maybe_print_status()
+
+    if environ.get('PATH_INFO', '') == "/start_profile":
+        pr.enable()
+        start_response('200 OK', [])
+        return b'profiling enabled',
+
+    if environ.get('PATH_INFO', '') == "/stop_profile":
+        pr.disable()
+        start_response('200 OK', [])
+        return b'profiling disabled',
+
+    if environ.get('PATH_INFO', '') == "/get_profile":
+        s = io.StringIO()
+        ps = pstats.Stats(pr, stream=s).sort_stats('tottime')
+        ps.print_stats()
+        start_response('200 OK', [])
+        return s.getvalue().encode("utf-8"),
 
     server_clock = int(time.time() * SAMPLE_RATE)
     start_response(
