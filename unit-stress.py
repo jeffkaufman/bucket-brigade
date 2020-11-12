@@ -59,7 +59,7 @@ class FakeDecoder:
 
 class FakePacked:
   def tobytes(self):
-    return ""
+    return zeros
 
 def setup(args):
   if "noopus" in args:
