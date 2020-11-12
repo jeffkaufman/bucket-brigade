@@ -43,5 +43,25 @@ def stress():
       each_s*1000,
       PACKET_INTERVAL/each_s))
 
+class FakeEncoder:
+  def __init__(*args):
+    pass
+
+  def encode_float(self, _, n_samples):
+    return np.zeros(n_samples)
+
+class FakeDecoder:
+  def __init__(*args):
+    pass
+
+  def decode_float(self, _, n_samples, **kwargs):
+    return np.zeros(n_samples)
+
+def setup(args):
+  if args and args[0] == "noopus":
+    opuslib.Encoder = FakeEncoder
+    opuslib.Decoder = FakeDecoder
+
 if __name__ == "__main__":
+  setup(sys.argv[1:])
   stress()
