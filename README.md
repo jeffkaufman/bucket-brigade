@@ -80,6 +80,12 @@ Build the python 3.6 UWSGI plug-in:
 $ PYTHON=python3.6 uwsgi --build-plugin "/usr/src/uwsgi/plugins/python python36"
 ```
 
+[Alternate quick install & run (still need to serve the static files separate as above):
+
+`pip3 install uwsgi`  (This automatically builds in the python plugin)
+`uwsgi --http :8081 --wsgi-file server.py`  (run the bare python server without nginx)]
+OR: `uwsgi --http :8081 --wsgi-file server.py --threads 4`  (now you're living dangerously, this doesn't work yet)
+
 #### Config
 
 Create `/etc/systemd/system/uwsgi-echo.service` with:
