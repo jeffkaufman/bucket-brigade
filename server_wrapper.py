@@ -18,6 +18,8 @@ OPUS_FRAME_SAMPLES = server.SAMPLE_RATE // 1000 * OPUS_FRAME_MS
 OPUS_BYTES_PER_SAMPLE = 4  # float32
 OPUS_FRAME_BYTES = OPUS_FRAME_SAMPLES * CHANNELS * OPUS_BYTES_PER_SAMPLE
 
+# TODO: have a system for cleaning up users when we haven't heard for them in
+# a long time, so we don't just accumulate encoders indefinitely.
 users = {}  # userid -> (enc, dec)
 
 def pack_multi(packets) -> Any:
