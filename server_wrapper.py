@@ -173,7 +173,7 @@ def do_POST(environ, start_response) -> None:
         n_samples, = query_params.get("n_samples", ("0",))
         n_samples = int(n_samples)
 
-        data, x_audio_metadata = handle_post(userid, n_samples, in_data_raw, new_events, reset_events, query_string)
+        data, x_audio_metadata = handle_post(userid, n_samples, in_data_raw, new_events, query_string)
     except Exception as e:
         # Clear out stale session
         if userid and (userid in users):
