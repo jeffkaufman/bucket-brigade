@@ -124,3 +124,11 @@ $ service uwsgi-echo restart
 ```
 $ tail -f /var/log/uwsgi-echo.log
 ```
+
+## Profiling
+
+The server creates a cProfile profiler by default, but doesn't enable it. To start profiling, hit the `/start_profile` endpoint; to stop, hit `/stop_profile`, and to see the results hit `/get_profile`.
+
+These are GET requests so you can do them from a browser easily. I expect them to be idempotent (i.e. hitting them repeatedly is harmless), but this still violates good sense by having side effects in a GET request, so weird things may happen if the browser does prefetching or something. Be ye warned.
+
+Be careful if using this in production; the profiler has significant overhead. Don't leave it running.
