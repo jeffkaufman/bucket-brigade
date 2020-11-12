@@ -3,6 +3,7 @@ import time
 import opuslib
 import numpy as np
 import server
+import server_wrapper
 import random
 import time
 import requests
@@ -12,9 +13,9 @@ PACKET_INTERVAL = 0.6 # 600ms
 PACKET_SAMPLES = int(server.SAMPLE_RATE * PACKET_INTERVAL)
 
 enc = opuslib.Encoder(
-  server.SAMPLE_RATE, server.CHANNELS, opuslib.APPLICATION_AUDIO)
+  server.SAMPLE_RATE, server_wrapper.CHANNELS, opuslib.APPLICATION_AUDIO)
 zeros = np.zeros(PACKET_SAMPLES).reshape(
-  [-1, server.OPUS_FRAME_SAMPLES])
+  [-1, server_wrapper.OPUS_FRAME_SAMPLES])
 
 def stress(n_rounds, worker_name):
   n_rounds = int(n_rounds)    
@@ -22,9 +23,9 @@ def stress(n_rounds, worker_name):
   # avoid having everyone at the same offset
   time.sleep(random.random() * PACKET_INTERVAL)
 
-  data = server.pack_multi([
+  data = server_wrapper.pack_multi([
     np.frombuffer(
-      enc.encode_float(packet.tobytes(), server.OPUS_FRAME_SAMPLES),
+      enc.encode_float(packet.tobytes(), server_wrapper.OPUS_FRAME_SAMPLES),
       np.uint8)
     for packet in zeros]).tobytes()
 

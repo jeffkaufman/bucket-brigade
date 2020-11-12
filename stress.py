@@ -4,7 +4,6 @@ import sys
 import subprocess
 import opuslib
 import numpy as np
-import server
 import tempfile
 import random
 from multiprocessing import Pool
@@ -12,12 +11,6 @@ import time
 import json
 
 PACKET_INTERVAL = 0.6 # 600ms
-
-
-enc = opuslib.Encoder(
-  server.SAMPLE_RATE, server.CHANNELS, opuslib.APPLICATION_AUDIO)
-zeros = np.zeros(int(server.SAMPLE_RATE * PACKET_INTERVAL)).reshape(
-  [-1, server.OPUS_FRAME_SAMPLES])
 
 def summarize(timing):
   return min(timing), max(timing), sum(timing)//len(timing)
