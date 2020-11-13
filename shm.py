@@ -1,5 +1,5 @@
 import numpy as np
-import SharedArray
+import SharedArray  # pip install SharedArray
 import struct
 import sys
 import time
