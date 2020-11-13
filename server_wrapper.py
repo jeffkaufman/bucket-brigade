@@ -5,9 +5,12 @@ import urllib.parse
 import numpy as np  # type:ignore
 import opuslib  # type:ignore
 import traceback
+import uwsgi
+import SharedArray  # pip install SharedArray
 
 sys.path.append(os.path.dirname(__file__)) # for finding server
 import server
+import shm
 
 from typing import Any, Dict, List, Tuple
 
@@ -21,6 +24,9 @@ OPUS_FRAME_BYTES = OPUS_FRAME_SAMPLES * CHANNELS * OPUS_BYTES_PER_SAMPLE
 # TODO: have a system for cleaning up users when we haven't heard for them in
 # a long time, so we don't just accumulate encoders indefinitely.
 users = {}  # userid -> (enc, dec)
+
+# Will be non-null when using shared memory.
+shared_memory = None
 
 def pack_multi(packets) -> Any:
     encoded_length = 1
@@ -53,6 +59,18 @@ def unpack_multi(data) -> List[Any]:
         result.append(packet)
     return result
 
+def handle_json_post(in_data, new_events, query_string, print_status):
+    in_json = {
+        "new_events": new_events,
+        "query_string": query_string,
+        "print_status": print_status,
+    }
+    out_json_raw, out_data = shm.ShmClient.handle_post(
+        shared_memory, json.dumps(in_json), in_data)
+
+    out_json = json.loads(out_json_raw)
+    return out_data, out_json["x-audio-metadata"]
+
 def handle_post(userid, n_samples, in_data_raw, new_events,
                 query_string, print_status=True) -> Tuple[Any, str]:
     try:
@@ -84,12 +102,13 @@ def handle_post(userid, n_samples, in_data_raw, new_events,
     if n_samples != len(in_data):
         raise ValueError("Client is confused about how many samples it sent (got %s expected %s" % (n_samples, len(in_data)))
 
-    # TODO: allow this to be replaced with an RPC
-    # TODO: when we do that, figure out how errors will be handled
-    
-    data, x_audio_metadata = server.handle_post(
-        in_data, new_events, query_string, print_status)
-    
+    if shared_memory is not None:
+        data, x_audio_metadata = handle_json_post(
+            in_data, new_events, query_string, print_status)
+    else:
+        data, x_audio_metadata = server.handle_post(
+            in_data, new_events, query_string, print_status)
+
     packets = data.reshape([-1, OPUS_FRAME_SAMPLES])
     encoded = []
     for p in packets:
@@ -125,7 +144,7 @@ def do_GET(environ, start_response) -> None:
         ps.print_stats()
         start_response('200 OK', [])
         return s.getvalue().encode("utf-8"),
-    
+
     server_clock = server.calculate_server_clock()
 
     start_response(
@@ -159,7 +178,10 @@ def do_POST(environ, start_response) -> None:
     query_params = urllib.parse.parse_qs(query_string, strict_parsing=True)
 
     if environ.get('PATH_INFO', '') == "/reset_events":
-        server.clear_events()
+        if shared_memory is not None:
+            shm.ShmClient.clear_events(shared_memory)
+        else:
+            server.clear_events()
         start_response('204 No Content', [])
         return b'',
 
@@ -170,7 +192,7 @@ def do_POST(environ, start_response) -> None:
         new_events = []
     if type(new_events) != list:
         new_events = []
-    
+
     userid = None
     try:
         userid, = query_params.get("userid", (None,))
@@ -194,6 +216,12 @@ def do_POST(environ, start_response) -> None:
     return data,
 
 def application(environ, start_response):
+    global shared_memory
+    if shared_memory is None:
+        shm_name = uwsgi.opt['segment'].decode("utf8")
+        if shm_name:
+            shared_memory = shm.attach_or_create(shm_name)
+
     return {"GET": do_GET,
             "POST": do_POST,
             "OPTIONS": do_OPTIONS}[environ["REQUEST_METHOD"]](

@@ -252,10 +252,10 @@ def user_summary() -> List[Any]:
     return summary
 
 def handle_json_post(in_json_raw, in_data):
-    json_in = json.loads(json_in_raw)
+    in_json = json.loads(in_json_raw)
 
-    new_events = json_in.get("new_events", [])
-    query_string = json_in["query_string"]
+    new_events = in_json.get("new_events", [])
+    query_string = in_json["query_string"]
 
     out_data, x_audio_metadata = handle_post_(
         in_data, new_events, query_string, print_status=True)

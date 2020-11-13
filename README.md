@@ -125,6 +125,41 @@ $ service uwsgi-echo restart
 $ tail -f /var/log/uwsgi-echo.log
 ```
 
+### Shared Memory Operation
+
+#### uWSGI
+
+Set up multiple services (`/etc/systemd/system/uwsgi-echo-01.service`,
+`echo-02`, ...) each with a unique socket (`socket :7101`, `socket
+:7102`, ...), log (`--logto /var/log/uwsgi-echo-01.log`,
+`uwsgi-echo-02.log`), and segment (`--declare-option 'segment=$1'
+--segment=echo01`, `echo02`, ...).
+
+#### Nginx
+
+Configure nginx to shard requests to these uwsgi sockets by userid.
+This is probably going to require moving the user ID into the pass so
+nginx can match on it.
+
+#### ShmServer
+
+Create `/etc/systemd/system/echo-shm.service` with:
+
+```
+[Unit]
+Description=Echo Shared Memory Server
+
+[Service]
+ExecStart=/usr/bin/python3 /root/src/solstice-audio-test/shm.py echo01 echo02 (etc...)
+Restart=always
+KillSignal=SIGQUIT
+Type=simple
+NotifyAccess=all
+
+[Install]
+WantedBy=multi-user.target
+```
+
 ## Profiling
 
 The server creates a cProfile profiler by default, but doesn't enable it. To start profiling, hit the `/start_profile` endpoint; to stop, hit `/stop_profile`, and to see the results hit `/get_profile`.
