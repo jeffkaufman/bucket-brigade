@@ -78,7 +78,10 @@ events: Dict[str, str] = {}
 
 def clear_events():
     with lock:
-        events.clear()
+        clear_events_()
+
+def clear_events_():
+    events.clear()
 
 tracks = []
 def populate_tracks() -> None:
@@ -247,6 +250,19 @@ def user_summary() -> List[Any]:
             user.is_monitored))
     summary.sort()
     return summary
+
+def handle_json_post(in_json_raw, in_data):
+    json_in = json.loads(json_in_raw)
+
+    new_events = json_in.get("new_events", [])
+    query_string = json_in["query_string"]
+
+    out_data, x_audio_metadata = handle_post_(
+        in_data, new_events, query_string, print_status=True)
+
+    return json.dumps({
+        "x-audio-metadata": x_audio_metadata,
+    }), out_data
 
 def handle_post(in_data, new_events, query_string, print_status) -> Tuple[Any, str]:
     with lock:
@@ -550,4 +566,4 @@ def maybe_print_status() -> None:
     last_status_ts = now
 
 if __name__ == "__main__":
-    print("Run server_wrapper.py instead")
+    print("Run server_wrapper.py or server_runner.py instead")
