@@ -9,8 +9,7 @@ CLIENT_SLEEP_S = 1/10000  #0.1ms
 SERVER_SLEEP_S = 1/10000  #0.1ms
 
 MESSAGE_TYPE_POST = 1
-MESSAGE_TYPE_CLEAR_EVENTS = 2
-MESSAGE_TYPE_RESPONSE = 3
+MESSAGE_TYPE_RESPONSE = 2
 
 # Buffer layout:
 #   1 byte: status
@@ -33,7 +32,7 @@ def attach_or_create(name):
     return SharedArray.create(name, BUFFER_SIZE, dtype=np.uint8)
 
 def server_turn(buf):
-    return buf[0] in [MESSAGE_TYPE_POST, MESSAGE_TYPE_CLEAR_EVENTS]
+    return buf[0] == MESSAGE_TYPE_POST
 
 def encode_json_and_data(buf, json_raw, data):
     index = 1
@@ -42,10 +41,15 @@ def encode_json_and_data(buf, json_raw, data):
     index += 2
 
     json_raw_bytes = json_raw.encode("utf-8")
+    if len(json_raw_bytes) > MAX_JSON_LENGTH:
+        raise Exception("json too long: %s" % len(json_raw_bytes))
     buf[index : index + len(json_raw_bytes)] = memoryview(json_raw_bytes)
     index += len(json_raw_bytes)
 
     data_uint8 = data.view(dtype=np.uint8)
+    if len(data_uint8) > MAX_DATA_LENGTH:
+        raise Exception("data too long: %s" % len(data_uint8))
+
     buf[index : index + 4] = memoryview(struct.pack("I", len(data_uint8)))
     index += 4
 
@@ -75,10 +79,6 @@ def decode_json_and_data(buf):
 
 class ShmServer:
     @staticmethod
-    def clear_events():
-        server.clear_events_()
-
-    @staticmethod
     def post(buf):
         in_json_raw, in_data = decode_json_and_data(buf)
         out_json_raw, out_data = server.handle_json_post(in_json_raw, in_data)
@@ -92,21 +92,13 @@ class ShmServer:
             didAction = False
             for buf in buffers:
                 if server_turn(buf):
-                    if buf[0] == MESSAGE_TYPE_POST:
-                        ShmServer.post(buf)
-                    elif buf[1] == MESSAGE_TYPE_CLEAR_EVENTS:
-                        ShmServer.clear_events()
+                    ShmServer.post(buf)
                     buf[0] = MESSAGE_TYPE_RESPONSE
                     didAction = True
             if not didAction:
                 time.sleep(SERVER_SLEEP_S)
 
 class ShmClient:
-    @staticmethod
-    def clear_events(buf):
-        buf[0] = MESSAGE_TYPE_CLEAR_EVENTS
-        ShmClient.wait_resp_(buf)
-
     @staticmethod
     def handle_post(buf, in_json_raw, in_data):
         encode_json_and_data(buf, in_json_raw, in_data)

@@ -254,6 +254,10 @@ def user_summary() -> List[Any]:
 def handle_json_post(in_json_raw, in_data):
     in_json = json.loads(in_json_raw)
 
+    if "clear_events" in in_json:
+        clear_events_()
+        return "", []
+
     new_events = in_json.get("new_events", [])
     query_string = in_json["query_string"]
 

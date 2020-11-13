@@ -71,6 +71,10 @@ def handle_json_post(in_data, new_events, query_string, print_status):
     out_json = json.loads(out_json_raw)
     return out_data, out_json["x-audio-metadata"]
 
+def handle_json_clear_events():
+    shm.ShmClient.handle_post(
+        shared_memory, json.dumps({'clear_events': True}), [])
+
 def handle_post(userid, n_samples, in_data_raw, new_events,
                 query_string, print_status=True) -> Tuple[Any, str]:
     try:
@@ -179,7 +183,7 @@ def do_POST(environ, start_response) -> None:
 
     if environ.get('PATH_INFO', '') == "/reset_events":
         if shared_memory is not None:
-            shm.ShmClient.clear_events(shared_memory)
+            handle_json_clear_events()
         else:
             server.clear_events()
         start_response('204 No Content', [])
