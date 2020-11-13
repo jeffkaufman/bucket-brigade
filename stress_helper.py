@@ -14,10 +14,10 @@ PACKET_SAMPLES = int(server.SAMPLE_RATE * PACKET_INTERVAL)
 
 enc = opuslib.Encoder(
   server.SAMPLE_RATE, server_wrapper.CHANNELS, opuslib.APPLICATION_AUDIO)
-zeros = np.zeros(PACKET_SAMPLES).reshape(
+zeros = np.zeros(PACKET_SAMPLES, dtype=np.float32).reshape(
   [-1, server_wrapper.OPUS_FRAME_SAMPLES])
 
-def stress(n_rounds, worker_name):
+def stress(n_rounds, worker_name, shard):
   n_rounds = int(n_rounds)    
   
   # avoid having everyone at the same offset
@@ -39,8 +39,8 @@ def stress(n_rounds, worker_name):
 
     ts = full_start + PACKET_SAMPLES * i
     resp = s.post(
-      url='https://echo.jefftk.com/api/?read_clock=%s&userid=%s&username=%s'
-        % (ts, userid, worker_name),
+      url='https://echo.jefftk.com/api%s/?read_clock=%s&userid=%s&username=%s'
+        % (ts, shard, userid, worker_name),
       data=data,
       headers={
           'Content-Type': 'application/octet-stream',
