@@ -4,6 +4,7 @@ import sys
 import time
 import struct
 import server
+import json
 
 CLIENT_SLEEP_S = 1/10000  #0.1ms
 SERVER_SLEEP_S = 1/10000  #0.1ms
@@ -34,21 +35,30 @@ def attach_or_create(name):
 def server_turn(buf):
     return buf[0] == MESSAGE_TYPE_POST
 
-def encode_json_and_data(buf, json_raw, data):
+def encode_json_and_data(buf, json_raw, data, throw_exceptions):
     index = 1
 
-    buf[index : index + 2] = memoryview(struct.pack("H", len(json_raw)))
+    json_raw_bytes = json_raw.encode("utf-8")
+    data_uint8 = data.view(dtype=np.uint8)
+
+    errormsg = None
+    if len(json_raw_bytes) > MAX_JSON_LENGTH:
+        errormsg = "json too long: %s" % len(json_raw_bytes)
+    elif len(data_uint8) > MAX_DATA_LENGTH:
+        errormsg = "data too long: %s" % len(data_uint8)
+
+    if errormsg:
+        if throw_exceptions:
+            raise Exception(errormsg)
+        else:
+            json_raw_bytes = json.dumps({"error": errormsg}).encode("utf-8")
+            data_uint8 = np.zeros(0, dtype=np.uint8)
+
+    buf[index : index + 2] = memoryview(struct.pack("H", len(json_raw_bytes)))
     index += 2
 
-    json_raw_bytes = json_raw.encode("utf-8")
-    if len(json_raw_bytes) > MAX_JSON_LENGTH:
-        raise Exception("json too long: %s" % len(json_raw_bytes))
     buf[index : index + len(json_raw_bytes)] = memoryview(json_raw_bytes)
     index += len(json_raw_bytes)
-
-    data_uint8 = data.view(dtype=np.uint8)
-    if len(data_uint8) > MAX_DATA_LENGTH:
-        raise Exception("data too long: %s" % len(data_uint8))
 
     buf[index : index + 4] = memoryview(struct.pack("I", len(data_uint8)))
     index += 4
@@ -80,9 +90,15 @@ def decode_json_and_data(buf):
 class ShmServer:
     @staticmethod
     def post(buf):
-        in_json_raw, in_data = decode_json_and_data(buf)
-        out_json_raw, out_data = server.handle_json_post(in_json_raw, in_data)
-        encode_json_and_data(buf, out_json_raw, out_data)
+        try:
+            in_json_raw, in_data = decode_json_and_data(buf)
+            out_json_raw, out_data = server.handle_json_post(in_json_raw, in_data)
+            encode_json_and_data(buf, out_json_raw, out_data,
+                                 throw_exceptions=False)
+        except Exception as e:
+            encode_json_and_data(buf, json.dumps(
+                {"error": str(e)}
+            ), np.zeros(0, dtype=np.float32), throw_exceptions=False)
 
     @staticmethod
     def run(buffer_names):
@@ -101,7 +117,7 @@ class ShmServer:
 class ShmClient:
     @staticmethod
     def handle_post(buf, in_json_raw, in_data):
-        encode_json_and_data(buf, in_json_raw, in_data)
+        encode_json_and_data(buf, in_json_raw, in_data, throw_exceptions=True)
         buf[0] = MESSAGE_TYPE_POST
 
         ShmClient.wait_resp_(buf)

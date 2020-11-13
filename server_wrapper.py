@@ -69,6 +69,10 @@ def handle_json_post(in_data, new_events, query_string, print_status):
         shared_memory, json.dumps(in_json), in_data)
 
     out_json = json.loads(out_json_raw)
+
+    if "error" in out_json:
+        raise Exception(out_json["error"])
+
     return out_data, out_json["x-audio-metadata"]
 
 def handle_json_clear_events():
