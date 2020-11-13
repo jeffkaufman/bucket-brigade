@@ -22,7 +22,7 @@ def run(n_workers, n_rounds, n_shards):
   if n_shards == 0:
     shards = [""]
   else:
-    shards = ["/%s" % str(i).zfill(2) for i in range(n_shards)]
+    shards = ["/%s" % str(i+1).zfill(2) for i in range(n_shards)]
 
   processes = []
   for i in range(n_workers):
