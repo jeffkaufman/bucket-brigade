@@ -28,7 +28,7 @@ def run(n_workers, n_rounds, n_shards):
   for i in range(n_workers):
     processes.append(subprocess.Popen(["python3", "stress_helper.py",
                                        n_rounds, "stress%s" % i,
-                                       shards[i%len(shards)]]w,
+                                       shards[i%len(shards)]],
                                       stdout=subprocess.PIPE))
   timings = []
   for process in processes:
