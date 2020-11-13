@@ -40,7 +40,7 @@ def stress(n_rounds, worker_name, shard):
     ts = full_start + PACKET_SAMPLES * i
     resp = s.post(
       url='https://echo.jefftk.com/api%s/?read_clock=%s&userid=%s&username=%s'
-        % (ts, shard, userid, worker_name),
+        % (shard, ts, userid, worker_name),
       data=data,
       headers={
           'Content-Type': 'application/octet-stream',
