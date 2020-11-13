@@ -566,4 +566,4 @@ def maybe_print_status() -> None:
     last_status_ts = now
 
 if __name__ == "__main__":
-    print("Run server_wrapper.py or server_runner.py instead")
+    print("Run server_wrapper.py or shm.py instead")
