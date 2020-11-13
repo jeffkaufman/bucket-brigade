@@ -5,7 +5,13 @@ import urllib.parse
 import numpy as np  # type:ignore
 import opuslib  # type:ignore
 import traceback
-import uwsgi
+
+try:
+    import uwsgi
+except Exception:
+    # only available in app, not in shell
+    uwsgi = None
+
 import SharedArray  # pip install SharedArray
 
 sys.path.append(os.path.dirname(__file__)) # for finding server
@@ -225,7 +231,7 @@ def do_POST(environ, start_response) -> None:
 
 def application(environ, start_response):
     global shared_memory
-    if shared_memory is None and 'segment' in uwsgi.opt:
+    if shared_memory is None and (uwsgi is not None  and 'segment' in uwsgi.opt):
         shm_name = uwsgi.opt['segment']
         if shm_name:
             shared_memory = shm.attach_or_create(shm_name.decode("utf8"))
