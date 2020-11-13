@@ -81,7 +81,7 @@ def decode_json_and_data(buf):
     index += 4
 
     if data_length > MAX_DATA_LENGTH:
-        raise Exeption("bad data length %s" % data_length)
+        raise Exception("bad data length %s" % data_length)
 
     data = buf[index : index + data_length].view(np.float32)
 
