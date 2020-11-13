@@ -218,9 +218,9 @@ def do_POST(environ, start_response) -> None:
 def application(environ, start_response):
     global shared_memory
     if shared_memory is None:
-        shm_name = uwsgi.opt['segment'].decode("utf8")
+        shm_name = uwsgi.opt['segment']
         if shm_name:
-            shared_memory = shm.attach_or_create(shm_name)
+            shared_memory = shm.attach_or_create(shm_name.decode("utf8"))
 
     return {"GET": do_GET,
             "POST": do_POST,
