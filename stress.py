@@ -56,9 +56,12 @@ def run(n_workers, users_per_client, n_rounds, n_shards, url, should_sleep):
       all_timings.extend(timings)
     print("[min=%.0f  max=%.0f  avg=%.0f]" % summarize(all_timings))
   else:
+    total = 0
     for timing in timings:
-      print("est %.0f clients" % (
-        PACKET_INTERVAL * 1000 * len(timing) / sum(timing)))
+      est = PACKET_INTERVAL * 1000 * len(timing) / sum(timing)
+      print("est %.0f clients" % est)
+      total += est
+    print("total: %.0f clients" % total)
 
 if __name__ == "__main__":
   run(*sys.argv[1:])
