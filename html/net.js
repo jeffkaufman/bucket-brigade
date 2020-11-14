@@ -326,7 +326,7 @@ export async function samples_to_server(outdata, target_url, send_metadata) {
     if (bpmToSend) {
       params.set('bpm', bpmToSend);
     }
-    if (bprToSend) {
+    if (bprToSend != null) {
       params.set('bpr', bprToSend);
     }      
 

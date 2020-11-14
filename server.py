@@ -471,7 +471,7 @@ def handle_post_(in_data, new_events, query_string, print_status) -> Tuple[Any, 
         # stop the backing track from playing, if it's still going
         backing_track_index = len(backing_track)
         metronome_on = False
-
+        leader = None
         song_end_clock = user.last_write_clock
 
         # They're done singing, send them to the end.

@@ -249,7 +249,7 @@ window.bpmUpdate.addEventListener("click", () => {
 let bprToSend = null;
 window.bprUpdate.addEventListener("click", () => {
   const newBpr = parseInt(window.bpr.value);
-  if (isNaN(newBpr) || newBpr < 1 || newBpr > 500) {
+  if (isNaN(newBpr) || newBpr < 0 || newBpr > 500) {
     window.bpr.value = "invalid";
     return;
   }
@@ -1498,30 +1498,28 @@ function update_active_users(user_summary, server_sample_rate, leader) {
     window.activeUsers.removeChild(window.activeUsers.lastChild);
   }
 
+  const wasLeading = imLeading;
+  imLeading = (myUserid == leader);
+
+  if (imLeading && leadButtonState != "start-singing") {
+    window.takeLead.textContent = "Start Singing";
+    leadButtonState = "start-singing";
+    window.jumpToEnd.disabled = true;
+    window.backingTrack.style.display = "block";
+    window.backingTrack.selectedIndex = 0;
+  } else if (!imLeading && leadButtonState != "leadButtonState") {
+    window.takeLead.textContent = "Lead a Song";
+    leadButtonState = "take-lead";
+    window.jumpToEnd.disabled = false;
+    window.backingTrack.style.display = "none";
+  }
+
   const mic_volume_inputs = [];
   for (var i = 0; i < user_summary.length; i++) {
     const offset_s = user_summary[i][0];
     const name = user_summary[i][1];
     const mic_volume = user_summary[i][2];
     const userid = user_summary[i][3];
-
-    if (i === 0) {
-      const wasLeading = imLeading;
-      imLeading = (userid == myUserid && userid == leader);
-
-      if (imLeading && !wasLeading) {
-        window.takeLead.textContent = "Start Singing";
-        leadButtonState = "start-singing";
-        window.jumpToEnd.disabled = true;
-        window.backingTrack.style.display = "block";
-        window.backingTrack.selectedIndex = 0;
-      } else if (!imLeading && wasLeading) {
-        window.takeLead.textContent = "Lead a Song";
-        leadButtonState = "take-lead";
-        window.jumpToEnd.disabled = false;
-        window.backingTrack.style.display = "none";
-      }
-    }
 
     mic_volume_inputs.push([name, userid, mic_volume]);
 
