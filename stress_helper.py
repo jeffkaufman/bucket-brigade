@@ -17,7 +17,7 @@ enc = opuslib.Encoder(
 zeros = np.zeros(PACKET_SAMPLES, dtype=np.float32).reshape(
   [-1, server_wrapper.OPUS_FRAME_SAMPLES])
 
-def stress(n_rounds, worker_name, shard):
+def stress(n_rounds, worker_name, url):
   n_rounds = int(n_rounds)    
   
   # avoid having everyone at the same offset
@@ -39,8 +39,8 @@ def stress(n_rounds, worker_name, shard):
 
     ts = full_start + PACKET_SAMPLES * i
     resp = s.post(
-      url='https://echo.jefftk.com/api%s/?read_clock=%s&userid=%s&username=%s'
-        % (shard, ts, userid, worker_name),
+      url='%s?read_clock=%s&userid=%s&username=%s'
+        % (url, ts, userid, worker_name),
       data=data,
       headers={
           'Content-Type': 'application/octet-stream',

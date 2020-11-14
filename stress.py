@@ -1,4 +1,8 @@
-# run as: python3 stress.py <n_workers> <n_rounds>
+# run as: python3 stress.py <n_workers> <n_rounds> <n_shards> <url>
+#
+# n_shards=0 for no shards
+#
+# if n_shards>0, url should have a %s in it to substitute the shard number
 
 import sys
 import subprocess
@@ -15,21 +19,25 @@ PACKET_INTERVAL = 0.6 # 600ms
 def summarize(timing):
   return min(timing), max(timing), sum(timing)//len(timing)
 
-def run(n_workers, n_rounds, n_shards):
+def run(n_workers, n_rounds, n_shards, url):
   n_workers = int(n_workers)
   n_shards = int(n_shards)
 
   if n_shards == 0:
     shards = [""]
   else:
-    shards = ["/%s" % str(i+1).zfill(2) for i in range(n_shards)]
+    shards = ["%s" % str(i+1).zfill(2) for i in range(n_shards)]
 
   processes = []
   for i in range(n_workers):
-    processes.append(subprocess.Popen(["python3", "stress_helper.py",
-                                       n_rounds, "stress%s" % i,
-                                       shards[i%len(shards)]],
-                                      stdout=subprocess.PIPE))
+    shard = shards[i%len(shards)]
+    if n_shards > 0:
+      sharded_url = url % shard
+    else:
+      sharded_url = url
+    processes.append(subprocess.Popen(
+      ["python3", "stress_helper.py", n_rounds, "stress%s" % i, sharded_url],
+      stdout=subprocess.PIPE))
   timings = []
   for process in processes:
     process.wait()
