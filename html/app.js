@@ -968,6 +968,7 @@ async function start() {
     switch_app_state(APP_CALIBRATING_LATENCY);
   } else {
     switch_app_state(APP_RUNNING);
+    window.estLatency.innerText = "150ms";
     send_local_latency();
 
     await server_connection.start();
