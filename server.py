@@ -42,6 +42,7 @@ requested_track: Any = None
 
 bpm = None
 bpr = None
+leader = None
 
 QUEUE_SECONDS = 120
 
@@ -87,7 +88,7 @@ def clear_events_():
     events.clear()
 
 METRONOME = "metronome -- set BPM below"
-    
+
 tracks = []
 def populate_tracks() -> None:
     for track in sorted(os.listdir(AUDIO_DIR)):
@@ -197,9 +198,19 @@ def run_backing_track() -> None:
 def assign_delays(userid_lead) -> None:
     global max_position
 
-    users[userid_lead].delay_to_send = DELAY_INTERVAL
+    initial_position = 0
 
-    positions = [x*DELAY_INTERVAL
+    if bpr and bpm:
+        beat_length_s = 60 / bpm
+        repeat_length_s = beat_length_s * bpr
+        initial_position += int(repeat_length_s)
+
+    if initial_position > 90:
+        initial_position = 90
+
+    users[userid_lead].delay_to_send = initial_position + DELAY_INTERVAL
+
+    positions = [initial_position + x*DELAY_INTERVAL
                  for x in range(2, LAYERING_DEPTH)]
 
     # Randomly shuffle the remaining users, and assign them to positions. If we
@@ -266,7 +277,7 @@ def user_summary() -> List[Any]:
 leftover_beat_samples = 0
 def write_metronome(clear_index, clear_samples):
     global leftover_beat_samples
-    
+
     metronome_samples = np.zeros(clear_samples, np.float32)
 
     if bpm is not None:
@@ -283,8 +294,26 @@ def write_metronome(clear_index, clear_samples):
             metronome_samples[-remaining_clear_samples] = 1
             leftover_beat_samples = beat_samples
         leftover_beat_samples -= remaining_clear_samples
-    
+
     wrap_assign(audio_queue, clear_index, metronome_samples)
+
+
+def update_audio(pos, n_samples, in_data, is_monitored):
+    old_audio = wrap_get(audio_queue, pos, n_samples)
+    new_audio = old_audio + in_data
+    wrap_assign(audio_queue, pos, new_audio)
+
+    if is_monitored:
+        wrap_assign(monitor_queue, pos, in_data)
+
+    old_n_people = wrap_get(n_people_queue, pos, n_samples)
+    new_n_people = old_n_people + np.ones(n_samples, np.int16)
+    wrap_assign(n_people_queue, pos, new_n_people)
+
+def repeat_length_samples():
+    beat_length_s = 60 / bpm
+    repeat_length_s = beat_length_s * bpr
+    return int(repeat_length_s * SAMPLE_RATE)
 
 
 def handle_json_post(in_json_raw, in_data):
@@ -322,6 +351,7 @@ def handle_post_(in_data, new_events, query_string, print_status) -> Tuple[Any, 
     global metronome_on
     global bpm
     global bpr
+    global leader
 
     query_params = urllib.parse.parse_qs(query_string, strict_parsing=True)
 
@@ -398,7 +428,7 @@ def handle_post_(in_data, new_events, query_string, print_status) -> Tuple[Any, 
         bpr = int(bpr)
         for other_userid in users:
             users[other_userid].bpr_to_send = bpr
-                    
+
     mic_volumes = query_params.get("mic_volume", None)
     if mic_volumes:
         mic_volume, = mic_volumes
@@ -425,11 +455,15 @@ def handle_post_(in_data, new_events, query_string, print_status) -> Tuple[Any, 
         song_start_clock = None
         song_end_clock = 0
         metronome_on = False
+        leader = userid
 
     if query_params.get("mark_start_singing", None):
         song_start_clock = user.last_write_clock
         song_end_clock = 0
         metronome_on = False
+        if bpm and bpr:
+            requested_track = METRONOME
+            song_start_clock = user.last_write_clock + repeat_length_samples()
         if requested_track:
             run_backing_track()
 
@@ -520,21 +554,14 @@ def handle_post_(in_data, new_events, query_string, print_status) -> Tuple[Any, 
         if (song_start_clock and client_write_clock > song_start_clock and
             (not song_end_clock or
              client_write_clock - n_samples < song_end_clock)):
-            old_audio = wrap_get(
-                audio_queue, client_write_clock - n_samples, n_samples)
-            new_audio = old_audio + in_data
-            wrap_assign(
-                audio_queue, client_write_clock - n_samples, new_audio)
 
-            if user.is_monitored:
-                wrap_assign(
-                    monitor_queue, client_write_clock - n_samples, in_data)
+            pos = client_write_clock - n_samples
+            update_audio(pos, n_samples, in_data, user.is_monitored)
 
-            old_n_people = wrap_get(
-                n_people_queue, client_write_clock - n_samples, n_samples)
-            new_n_people = old_n_people + np.ones(n_samples, np.int16)
-            wrap_assign(
-                n_people_queue, client_write_clock - n_samples, new_n_people)
+            if bpr and bpm:
+                repeat_pos = pos + repeat_length_samples()
+                if repeat_pos + n_samples < server_clock:
+                    update_audio(repeat_pos, n_samples, in_data, False)
 
     # Why subtract n_samples above and below? Because the future is to the
     #   right. So when a client asks for n samples at time t, what they
@@ -601,6 +628,7 @@ def handle_post_(in_data, new_events, query_string, print_status) -> Tuple[Any, 
         "events": events_to_send,
         "bpm": user.bpm_to_send,
         "bpr": user.bpr_to_send,
+        "leader": leader,
     })
 
     user.chats_to_send.clear()

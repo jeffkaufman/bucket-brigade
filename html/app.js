@@ -1383,6 +1383,7 @@ async function handle_message(event) {
     var client_read_clock = metadata["client_read_clock"];
     var server_bpm = metadata["bpm"];
     var server_bpr = metadata["bpr"];
+    var leader = metadata["leader"]
 
     for (let ev of metadata["events"]) {
       alarms[ev["clock"]] = () => event_hooks.map(f=>f(ev["evid"]));
@@ -1415,7 +1416,7 @@ async function handle_message(event) {
       }
 
       // XXX: DOM stuff below this line.
-      update_active_users(user_summary, server_sample_rate);
+      update_active_users(user_summary, server_sample_rate, leader);
       chats.forEach((msg) => receiveChatMessage(msg[0], msg[1]));
       update_backing_tracks(tracks);
 
@@ -1471,7 +1472,7 @@ let previous_mic_volume_inputs_str = "";
 
 let imLeading = false;
 
-function update_active_users(user_summary, server_sample_rate) {
+function update_active_users(user_summary, server_sample_rate, leader) {
   for (var i = 0; i < user_summary.length; i++) {
     const userid = user_summary[i][3];
     if (userid != myUserid) {
@@ -1506,7 +1507,7 @@ function update_active_users(user_summary, server_sample_rate) {
 
     if (i === 0) {
       const wasLeading = imLeading;
-      imLeading = (userid == myUserid && offset_s < 5);
+      imLeading = (userid == myUserid && userid == leader);
 
       if (imLeading && !wasLeading) {
         window.takeLead.textContent = "Start Singing";
