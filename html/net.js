@@ -265,7 +265,7 @@ export async function samples_to_server(outdata, target_url, send_metadata) {
   var { read_clock, write_clock, username, userid, chatsToSend, requestedLeadPosition, markStartSinging, markStopSinging,
         loopback_mode, n_samples, globalVolumeToSend, backingVolumeToSend,
         micVolumesToSend, backingTrackToSend, monitoredUserIdToSend,
-        event_data,
+        event_data, bpmToSend, bprToSend
       } = send_metadata;
   if (outdata === null) {
     outdata = new Uint8Array();
@@ -323,6 +323,12 @@ export async function samples_to_server(outdata, target_url, send_metadata) {
     if (monitoredUserIdToSend) {
       params.set('monitor', monitoredUserIdToSend);
     }
+    if (bpmToSend) {
+      params.set('bpm', bpmToSend);
+    }
+    if (bprToSend) {
+      params.set('bpr', bprToSend);
+    }      
 
     target_url.search = params.toString();
 

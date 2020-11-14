@@ -40,6 +40,9 @@ song_end_clock = 0
 song_start_clock = None
 requested_track: Any = None
 
+bpm = None
+bpr = None
+
 QUEUE_SECONDS = 120
 
 SAMPLE_RATE = 48000
@@ -83,11 +86,14 @@ def clear_events():
 def clear_events_():
     events.clear()
 
+METRONOME = "metronome -- set BPM below"
+    
 tracks = []
 def populate_tracks() -> None:
     for track in sorted(os.listdir(AUDIO_DIR)):
         if track != "README":
             tracks.append(track)
+    tracks.append(METRONOME)
 
 populate_tracks()
 
@@ -111,6 +117,8 @@ class User:
         self.last_write_clock = None
         self.is_monitored = False
         self.is_monitoring = False
+        self.bpm_to_send = None
+        self.bpr_to_send = None
         # For debugging purposes only
         self.last_seen_read_clock = None
         self.last_seen_write_clock = None
@@ -154,16 +162,20 @@ def wrap_assign(queue, start, vals) -> None:
         queue[start_in_queue:(start_in_queue+first_section_size)] = vals[:first_section_size]
         queue[0:second_section_size] = vals[first_section_size:]
 
+metronome_on = False
 backing_track: Any = np.zeros(0)
 backing_track_index = 0
 def run_backing_track() -> None:
     global backing_track
     global backing_track_index
     global requested_track
+    global metronome_on
 
     backing_track_index = 0
 
-    if requested_track in tracks:
+    if requested_track == METRONOME:
+        metronome_on = True
+    elif requested_track in tracks:
         with wave.open(os.path.join(AUDIO_DIR, requested_track)) as inf:
             if inf.getnchannels() != 1:
                 raise Exception(
@@ -251,6 +263,30 @@ def user_summary() -> List[Any]:
     summary.sort()
     return summary[:50]
 
+leftover_beat_samples = 0
+def write_metronome(clear_index, clear_samples):
+    global leftover_beat_samples
+    
+    metronome_samples = np.zeros(clear_samples, np.float32)
+
+    if bpm is not None:
+        beat_samples = SAMPLE_RATE * 60 // bpm
+
+        # We now want to mark a beat at positions matching
+        #   leftover_beat_samples + N*beat_samples
+        # It is possible that we will write no beats, and instead will
+        # just decrease leftover_beat_samples.
+
+        remaining_clear_samples = clear_samples
+        while leftover_beat_samples < remaining_clear_samples:
+            remaining_clear_samples -= leftover_beat_samples
+            metronome_samples[-remaining_clear_samples] = 1
+            leftover_beat_samples = beat_samples
+        leftover_beat_samples -= remaining_clear_samples
+    
+    wrap_assign(audio_queue, clear_index, metronome_samples)
+
+
 def handle_json_post(in_json_raw, in_data):
     in_json = json.loads(in_json_raw)
 
@@ -283,6 +319,9 @@ def handle_post_(in_data, new_events, query_string, print_status) -> Tuple[Any, 
     global song_start_clock
     global requested_track
     global backing_track_index
+    global metronome_on
+    global bpm
+    global bpr
 
     query_params = urllib.parse.parse_qs(query_string, strict_parsing=True)
 
@@ -346,6 +385,20 @@ def handle_post_(in_data, new_events, query_string, print_status) -> Tuple[Any, 
                 for msg_chat in msg_chats:
                     other_user.chats_to_send.append((username, msg_chat))
 
+    bpms = query_params.get("bpm", None)
+    if bpms:
+        bpm, = bpms
+        bpm = int(bpm)
+        for other_userid in users:
+            users[other_userid].bpm_to_send = bpm
+
+    bprs = query_params.get("bpr", None)
+    if bprs:
+        bpr, = bprs
+        bpr = int(bpr)
+        for other_userid in users:
+            users[other_userid].bpr_to_send = bpr
+                    
     mic_volumes = query_params.get("mic_volume", None)
     if mic_volumes:
         mic_volume, = mic_volumes
@@ -371,16 +424,19 @@ def handle_post_(in_data, new_events, query_string, print_status) -> Tuple[Any, 
         assign_delays(userid)
         song_start_clock = None
         song_end_clock = 0
+        metronome_on = False
 
     if query_params.get("mark_start_singing", None):
         song_start_clock = user.last_write_clock
         song_end_clock = 0
+        metronome_on = False
         if requested_track:
             run_backing_track()
 
     if query_params.get("mark_stop_singing", None):
         # stop the backing track from playing, if it's still going
         backing_track_index = len(backing_track)
+        metronome_on = False
 
         song_end_clock = user.last_write_clock
 
@@ -422,8 +478,12 @@ def handle_post_(in_data, new_events, query_string, print_status) -> Tuple[Any, 
                 song_end_clock = clear_index
 
         if clear_samples > 0:
-            wrap_assign(
-                audio_queue, clear_index, np.zeros(clear_samples, np.float32))
+            if metronome_on:
+                write_metronome(clear_index, clear_samples)
+            else:
+                wrap_assign(
+                    audio_queue, clear_index,
+                    np.zeros(clear_samples, np.float32))
 
     saved_last_request_clock = last_request_clock
     last_request_clock = server_clock
@@ -539,10 +599,14 @@ def handle_post_(in_data, new_events, query_string, print_status) -> Tuple[Any, 
         # The following uses units of 128-sample frames
         "queue_size": QUEUE_LENGTH / FRAME_SIZE,
         "events": events_to_send,
+        "bpm": user.bpm_to_send,
+        "bpr": user.bpr_to_send,
     })
 
     user.chats_to_send.clear()
     user.delay_to_send = None
+    user.bpm_to_send = None
+    user.bpr_to_send = None
 
     if print_status:
         maybe_print_status()

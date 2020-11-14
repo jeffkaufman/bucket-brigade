@@ -236,6 +236,26 @@ window.jumpToEnd.addEventListener("click", () => {
   audio_offset_change();
 });
 
+let bpmToSend = null;
+window.bpmUpdate.addEventListener("click", () => {
+  const newBpm = parseInt(window.bpm.value);
+  if (isNaN(newBpm) || newBpm < 1 || newBpm > 500) {
+    window.bpm.value = "invalid";
+    return;
+  }
+  bpmToSend = newBpm;
+});
+
+let bprToSend = null;
+window.bprUpdate.addEventListener("click", () => {
+  const newBpr = parseInt(window.bpr.value);
+  if (isNaN(newBpr) || newBpr < 1 || newBpr > 500) {
+    window.bpr.value = "invalid";
+    return;
+  }
+  bprToSend = newBpr;
+});
+
 function persist(textFieldId) {
   const textField = document.getElementById(textFieldId);
   const prevVal = localStorage.getItem(textFieldId);
@@ -1292,6 +1312,8 @@ async function handle_message(event) {
       backingTrackToSend,
       monitoredUserIdToSend,
       event_data,
+      bpmToSend,
+      bprToSend,
     };
     if (requestedLeadPosition) {
       requestedLeadPosition = false;
@@ -1309,6 +1331,8 @@ async function handle_message(event) {
     backingTrackToSend = null;
     monitoredUserIdToSend = null;
     event_data = [];
+    bpmToSend = null;
+    bprToSend = null;
 
     server_connection.set_metadata(send_metadata);
     // XXX: interesting, it does not seem that these promises are guaranteed to resolve in order... and the worklet's buffer uses the first chunk's timestamp to decide where to start playing back, so if the first two chunks are swapped it has a big problem.
@@ -1357,6 +1381,8 @@ async function handle_message(event) {
     var server_sample_rate = metadata["server_sample_rate"];
     var song_start_clock = metadata["song_start_clock"];
     var client_read_clock = metadata["client_read_clock"];
+    var server_bpm = metadata["bpm"];
+    var server_bpr = metadata["bpr"];
 
     for (let ev of metadata["events"]) {
       alarms[ev["clock"]] = () => event_hooks.map(f=>f(ev["evid"]));
@@ -1392,6 +1418,13 @@ async function handle_message(event) {
       update_active_users(user_summary, server_sample_rate);
       chats.forEach((msg) => receiveChatMessage(msg[0], msg[1]));
       update_backing_tracks(tracks);
+
+      if (server_bpm) {
+        window.bpm.value = server_bpm;
+      }
+      if (server_bpr) {
+        window.bpr.value = server_bpr;
+      }
 
       // This is how closely it's safe to follow behind us, if you get as unlucky as possible (and try to read _just_ before we write).
       client_total_time.value = connection_as_of_message.client_window_time + play_chunk.length_seconds;
