@@ -1,3 +1,6 @@
+#!/bin/bash
+# usage: ./start_stress_servers.sh {1..8}
+
 trap ctrl_c INT
 
 function ctrl_c() {
@@ -8,12 +11,17 @@ function ctrl_c() {
   exit
 }
 
-python3 shm.py echo0{1,2,3,4,5,6,7,8} &
+SEGMENTS=""
+for i in $@; do
+  SEGMENTS+=" stress0$i"
+done
 
-for i in 01 02 02 03 04 05 06 07 08; do
-    uwsgi --http :80$i --wsgi-file \
-    server_wrapper.py --threads=1 --processes=1 --disable-logging \
-    --declare-option 'segment=$1' --segment=echo$i &
+python3 shm.py $SEGMENTS &
+
+for i in $@; do
+  uwsgi --http :810$i --wsgi-file \
+       server_wrapper.py --threads=1 --processes=1 --disable-logging \
+       --declare-option 'segment=$1' --segment=stress0$i &
 done
 
 echo running...
