@@ -249,7 +249,7 @@ def user_summary() -> List[Any]:
             user.is_monitoring,
             user.is_monitored))
     summary.sort()
-    return summary
+    return summary[:50]
 
 def handle_json_post(in_json_raw, in_data):
     in_json = json.loads(in_json_raw)
