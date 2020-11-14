@@ -172,8 +172,6 @@ def run_backing_track() -> None:
     global requested_track
     global metronome_on
 
-    backing_track_index = 0
-
     if requested_track == METRONOME:
         metronome_on = True
     elif requested_track in tracks:
@@ -191,6 +189,7 @@ def run_backing_track() -> None:
             backing_track = np.frombuffer(
                 inf.readframes(-1), np.int16).astype(np.float32) / (2**15)
             backing_track *= 0.8 # turn it down a bit
+            backing_track_index = 0
 
     # Backing track is used only once.
     requested_track = None
