@@ -400,7 +400,7 @@ function set_controls() {
   if (app_state == APP_STOPPED) {
     start_button.textContent = "Start";
   } else if (app_state != APP_INITIALIZING) {
-    start_button.textContent = "Stop";
+    start_button.textContent = "Disconnect";
   }
 
   setVisibleIn(window.pleaseBeKind, allStatesExcept(ACTIVE_STATES));
