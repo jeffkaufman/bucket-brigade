@@ -17,11 +17,14 @@ enc = opuslib.Encoder(
 zeros = np.zeros(PACKET_SAMPLES, dtype=np.float32).reshape(
   [-1, server_wrapper.OPUS_FRAME_SAMPLES])
 
-def stress(n_rounds, worker_name, url):
-  n_rounds = int(n_rounds)    
-  
-  # avoid having everyone at the same offset
-  time.sleep(random.random() * PACKET_INTERVAL)
+def stress(n_rounds, worker_name, url, should_sleep):
+  n_rounds = int(n_rounds)
+  should_sleep = {"sleep": True,
+                  "nosleep": False}[should_sleep]
+
+  if should_sleep:
+    # avoid having everyone at the same offset
+    time.sleep(random.random() * PACKET_INTERVAL)
 
   data = server_wrapper.pack_multi([
     np.frombuffer(
@@ -52,13 +55,14 @@ def stress(n_rounds, worker_name, url):
     end = time.time()
 
     duration = end-start
-    timing.append(int(duration*1000))
+    timing.append(duration*1000)
 
     full_duration = end - full_start
     expected_full_elapsed = i * PACKET_INTERVAL
 
-    if full_duration < expected_full_elapsed:
-      time.sleep(expected_full_elapsed - full_duration)
+    if should_sleep:
+      if full_duration < expected_full_elapsed:
+        time.sleep(expected_full_elapsed - full_duration)
 
   print(json.dumps(timing))
     
