@@ -17,8 +17,9 @@ enc = opuslib.Encoder(
 zeros = np.zeros(PACKET_SAMPLES, dtype=np.float32).reshape(
   [-1, server_wrapper.OPUS_FRAME_SAMPLES])
 
-def stress(n_rounds, worker_name, url, should_sleep):
+def stress(n_rounds, users_per_client, worker_name, url, should_sleep):
   n_rounds = int(n_rounds)
+  users_per_client = int(users_per_client)
   should_sleep = {"sleep": True,
                   "nosleep": False}[should_sleep]
 
@@ -42,8 +43,8 @@ def stress(n_rounds, worker_name, url, should_sleep):
 
     ts = full_start + PACKET_SAMPLES * i
     resp = s.post(
-      url='%s?read_clock=%s&userid=%s&username=%s'
-        % (url, ts, userid, worker_name),
+      url='%s?read_clock=%s&userid=%s%s&username=%s'
+        % (url, ts, userid, i%users_per_client, worker_name),
       data=data,
       headers={
           'Content-Type': 'application/octet-stream',
