@@ -136,7 +136,7 @@ def do_OPTIONS(environ, start_response) -> None:
     start_response(
         '200 OK',
         [("Access-Control-Allow-Origin", "*"),
-         ("Access-Control-Allow-Headers", "Content-Type")])
+         ("Access-Control-Allow-Headers", "Content-Type, X-Event-Data")])
     return b'',
 
 def do_GET(environ, start_response) -> None:
@@ -164,7 +164,7 @@ def do_GET(environ, start_response) -> None:
     start_response(
         '200 OK',
         [("Access-Control-Allow-Origin", "*"),
-         ("Access-Control-Allow-Headers", "Content-Type"),
+         ("Access-Control-Allow-Headers", "Content-Type, X-Event-Data"),
          ("Access-Control-Expose-Headers", "X-Audio-Metadata"),
          ("X-Audio-Metadata", json.dumps({
              "server_clock": server_clock,
@@ -223,7 +223,7 @@ def do_POST(environ, start_response) -> None:
     start_response(
         '200 OK',
         [("Access-Control-Allow-Origin", "*"),
-         ("Access-Control-Allow-Headers", "Content-Type"),
+         ("Access-Control-Allow-Headers", "Content-Type, X-Event-Data"),
          ("Access-Control-Expose-Headers", "X-Audio-Metadata"),
          ("X-Audio-Metadata", x_audio_metadata),
          ("Content-Type", "application/octet-stream")])
