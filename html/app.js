@@ -16,6 +16,7 @@ const APP_STOPPED = "stopped";
 const APP_STARTING = "starting";
 const APP_RUNNING = "running";
 const APP_CALIBRATING_LATENCY = "calibrating_latency";
+const APP_CALIBRATING_LATENCY_CONTINUE = "calibrating_latency_continue";
 const APP_CALIBRATING_VOLUME = "calibrating_volume";
 const APP_STOPPING = "stopping";
 const APP_RESTARTING = "restarting";
@@ -262,6 +263,23 @@ window.bprUpdate.addEventListener("click", () => {
   send_metadata.bpr = newBpr;
 });
 
+window.latencyCalibrationRetry.addEventListener("click", () => {
+  set_estimate_latency_mode(true);
+  switch_app_state(APP_CALIBRATING_LATENCY);
+});
+
+window.latencyCalibrationGiveUp.addEventListener("click", () => {
+  send_ignore_input(true);
+
+  // Make something up.
+  window.estLatency.innerText = "150ms";
+  send_local_latency();
+
+  // No reason to continue with volume calibration, go right to running.
+  switch_app_state(APP_RUNNING);
+  server_connection.start();
+});
+
 function persist(textFieldId) {
   const textField = document.getElementById(textFieldId);
   const prevVal = localStorage.getItem(textFieldId);
@@ -427,11 +445,15 @@ function set_controls() {
   setVisibleIn(window.speakerToggleButton, [APP_RUNNING, APP_RESTARTING], "inline-block");
 
   setVisibleIn(window.initialInstructions, [
-    APP_INITIALIZING, APP_STOPPED, APP_CALIBRATING_LATENCY, APP_STOPPING]);
+    APP_INITIALIZING, APP_STOPPED, APP_CALIBRATING_LATENCY,
+    APP_CALIBRATING_LATENCY_CONTINUE, APP_STOPPING]);
   setVisibleIn(window.latencyCalibrationInstructions, [
-    APP_INITIALIZING, APP_STOPPED, APP_CALIBRATING_LATENCY, APP_STOPPING]);
+    APP_INITIALIZING, APP_STOPPED, APP_CALIBRATING_LATENCY,
+    APP_CALIBRATING_LATENCY_CONTINUE, APP_STOPPING]);
 
-  setVisibleIn(window.calibration, [APP_CALIBRATING_LATENCY]);
+  setVisibleIn(window.calibration, [APP_CALIBRATING_LATENCY,
+                                    APP_CALIBRATING_LATENCY_CONTINUE]);
+  setVisibleIn(window.latencyCalibrationFailed, [APP_CALIBRATING_LATENCY_CONTINUE]);
 
   setVisibleIn(window.volumeCalibration, [APP_CALIBRATING_VOLUME]);
   setEnabledIn(window.startVolumeCalibration, [APP_CALIBRATING_VOLUME]);
@@ -441,7 +463,7 @@ function set_controls() {
   setVisibleIn(window.noAudioInputInstructions, []);
 
   window.estSamples.innerText = "...";
-  window.est40to60.innerText = "...";
+  window.est25to75.innerText = "...";
   window.estLatency.innerText = "...";
 
   window.backingTrack.display = "none";
@@ -519,11 +541,12 @@ var app_initialized = false;
 
 const ALL_STATES = [
   APP_TUTORIAL, APP_INITIALIZING, APP_STOPPED, APP_STARTING, APP_RUNNING,
-  APP_CALIBRATING_LATENCY, APP_CALIBRATING_VOLUME, APP_STOPPING,
-  APP_RESTARTING];
+  APP_CALIBRATING_LATENCY, APP_CALIBRATING_LATENCY_CONTINUE,
+  APP_CALIBRATING_VOLUME, APP_STOPPING, APP_RESTARTING];
 
 const ACTIVE_STATES = [
-  APP_RUNNING, APP_CALIBRATING_LATENCY, APP_CALIBRATING_VOLUME, APP_RESTARTING
+  APP_RUNNING, APP_CALIBRATING_LATENCY, APP_CALIBRATING_LATENCY_CONTINUE,
+  APP_CALIBRATING_VOLUME, APP_RESTARTING
 ];
 
 function switch_app_state(newstate) {
@@ -559,6 +582,14 @@ var sample_batch_size;
 function set_estimate_latency_mode(mode) {
   playerNode.port.postMessage({
     "type": "latency_estimation_mode",
+    "enabled": mode
+  });
+}
+
+function send_ignore_input(mode) {
+  window.takeLead.disabled = mode;
+  playerNode.port.postMessage({
+    "type": "ignore_input",
     "enabled": mode
   });
 }
@@ -996,6 +1027,7 @@ async function start() {
 
   if (!disable_latency_measurement_checkbox.checked) {
     set_estimate_latency_mode(true);
+    send_ignore_input(false);
     switch_app_state(APP_CALIBRATING_LATENCY);
   } else {
     switch_app_state(APP_RUNNING);
@@ -1196,6 +1228,7 @@ async function handle_message(event) {
   lib.log(LOG_VERYSPAM, "onmessage in main thread received ", msg);
   if (app_state != APP_RUNNING &&
       app_state != APP_CALIBRATING_LATENCY &&
+      app_state != APP_CALIBRATING_LATENCY_CONTINUE &&
       app_state != APP_CALIBRATING_VOLUME) {
     lib.log(LOG_WARNING, "Ending message handler early because not running or calibrating");
     return;
@@ -1218,21 +1251,23 @@ async function handle_message(event) {
     window.noAudioInputInstructions.style.display = "none";
 
     if (msg.p50 !== undefined) {
-      const latency_range = msg.p60 - msg.p40;
-      window.est40to60.innerText = Math.round(latency_range) + "ms";
+      const latency_range = msg.p75 - msg.p25;
+      window.est25to75.innerText = Math.round(latency_range) + "ms";
       window.estLatency.innerText = Math.round(msg.p50) + "ms";
       window.msClientLatency.value = Math.round(msg.p50) + "ms";
       window.msWebAudioJank.value = Math.round(msg.jank) + "ms";
       window.msTrueLatency.value = Math.round(msg.p50 - msg.jank) + "ms";
 
-      if (latency_range < msg.samples / 2) {
-        // Stop trying to estimate latency once were close enough. The
-        // more claps the person has done, the more we lower our
-        // standards for close enough, figuring that they're having
-        // trouble clapping on the beat.
-        send_local_latency();
+      if (msg.samples >= 7) {
         set_estimate_latency_mode(false);
-        switch_app_state(APP_CALIBRATING_VOLUME);
+
+        if (latency_range <= 2) {
+          // If we have measured latency within 2ms, that's good.
+          send_local_latency();
+          switch_app_state(APP_CALIBRATING_VOLUME);
+        } else {
+          switch_app_state(APP_CALIBRATING_LATENCY_CONTINUE);
+        }
       }
     }
     return;
@@ -1628,6 +1663,7 @@ async function restart() {
 async function stop() {
   if (app_state != APP_RUNNING &&
       app_state != APP_CALIBRATING_LATENCY &&
+      app_state != APP_CALIBRATING_LATENCY_CONTINUE &&
       app_state != APP_CALIBRATING_VOLUME) {
     lib.log(LOG_WARNING, "Trying to stop, but current state is not running or calibrating? Stopping anyway.");
   }

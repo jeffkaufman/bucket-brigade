@@ -223,6 +223,7 @@ class LatencyCalibrator {
     this.min_peak_interval_ms = 200;
     this.window_size_samples = 20;
     this.click_interval_samples = 3000;
+    this.min_n_latencies = 3;
 
     this.latencies = [];
   }
@@ -244,20 +245,17 @@ class LatencyCalibrator {
       }
 
       this.latencies.push(latency_ms);
-      if (this.latencies.length > 5 /* XXX hardcoded */) {
-        this.latencies.shift();
-      }
       const msg = {
         "type": "latency_estimate",
         "samples": this.latencies.length,
       }
 
-      if (this.latencies.length >= /* XXX */ 5) {
+      if (this.latencies.length >= this.min_n_latencies) {
         this.sorted_latencies = this.latencies.slice();
         this.sorted_latencies.sort((a, b) => a-b);
-        msg.p40 = this.sorted_latencies[Math.round(this.latencies.length * 0.4)];
+        msg.p25 = this.sorted_latencies[Math.round(this.latencies.length * 0.25)];
         msg.p50 = this.sorted_latencies[Math.round(this.latencies.length * 0.5)];
-        msg.p60 = this.sorted_latencies[Math.round(this.latencies.length * 0.6)];
+        msg.p75 = this.sorted_latencies[Math.round(this.latencies.length * 0.75)];
       }
       return msg;
     }
@@ -457,6 +455,9 @@ class Player extends AudioWorkletProcessor {
         this.latency_calibrator = null;
       }
       return;
+    } else if (msg.type == "ignore_input") {
+      this.ignore_input = msg.enabled;
+      return;
     } else if (msg.type == "volume_estimation_mode") {
       this.volume_measurement_mode = msg.enabled;
       if (this.volume_measurement_mode) {
@@ -652,7 +653,7 @@ class Player extends AudioWorkletProcessor {
         }
         output = new Float32Array(output.length);
       } else {
-        if (this.mic_pause_mode) {
+        if (this.mic_pause_mode || this.ignore_input) {
           // Mute the microphone by replacing the input with zeros.
           input = new Float32Array(input.length);
         }
