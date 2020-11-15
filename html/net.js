@@ -324,13 +324,13 @@ export async function samples_to_server(outdata, target_url, send_metadata) {
     if (monitoredUserId) {
       params.set('monitor', monitoredUserId);
     }
-    if (bpm) {
+    if (bpm != null) {
       params.set('bpm', bpm);
     }
-    if (repeats) {
+    if (repeats != null) {
       params.set('repeats', repeats);
     }
-    if (bpr) {
+    if (bpr != null) {
       params.set('bpr', bpr);
     }
 
