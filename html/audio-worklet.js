@@ -598,13 +598,11 @@ class Player extends AudioWorkletProcessor {
           console.warn("BAD SAMPLE RATE, WEB AUDIO BUG? Should be", sampleRate, "but seeing", eff_rate, ". Will try restarting momentarily if this persists.");
         }
         this.bad_sample_rate += 1;
-        if (this.bad_sample_rate > 1000) {
+        if (this.bad_sample_rate > 2000) {
           console.warn("SAMPLE RATE STILL BAD. Should be", sampleRate, "but seeing", eff_rate, ". Restarting app.");
           // Ask the main app to reload the audio input device
           this.killed = true;
-          this.port.postMessage({
-            type: "bluetooth_bug_restart"
-          });
+          throw new Error("Your computer's audio system is lagging a lot, which is breaking the app. Please disconnect any bluetooth headphones or speakers, close unnecessary apps / reduce load on your computer, then refresh the page and try again.");
         }
       }
     }

@@ -425,13 +425,6 @@ function set_controls() {
   setVisibleIn(window.micToggleButton, [APP_RUNNING, APP_RESTARTING], "inline-block");
   setVisibleIn(window.speakerToggleButton, [APP_RUNNING, APP_RESTARTING], "inline-block");
 
-  setVisibleIn(window.initialInstructions, [
-    APP_INITIALIZING, APP_STOPPED, APP_CALIBRATING_LATENCY,
-    APP_CALIBRATING_LATENCY_CONTINUE, APP_STOPPING]);
-  setVisibleIn(window.latencyCalibrationInstructions, [
-    APP_INITIALIZING, APP_STOPPED, APP_CALIBRATING_LATENCY,
-    APP_CALIBRATING_LATENCY_CONTINUE, APP_STOPPING]);
-
   setVisibleIn(window.calibration, [APP_CALIBRATING_LATENCY,
                                     APP_CALIBRATING_LATENCY_CONTINUE]);
   setVisibleIn(window.latencyCalibrationFailed, [APP_CALIBRATING_LATENCY_CONTINUE]);
@@ -1258,22 +1251,6 @@ async function handle_message(event) {
     set_estimate_volume_mode(false);
     switch_app_state(APP_RUNNING);
     await server_connection.start();
-    return;
-  } else if (msg.type == "bluetooth_bug_restart") {
-    // God help us, the following is a workaround for an issue we see on gwillen's machine:
-    // * Google Chrome Version 86.0.4240.22 (Official Build) beta (x86_64)
-    // * macOS 10.14.6 (18G103)
-    // * MacBook Pro (15-inch, 2017)
-    // * Bose QC35 Bluetooth headset
-    //
-    // After opening the mic, the headset takes a few seconds to switch codecs/profiles/something.
-    // When it switches, it seems to change sample rate in a way that Chrome does not detect, causing
-    // the entire AudioContext to start sampling at the wrong rate. We can work around this by
-    // restarting the context and reopening the device once we see the wrong rate (which means that
-    // the profile switch has happened.)
-    window.bluetoothWarning.style.display = "block";
-    await stop();
-    await start();
     return;
   } else if (msg.type == "alarm") {
     if ((msg.time in alarms) && ! (msg.time in alarms_fired)) {
