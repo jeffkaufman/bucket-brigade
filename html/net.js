@@ -1,6 +1,3 @@
-import * as lib from './lib.js';
-import {LOG_VERYSPAM, LOG_SPAM, LOG_DEBUG, LOG_INFO, LOG_WARNING, LOG_ERROR} from './lib.js';
-import {LOG_LEVELS} from './lib.js';
 import {check} from './lib.js';
 import {AudioChunk, PlaceholderChunk, CompressedAudioChunk, ServerClockReference, ClockInterval} from './audiochunk.js'
 
@@ -43,7 +40,7 @@ export class ServerConnection extends ServerConnectionBase {
 
   async start() {
     if (this.running) {
-      lib.log(LOG_WARNING, "ServerConnection already started, ignoring");
+      console.warn("ServerConnection already started, ignoring");
       return;
     }
 
@@ -70,7 +67,7 @@ export class ServerConnection extends ServerConnectionBase {
 
   async send(chunk) {
     if (!this.running) {
-      lib.log(LOG_WARNING, "Not sending to server because not running");
+      console.warn("Not sending to server because not running");
       return {
         metadata: {},
         epoch: this.app_epoch,
@@ -110,7 +107,7 @@ export class ServerConnection extends ServerConnectionBase {
       return null;
     }
     if (!this.running) {
-      lib.log(LOG_WARNING, "ServerConnection stopped while waiting for response from server");
+      console.warn("ServerConnection stopped while waiting for response from server");
       return {
         metadata: {},
         epoch: this.app_epoch,
@@ -156,7 +153,7 @@ export class FakeServerConnection extends ServerConnectionBase {
 
   async start() {
     if (this.running) {
-      lib.log(LOG_WARNING, "FakeServerConnection already started");
+      console.warn("FakeServerConnection already started");
       return false;
     }
 
@@ -173,7 +170,7 @@ export class FakeServerConnection extends ServerConnectionBase {
 
   async send(chunk) {
     if (!this.running) {
-      lib.log(LOG_WARNING, "Not sending to fake server because not running");
+      console.warn("Not sending to fake server because not running");
       return {
         metadata: {},
         epoch: this.app_epoch,
@@ -251,10 +248,10 @@ export async function query_server_clock(target_url) {
   */
   var server_latency_ms = (Date.now() - request_time_ms) / 2.0;  // Wrong, see above
   var metadata = JSON.parse(fetch_result.headers.get("X-Audio-Metadata"));
-  lib.log(LOG_DEBUG, "query_server_clock got metadata:", metadata);
+  console.debug("query_server_clock got metadata:", metadata);
   var server_sample_rate = parseInt(metadata["server_sample_rate"], 10);
   var server_clock = Math.round(metadata["server_clock"] + server_latency_ms * server_sample_rate / 1000.0);
-  lib.log(LOG_INFO, "Server clock is estimated to be:", server_clock, " (", metadata["server_clock"], "+", server_latency_ms * server_sample_rate / 1000.0);
+  console.info("Server clock is estimated to be:", server_clock, " (", metadata["server_clock"], "+", server_latency_ms * server_sample_rate / 1000.0);
   return { server_clock, server_sample_rate };
 }
 
@@ -293,7 +290,7 @@ export async function samples_to_server(outdata, target_url, send_metadata) {
     }
     if (loopback_mode == "server") {
       params.set('loopback', true);
-      lib.log(LOG_SPAM, "looping back samples at server");
+      console.debug("SPAM", "looping back samples at server");
     }
     params.set('username', username);
     params.set('userid', userid);
@@ -338,17 +335,17 @@ export async function samples_to_server(outdata, target_url, send_metadata) {
 
     // Arbitrary cap; browser cap is 8(?) after which they queue
     if (xhrs_inflight >= 4) {
-      lib.log(LOG_WARNING, "NOT SENDING XHR w/ ID:", xhr.debug_id, " due to limit -- already in flight:", xhrs_inflight);
+      console.warn("NOT SENDING XHR w/ ID:", xhr.debug_id, " due to limit -- already in flight:", xhrs_inflight);
       resolve(null);
     }
 
-    lib.log(LOG_SPAM, "Sending XHR w/ ID:", xhr.debug_id, "already in flight:", xhrs_inflight++, "; data size:", outdata.length);
+    console.debug("SPAM", "Sending XHR w/ ID:", xhr.debug_id, "already in flight:", xhrs_inflight++, "; data size:", outdata.length);
     xhr.open("POST", target_url, true);
     xhr.setRequestHeader("Content-Type", "application/octet-stream");
     xhr.setRequestHeader("X-Event-Data", JSON.stringify(event_data));
     xhr.responseType = "arraybuffer";
     xhr.send(outdata);
-    lib.log(LOG_SPAM, "... XHR sent.");
+    console.debug("SPAM", "... XHR sent.");
   });
 }
 
@@ -356,17 +353,17 @@ export async function samples_to_server(outdata, target_url, send_metadata) {
 function handle_xhr_result(xhr, resolve) {
   /* XXX: this state is no longer shared with us easily
   if (!running) {
-    lib.log(LOG_WARNING, "Got XHR onreadystatechange w/ID:", xhr.debug_id, "for xhr:", xhr, " when done running; still in flight:", --xhrs_inflight);
+    console.warn("Got XHR onreadystatechange w/ID:", xhr.debug_id, "for xhr:", xhr, " when done running; still in flight:", --xhrs_inflight);
     return reject();
   }
   */
 
   if (xhr.status == 200) {
     var metadata = JSON.parse(xhr.getResponseHeader("X-Audio-Metadata"));
-    lib.log(LOG_SPAM, "metadata:", metadata);
-    lib.log(LOG_SPAM, "Got XHR response w/ ID:", xhr.debug_id, "result:", xhr.response, " -- still in flight:", --xhrs_inflight);
+    console.debug("SPAM", "metadata:", metadata);
+    console.debug("SPAM", "Got XHR response w/ ID:", xhr.debug_id, "result:", xhr.response, " -- still in flight:", --xhrs_inflight);
     if (metadata["kill_client"]) {
-      lib.log(LOG_ERROR, "Received kill from server");
+      console.error("Received kill from server");
       resolve(null);
     }
 
@@ -375,7 +372,7 @@ function handle_xhr_result(xhr, resolve) {
       data: xhr.response
     });
   } else {
-    lib.log(LOG_ERROR, "XHR failed w/ ID:", xhr.debug_id, "stopping:", xhr, " -- still in flight:", --xhrs_inflight);
+    console.error("XHR failed w/ ID:", xhr.debug_id, "stopping:", xhr, " -- still in flight:", --xhrs_inflight);
     resolve(null);
   }
 }

@@ -1,5 +1,4 @@
 import * as lib from './lib.js';
-import {LOG_VERYSPAM, LOG_SPAM, LOG_DEBUG, LOG_INFO, LOG_WARNING, LOG_ERROR} from './lib.js';
 import {check} from './lib.js';
 
 const CLOCK_SERVER = Symbol("CLOCK_SERVER");

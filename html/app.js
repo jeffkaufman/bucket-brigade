@@ -1,6 +1,3 @@
-import * as lib from './lib.js';
-import {LOG_VERYSPAM, LOG_SPAM, LOG_DEBUG, LOG_INFO, LOG_WARNING, LOG_ERROR} from './lib.js';
-import {LOG_LEVELS} from './lib.js';
 import {check} from './lib.js';
 
 import {ServerConnection, FakeServerConnection} from './net.js';
@@ -40,22 +37,6 @@ addEventListener('unhandledrejection', (event) => {
   throw event.reason;
 });
 
-const session_id = Math.floor(Math.random() * 2**32).toString(16);
-lib.set_logging_session_id(session_id);
-lib.set_logging_context_id("main");
-
-var log_level_select = document.getElementById('logLevel');
-
-LOG_LEVELS.forEach((level) => {
-  var el = document.createElement("option");
-  el.value = level[0];
-  el.text = level[1];
-  if (lib.log_level == level[0]) {
-    el.selected = true;
-  }
-  log_level_select.appendChild(el);
-});
-
 // We fall back exponentially until we find a good size, but we need a
 // place to start that should be reasonably fair.
 const INITIAL_MS_PER_BATCH = 600; // XXX 180;  // XXX: probably make sure this is a multiple of our opus frame size (60ms), but it should in theory work without
@@ -68,7 +49,7 @@ const OPUS_FRAME_MS = 60;
 
 let send_metadata = {};
 
-lib.log(LOG_INFO, "Starting up");
+console.info("Starting up");
 
 const myUserid = Math.round(Math.random()*100000000000)
 
@@ -106,7 +87,7 @@ function update_calendar() {
 
       if ( ! data.items ) {
         // TODO: Save the error code?
-        lib.log(LOG_WARNING, "No data from Google Calendar");
+        console.warn("No data from Google Calendar");
         window.currentEvent.innerText = "(Unable to communicate with Google Calendar.)";
         return;
       }
@@ -550,7 +531,7 @@ const ACTIVE_STATES = [
 ];
 
 function switch_app_state(newstate) {
-  lib.log(LOG_INFO, "Changing app state from", app_state, "to", newstate, ".");
+  console.info("Changing app state from", app_state, "to", newstate, ".");
   app_state = newstate;
   set_controls();
 }
@@ -657,7 +638,7 @@ async function start_stop() {
   } else if (app_state == APP_STOPPED) {
     await start();
   } else {
-    lib.log(LOG_WARNING, "Pressed start/stop button while not stopped or running; stopping by default.");
+    console.warn("Pressed start/stop button while not stopped or running; stopping by default.");
     await stop();
   }
 }
@@ -691,7 +672,7 @@ class AudioEncoder {
     this.next_request_id += 1;
     return new Promise(function (resolve, _) {
       _this.request_queue.push([request_id, resolve]);
-      lib.log(LOG_VERYSPAM, "Posting to port", _this.worker, "msg", msg, "transfer", transfer);
+      // console.debug("VERYSPAM", "Posting to port", _this.worker, "msg", msg, "transfer", transfer);
       _this.worker.postMessage({ request_id, ...msg }, transfer);
     });
   }
@@ -761,9 +742,9 @@ class AudioEncoder {
 
     // XXX: we'll see about this? I believe as long as the resampler is buffering correctly, this should never exceed 1, and should not be subject to accumulated roundoff error.
     // NOTE: We have to use chunk.end here, and not this.client_clock, which may have moved on while we were waiting for the decoder.
-    lib.log(LOG_SPAM, "net sample rate clock error:", chunk.end - client_clock_hypothetical);
+    console.debug("SPAM", "net sample rate clock error:", chunk.end - client_clock_hypothetical);
     if (Math.abs(chunk.end - client_clock_hypothetical) > 5 /* arbitrary */) {
-      lib.log(LOG_WARNING, "Sample rate clock slippage excessive in encoder; why is this happening?", chunk.end, client_clock_hypothetical, this.server_clock, buffered_samples, server_clock_adjusted, this.server_clock_reference.sample_rate, this.client_clock_reference.sample_rate);
+      console.warn("Sample rate clock slippage excessive in encoder; why is this happening?", chunk.end, client_clock_hypothetical, this.server_clock, buffered_samples, server_clock_adjusted, this.server_clock_reference.sample_rate, this.client_clock_reference.sample_rate);
       // TODO: Is this error always spurious? What should we do here, or how should we prevent it?
       // throw new Error("sample rate clock slippage excessive; what happened?");
     }
@@ -832,7 +813,7 @@ class AudioDecoder {
     this.next_request_id += 1;
     return new Promise(function (resolve, _) {
       _this.request_queue.push([request_id, resolve]);
-      lib.log(LOG_VERYSPAM, "Posting to port", _this.worker, "msg", msg, "transfer", transfer);
+      // console.debug("VERYSPAM", "Posting to port", _this.worker, "msg", msg, "transfer", transfer);
       _this.worker.postMessage({ request_id, ...msg }, transfer);
     });
   }
@@ -892,7 +873,7 @@ class AudioDecoder {
     var packets = unpack_multi(indata);
 
     // Make all the calls FIRST, and THEN gather the results. This will prevent us from interleaving with other calls to decode_chunk. (Assuming certain things about in-order dispatch and delivery of postMessage, which I hope are true.)
-    lib.log(LOG_VERYSPAM, "Starting to decode sample packets", packets);
+    // console.debug("VERYSPAM", "Starting to decode sample packets", packets);
     var decoding_promises = [];
     for (var i = 0; i < packets.length; ++i) {
       decoding_promises.push(decoder.decode({
@@ -900,11 +881,11 @@ class AudioDecoder {
       }));
     }
 
-    lib.log(LOG_VERYSPAM, "Forcing decoding promises", decoding_promises);
+    // console.debug("VERYSPAM", "Forcing decoding promises", decoding_promises);
     var decoded_packets = [];
     for (var i = 0; i < decoding_promises.length; ++i) {
       var p_samples = await decoding_promises[i];
-      lib.log(LOG_VERYSPAM, "Decoded samples:", p_samples);
+      // console.debug("VERYSPAM", "Decoded samples:", p_samples);
       decoded_packets.push(new Float32Array(p_samples.samples));
     }
 
@@ -913,7 +894,7 @@ class AudioDecoder {
     // XXX: This is janky, in reality our chunk length divides evenly so it should be 0, if it doesn't I'm not sure what we should expect here?
     check(Math.abs(decoded_length_expected - play_samples.length) < 5, "Chunk decoded to wrong length!", chunk, play_samples);
     this.client_clock += play_samples.length;
-    lib.log(LOG_SPAM, "Decoded all samples from server:", decoded_packets);
+    console.debug("SPAM", "Decoded all samples from server:", decoded_packets);
 
     var result_interval = new ClockInterval({
       reference: this.client_clock_reference,
@@ -950,7 +931,7 @@ async function start() {
   var AudioContext = window.AudioContext || window.webkitAudioContext;
   audioCtx = new AudioContext({latencyHint: 'playback'});
   sample_rate_text.value = audioCtx.sampleRate;
-  lib.log(LOG_DEBUG, "Audio Context:", audioCtx);
+  console.debug("Audio Context:", audioCtx);
 
   // XXX: this all gets kind of gross with 44100, nothing divides nicely.
   sample_batch_size = ms_to_batch_size(INITIAL_MS_PER_BATCH);
@@ -962,11 +943,6 @@ async function start() {
   //XXX: the AudioWorkletProcessor just seems to get leaked here, every time we stop and restart. I'm not sure if there's a way to prevent that without reloading the page... (or avoiding reallocating it when we stop and start.)
   await audioCtx.audioWorklet.addModule('audio-worklet.js');
   playerNode = new AudioWorkletNode(audioCtx, 'player');
-  playerNode.port.postMessage({
-    type: "log_params",
-    session_id: session_id,
-    log_level: lib.log_level
-  });
 
   // Avoid starting more than one copy of the encoder/decoder workers.
   if (!encoder) {
@@ -976,7 +952,7 @@ async function start() {
         num_of_channels: 1,
         frame_duration: OPUS_FRAME_MS,
     };
-    lib.log(LOG_DEBUG, "Setting up opus encoder. Encoder params:", enc_cfg);
+    console.debug("Setting up opus encoder. Encoder params:", enc_cfg);
     var { status, resampling } = await encoder.setup(enc_cfg);
     if (status != 0) {
       throw new Error("Encoder setup failed");
@@ -1011,7 +987,7 @@ async function start() {
         num_of_channels: 1,
         // Frame duration will be derived from the encoded data.
     };
-    lib.log(LOG_DEBUG, "Setting up opus decder. Decoder params:", dec_cfg);
+    console.debug("Setting up opus decder. Decoder params:", dec_cfg);
     await decoder.setup(dec_cfg);
   }
   decoder.reset();
@@ -1040,9 +1016,9 @@ async function start() {
 
 // Should really be named "restart everything", which is what it does.
 async function reload_settings(startup) {
-  lib.log(LOG_INFO, "Resetting the world! Old epoch was:", epoch);
+  console.info("Resetting the world! Old epoch was:", epoch);
   epoch +=1;
-  lib.log(LOG_INFO, "New epoch is:", epoch);
+  console.info("New epoch is:", epoch);
 
   // XXX: Not guaranteed to be immediate; we should wait for it to confirm.
   playerNode.port.postMessage({
@@ -1054,7 +1030,7 @@ async function reload_settings(startup) {
     server_connection = null;
   }
 
-  lib.log(LOG_INFO, "Stopped audio worklet and server connection.");
+  console.info("Stopped audio worklet and server connection.");
 
   mic_buf = [];
 
@@ -1075,12 +1051,12 @@ async function reload_settings(startup) {
     })
   }
 
-  lib.log(LOG_INFO, "Created new server connection, resetting encoder and decoder.");
+  console.info("Created new server connection, resetting encoder and decoder.");
 
   await encoder.reset();
   await decoder.reset();
 
-  lib.log(LOG_INFO, "Reset encoder and decoder, starting audio worket again.");
+  console.info("Reset encoder and decoder, starting audio worket again.");
 
   // Send this before we set audio params, which declares us to be ready for audio
   click_volume_change();
@@ -1131,7 +1107,7 @@ function samples_to_worklet(chunk) {
     chunk,
   };
 
-  lib.log(LOG_SPAM, "Posting to worklet:", message);
+  console.debug("SPAM", "Posting to worklet:", message);
   playerNode.port.postMessage(message);  // XXX huh, we aren't using transfer, and plausibly should be
 }
 
@@ -1141,7 +1117,7 @@ function samples_to_worklet(chunk) {
 //   - Packet length (bytes): 2 bytes, big endian
 //   - Packet data
 function pack_multi(packets) {
-  lib.log(LOG_SPAM, "Encoding packet for transmission to server! input:", packets);
+  console.debug("SPAM", "Encoding packet for transmission to server! input:", packets);
   var encoded_length = 1; // space for packet count
   packets.forEach((p) => {
     encoded_length += 2; // space for packet length
@@ -1162,12 +1138,12 @@ function pack_multi(packets) {
     outdata.set(p, outdata_idx + 2);
     outdata_idx += len + 2;
   });
-  lib.log(LOG_SPAM, "Encoded packet for transmission to server! Final outdata_idx:", outdata_idx, ", encoded_length:", encoded_length, ", num. subpackets:", packets.length, ", output:", outdata);
+  console.debug("SPAM", "Encoded packet for transmission to server! Final outdata_idx:", outdata_idx, ", encoded_length:", encoded_length, ", num. subpackets:", packets.length, ", output:", outdata);
   return outdata;
 }
 
 function unpack_multi(data) {
-  lib.log(LOG_SPAM, "Unpacking multi-packet from server, data:", data);
+  console.debug("SPAM", "Unpacking multi-packet from server, data:", data);
   if (data.constructor !== Uint8Array) {
     throw new Error("must be Uint8Array");
   }
@@ -1176,14 +1152,14 @@ function unpack_multi(data) {
   var result = [];
   for (var i = 0; i < packet_count; ++i) {
     var len = (data[data_idx] << 8) + data[data_idx + 1];
-    lib.log(LOG_VERYSPAM, "Unpacking subpacket", i, "at offset", data_idx, "with len", len);
+    // console.debug("VERYSPAM", "Unpacking subpacket", i, "at offset", data_idx, "with len", len);
     var packet = new Uint8Array(len);
     data_idx += 2;
     packet.set(data.slice(data_idx, data_idx + len));
     data_idx += len;
     result.push(packet);
   }
-  lib.log(LOG_SPAM, "Unpacked multi-packet from server! Final data_idx:", data_idx, ", total length:", data.length, ", num. subpackets:", packet_count, "final output:", result);
+  console.debug("SPAM", "Unpacked multi-packet from server! Final data_idx:", data_idx, ", total length:", data.length, ", num. subpackets:", packet_count, "final output:", result);
   return result;
 }
 
@@ -1225,16 +1201,16 @@ async function handle_message(event) {
   if (msg.type === "exception") {
     throw msg.exception;
   }
-  lib.log(LOG_VERYSPAM, "onmessage in main thread received ", msg);
+  // console.debug("VERYSPAM", "onmessage in main thread received ", msg);
   if (app_state != APP_RUNNING &&
       app_state != APP_CALIBRATING_LATENCY &&
       app_state != APP_CALIBRATING_LATENCY_CONTINUE &&
       app_state != APP_CALIBRATING_VOLUME) {
-    lib.log(LOG_WARNING, "Ending message handler early because not running or calibrating");
+    console.warn("Ending message handler early because not running or calibrating");
     return;
   }
   if (msg.epoch !== undefined && msg.epoch != epoch) {
-    lib.log(LOG_WARNING, "Ignoring message from old epoch");
+    console.warn("Ignoring message from old epoch");
     return;
   }
 
@@ -1301,7 +1277,7 @@ async function handle_message(event) {
     return;
   } else if (msg.type == "alarm") {
     if ((msg.time in alarms) && ! (msg.time in alarms_fired)) {
-      lib.log(LOG_INFO,"calling alarm at "+msg.time)
+      console.info("calling alarm at "+msg.time)
       alarms[msg.time]();
       alarms_fired[msg.time] = true;
     }
@@ -1309,7 +1285,7 @@ async function handle_message(event) {
   } else if (msg.type == "cur_clock") {
     for (let cb of cur_clock_cbs) {
       cb(msg.clock);
-      lib.log(LOG_WARNING, "got clock "+msg.clock+" and event_data is now "+ send_metadata.event_data);
+      console.warn("got clock "+msg.clock+" and event_data is now "+ send_metadata.event_data);
     }
     cur_clock_cbs = [];
     return
@@ -1320,7 +1296,7 @@ async function handle_message(event) {
   // If we see this change at any point, that means stop what we're doing.
   var our_epoch = epoch;
 
-  lib.log(LOG_SPAM, "Got heard chunk:", msg);
+  console.debug("SPAM", "Got heard chunk:", msg);
 
   // Tricky metaprogramming bullshit to recover the object-nature of an object sent via postMessage
   var chunk = rebless(msg.chunk);
@@ -1331,19 +1307,19 @@ async function handle_message(event) {
 
   if (mic_buf.length >= sample_batch_size) {
     var chunk = concat_chunks(mic_buf);
-    lib.log(LOG_SPAM, "Encoding chunk to send:", chunk);
+    console.debug("SPAM", "Encoding chunk to send:", chunk);
     mic_buf = [];
 
     var encoded_chunk = await encoder.encode_chunk(chunk);
     if (app_state != APP_RUNNING) {
-      lib.log(LOG_WARNING, "Ending message handler early because not running");
+      console.warn("Ending message handler early because not running");
       return;
     }
     if (our_epoch != epoch) {
-      lib.log(LOG_WARNING, "Ending message handler early due to stale epoch");
+      console.warn("Ending message handler early due to stale epoch");
       return;
     }
-    lib.log(LOG_SPAM, "Got encoded chunk to send:", encoded_chunk);
+    console.debug("SPAM", "Got encoded chunk to send:", encoded_chunk);
 
     send_metadata.username = window.userName.value;
     send_metadata.loopback_mode = loopback_mode;
@@ -1361,30 +1337,30 @@ async function handle_message(event) {
       return;
     }
     if (our_epoch != epoch) {
-      lib.log(LOG_WARNING, "Ending message handler early due to stale epoch");
+      console.warn("Ending message handler early due to stale epoch");
       return;
     }
     if (server_epoch != epoch) {
-      lib.log(LOG_WARNING, "Ignoring message from server with old epoch");
+      console.warn("Ignoring message from server with old epoch");
       return;
     }
     if (app_state != APP_RUNNING) {
-      lib.log(LOG_WARNING, "Ending message handler early because not running");
+      console.warn("Ending message handler early because not running");
       return;
     }
 
-    //lib.log(LOG_SPAM, "Got chunk from server:", response_chunk.interval, response_chunk, metadata);
+    //console.debug("SPAM", "Got chunk from server:", response_chunk.interval, response_chunk, metadata);
     var play_chunk = await decoder.decode_chunk(response_chunk);
     if (our_epoch != epoch) {
-      lib.log(LOG_WARNING, "Ending message handler early due to stale epoch");
+      console.warn("Ending message handler early due to stale epoch");
       return;
     }
     if (app_state != APP_RUNNING) {
-      lib.log(LOG_WARNING, "Ending message handler early because not running");
+      console.warn("Ending message handler early because not running");
       return;
     }
 
-    lib.log(LOG_SPAM, "Decoded chunk from server:", play_chunk.interval, play_chunk);
+    console.debug("SPAM", "Decoded chunk from server:", play_chunk.interval, play_chunk);
     samples_to_worklet(play_chunk);
 
     var queue_size = metadata["queue_size"];
@@ -1402,7 +1378,7 @@ async function handle_message(event) {
 
     for (let ev of metadata["events"]) {
       alarms[ev["clock"]] = () => event_hooks.map(f=>f(ev["evid"]));
-      lib.log(LOG_INFO, ev);
+      console.info(ev);
       playerNode.port.postMessage({
         type: "set_alarm",
         time: ev["clock"]
@@ -1665,7 +1641,7 @@ async function stop() {
       app_state != APP_CALIBRATING_LATENCY &&
       app_state != APP_CALIBRATING_LATENCY_CONTINUE &&
       app_state != APP_CALIBRATING_VOLUME) {
-    lib.log(LOG_WARNING, "Trying to stop, but current state is not running or calibrating? Stopping anyway.");
+    console.warn("Trying to stop, but current state is not running or calibrating? Stopping anyway.");
   }
   switch_app_state(APP_STOPPING);
 
@@ -1677,7 +1653,7 @@ async function stop() {
     toggle_speaker();
   }
 
-  lib.log(LOG_INFO, "Closing audio context and mic stream...");
+  console.info("Closing audio context and mic stream...");
   if (audioCtx) {
     await audioCtx.close();
     audioCtx = undefined;
@@ -1686,7 +1662,7 @@ async function stop() {
     close_stream(micStream);
     micStream = undefined;
   }
-  lib.log(LOG_INFO, "...closed.");
+  console.info("...closed.");
 
   for (let hook of stop_hooks) {
     hook();
@@ -1712,16 +1688,6 @@ window.globalVolumeControl.addEventListener("change", () => {
 
 window.backingVolumeControl.addEventListener("change", () => {
   send_metadata.backingVolume = window.backingVolumeControl.value;
-});
-
-log_level_select.addEventListener("change", () => {
-  lib.set_log_level(parseInt(log_level_select.value));
-  if (playerNode) {
-    playerNode.port.postMessage({
-      type: "log_params",
-      log_level: lib.log_level
-    });
-  }
 });
 
 var coll = document.getElementsByClassName("collapse");

@@ -1,6 +1,4 @@
-
 import * as lib from './lib.js';
-import {LOG_VERYSPAM, LOG_SPAM, LOG_DEBUG, LOG_INFO, LOG_WARNING, LOG_ERROR} from './lib.js';
 import {check} from './lib.js';
 
 import {AudioChunk, PlaceholderChunk, ClientClockReference, ClockInterval} from './audiochunk.js'
@@ -9,13 +7,12 @@ import {AudioChunk, PlaceholderChunk, ClientClockReference, ClockInterval} from 
 //   allows us to flush it from the cache when needed, as a workaround for
 //   https://bugs.chromium.org/p/chromium/issues/detail?id=880784 .
 if (typeof AudioWorkletProcessor === "undefined") {
-  lib.log(LOG_INFO, "Audio worklet module preloading");
+  console.info("Audio worklet module preloading");
   // If we are loaded as a regular module, skip the entire rest of the file
   //   (which will not be valid outside the audio worklet context).
 } else {
 
-lib.set_logging_context_id("audioworklet");
-lib.log(LOG_INFO, "Audio worklet module loading");
+console.info("Audio worklet module loading");
 
 const FRAME_SIZE = 128;  // by Web Audio API spec
 
@@ -25,7 +22,7 @@ class ClockedRingBuffer {
   constructor(len_seconds, leadin_seconds, clock_reference, port) {
     if (leadin_seconds > len_seconds) {
       // Note that even getting close is likely to result in failure.
-      lib.log(LOG_ERROR, "leadin time must not exceed size");
+      console.error("leadin time must not exceed size");
       throw new Error("leadin time must not exceed size");
     }
     // Before the first write, all reads will be zero. After the first write,
@@ -69,7 +66,7 @@ class ClockedRingBuffer {
     var real_offset = ((offset % len) + len) % len;
 
     if (!(real_offset >= 0 && real_offset < len)) {
-      lib.log(LOG_ERROR, "Bad offset:", offset);
+      console.error("Bad offset:", offset);
       throw "Bad offset:" + offset;
     }
     return real_offset;
@@ -80,7 +77,7 @@ class ClockedRingBuffer {
   }
 
   read_into(buf) {
-    //lib.log(LOG_DEBUG, "Reading chunk of size", buf.length);
+    //console.debug("Reading chunk of size", buf.length);
     if (this.read_clock === null) {
       buf.fill(0);
       return new PlaceholderChunk({
@@ -114,14 +111,14 @@ class ClockedRingBuffer {
     }
     if (errors.length > 0) {
       var err_uniq = Array.from(new Set(errors));
-      lib.log(LOG_ERROR, "Errors while reading chunk", interval, err_uniq);
+      console.error("Errors while reading chunk", interval, err_uniq);
       throw new Error("Failed to read audio chunk from buffer in worklet because: " + JSON.stringify(err_uniq));
     }
     return chunk;
   }
 
   read() {
-    lib.log_every(128000, "buf_read", LOG_DEBUG, "leadin_samples:", this.leadin_samples, "read_clock:", this.read_clock, "buffered_data:", this.buffered_data, "space_left:", this.space_left());
+    lib.log_every(128000, "buf_read", "leadin_samples:", this.leadin_samples, "read_clock:", this.read_clock, "buffered_data:", this.buffered_data, "space_left:", this.space_left());
     if (this.read_clock === null) {
       return "no read clock" ;
     }
@@ -134,7 +131,8 @@ class ClockedRingBuffer {
     if (isNaN(val)) {
       // XXX TODO: Seeing an underflow should make us allocate more client slack .... but that's tricky because it will cause a noticeable glitch on the server as our window expands (but at this point it's probably too late to prevent that)
       // * It would also make sense to instead just try to drop some audio and recover. (Although audio trapped in the audiocontext pipeline buffers cannot be dropped without restarting the whole thing.)
-      lib.log_every(12800, "buf_read underflow", LOG_ERROR, "Buffer underflow :-( leadin_samples:", this.leadin_samples, "read_clock:", this.read_clock, "buffered_data:", this.buffered_data, "space_left:", this.space_left());
+      // XXX this used to be an error log
+      lib.log_every(12800, "buf_read underflow", "Buffer underflow :-( leadin_samples:", this.leadin_samples, "read_clock:", this.read_clock, "buffered_data:", this.buffered_data, "space_left:", this.space_left());
       this.read_clock++;
       this.buffered_data--;
       return null;
@@ -143,7 +141,7 @@ class ClockedRingBuffer {
     this.read_clock++;
     this.buffered_data--;
     if (this.read_clock in this.read_callbacks) {
-      lib.log(LOG_INFO, "Firing callback at ", this.read_clock);
+      console.info("Firing callback at ", this.read_clock);
       this.read_callbacks[this.read_clock]();
       delete this.read_callbacks[this.read_clock];
     }
@@ -151,7 +149,7 @@ class ClockedRingBuffer {
   }
 
   write_chunk(chunk) {
-    lib.log(LOG_SPAM, "Writing chunk of size", chunk.length);
+    console.debug("SPAM", "Writing chunk of size", chunk.length);
     chunk.check_clock_reference(this.clock_reference);
     for (var i = 0; i < chunk.data.length; i++) {
       this.write(chunk.data[i], chunk.start + i);
@@ -164,24 +162,25 @@ class ClockedRingBuffer {
     if (this.last_write_clock !== null) {
       if (write_clock != this.last_write_clock + 1) {
         // Ostensibly we allow this, but I think it should never happen and is always a bug...
-        lib.log(LOG_ERROR, "Write clock not incrementing?! Last write clock:", this.last_write_clock, ", new write clock:", write_clock, ", difference from expected:", write_clock - (this.last_write_clock + 1));
+        console.error("Write clock not incrementing?! Last write clock:", this.last_write_clock, ", new write clock:", write_clock, ", difference from expected:", write_clock - (this.last_write_clock + 1));
         throw new Exception("Write clock skipped or went backwards");
       }
     }
     this.last_write_clock = write_clock;
-    // XXX(slow): lib.log_every(12800, "buf_write", LOG_SPAM, "write_clock:", write_clock, "read_clock:", this.read_clock, "buffered_data:", this.buffered_data, "space_left:", this.space_left());
+    // XXX(slow): lib.log_every(12800, "buf_write", "write_clock:", write_clock, "read_clock:", this.read_clock, "buffered_data:", this.buffered_data, "space_left:", this.space_left());
     if (this.read_clock === null) {
       // It should be acceptable for this to end up negative
       this.read_clock = write_clock - this.leadin_samples;
     }
     if (this.space_left() == 0) {
       // This is a "true" buffer overflow, we have actually run completely out of buffer.
-      lib.log(LOG_ERROR, "Buffer overflow :-( write_clock:", write_clock, "read_clock:", this.read_clock, "buffered_data:", this.buffered_data, "space_left:", this.space_left());
+      console.error("Buffer overflow :-( write_clock:", write_clock, "read_clock:", this.read_clock, "buffered_data:", this.buffered_data, "space_left:", this.space_left());
       throw new Error("Buffer overflow");
     }
     if (!isNaN(this.buf[this.real_offset(write_clock)])) {
       // This is a "false" buffer overflow -- we are overwriting some past data that the reader skipped over (presumably due to an underflow.) Just write it anyway.
-      lib.log_every(12800, "sorta_overflow", LOG_WARNING, "Writing over existing buffered data; write_clock:", write_clock, "read_clock:", this.read_clock, "buffered_data:", this.buffered_data, "space_left:", this.space_left());
+      // XXX this used to be a warning log
+      lib.log_every(12800, "sorta_overflow", "Writing over existing buffered data; write_clock:", write_clock, "read_clock:", this.read_clock, "buffered_data:", this.buffered_data, "space_left:", this.space_left());
     }
     this.buf[this.real_offset(write_clock)] = value;
     this.buffered_data++;
@@ -358,7 +357,7 @@ class VolumeCalibrator {
 
         const target_avg = 0.0004;
         input_gain = Math.min(target_avg / volume_90th, 10);
-        lib.log(LOG_INFO, "90th percentile avg volume: " + volume_90th +
+        console.info("90th percentile avg volume: " + volume_90th +
                 "; input_gain: " + input_gain);
 
         return {
@@ -381,7 +380,7 @@ class Player extends AudioWorkletProcessor {
   constructor () {
     super();
     this.try_do(() => {
-      lib.log(LOG_INFO, "Audio worklet object constructing");
+      console.info("Audio worklet object constructing");
       this.ready = false;
       this.port.onmessage = (event) => {
         this.try_do(() => {
@@ -410,18 +409,9 @@ class Player extends AudioWorkletProcessor {
 
   handle_message(event) {
     var msg = event.data;
-    lib.log(LOG_VERYSPAM, "handle_message in audioworklet:", msg);
+    // console.debug("VERYSPAM", "handle_message in audioworklet:", msg);
 
-    if (msg.type == "log_params") {
-      if (msg.log_level) {
-        lib.set_log_level(msg.log_level);
-      }
-      if (msg.session_id) {
-        lib.set_logging_session_id(msg.session_id);
-        lib.log(LOG_INFO, "Audio worklet logging ready");
-      }
-      return;
-    } else if (msg.type == "audio_params") {
+    if (msg.type == "audio_params") {
       // Reset and/or set up everything.
       this.latency_calibrator = null;
       this.latency_measurement_mode = false;
@@ -490,16 +480,16 @@ class Player extends AudioWorkletProcessor {
       }
       return;
     } else if (!this.ready) {
-      lib.log(LOG_ERROR, "received message before ready:", msg);
+      console.error("received message before ready:", msg);
       return;
     } else if (msg.type != "samples_in") {
-      lib.log(LOG_ERROR, "Unknown message:", msg);
+      console.error("Unknown message:", msg);
       return;
     }
 
     var chunk = rebless(msg.chunk);
     this.play_buffer.write_chunk(chunk);
-    lib.log(LOG_VERYSPAM, "new play buffer:", this.play_buffer);
+    // console.debug("VERYSPAM", "new play buffer:", this.play_buffer);
   }
 
   set_click_volume(linear_volume) {
@@ -508,9 +498,9 @@ class Player extends AudioWorkletProcessor {
   }
 
   synthesize_clicks(input, interval) {
-    lib.log(LOG_VERYSPAM, "synthesizing clicks");
+    // console.debug("VERYSPAM", "synthesizing clicks");
     if (!this.synthetic_source_counter) {
-      lib.log(LOG_INFO, "Starting up clicks");
+      console.info("Starting up clicks");
       this.synthetic_source_counter = 0;
     }
 
@@ -527,7 +517,7 @@ class Player extends AudioWorkletProcessor {
   }
 
   process_normal(input, output) {
-    //lib.log(LOG_VERYSPAM, "process_normal:", input);
+    //// console.debug("VERYSPAM", "process_normal:", input);
     if (this.synthetic_source == "CLICKS") {
       this.synthesize_clicks(input, this.click_interval);
     }
@@ -538,7 +528,7 @@ class Player extends AudioWorkletProcessor {
     } else {
       // Normal input/output handling
       var play_chunk = this.play_buffer.read_into(output);
-      lib.log(LOG_VERYSPAM, "about to play chunk:", play_chunk);
+      // console.debug("VERYSPAM", "about to play chunk:", play_chunk);
 
       if (this.synthetic_source == "ECHO") {
         // This is the "opposite" of local loopback: There, we take whatever
@@ -574,7 +564,7 @@ class Player extends AudioWorkletProcessor {
         });
       }
 
-      lib.log(LOG_VERYSPAM, "about to return heard chunk:", mic_chunk);
+      // console.debug("VERYSPAM", "about to return heard chunk:", mic_chunk);
       this.port.postMessage({
         epoch: this.epoch,
         jank: this.acc_err,
@@ -598,18 +588,18 @@ class Player extends AudioWorkletProcessor {
       var err = interval - target_interval;
       var eff_rate = process_history_len * 128 * 1000 / interval;
       this.acc_err += err / process_history_len;
-      lib.log_every(500, "profile_web_audio", LOG_DEBUG, sampleRate, eff_rate, this.process_history_ms[0], now_ms, interval, target_interval, err, this.acc_err, this.acc_err / (128 * 1000 / 22050 /* XXX... */));
+      lib.log_every(500, "profile_web_audio", sampleRate, eff_rate, this.process_history_ms[0], now_ms, interval, target_interval, err, this.acc_err, this.acc_err / (128 * 1000 / 22050 /* XXX... */));
 
       // other parameters of interesst
-      // XXX lib.log(LOG_VERYSPAM, currentTime, currentFrame, /* getOutputTimestamp(), performanceTime, contextTime*/);
+      // XXX // console.debug("VERYSPAM", currentTime, currentFrame, /* getOutputTimestamp(), performanceTime, contextTime*/);
 
       if (eff_rate < 0.75 * sampleRate) {
         if (this.bad_sample_rate == 0) {
-          lib.log(LOG_WARNING, "BAD SAMPLE RATE, WEB AUDIO BUG? Should be", sampleRate, "but seeing", eff_rate, ". Will try restarting momentarily if this persists.");
+          console.warn("BAD SAMPLE RATE, WEB AUDIO BUG? Should be", sampleRate, "but seeing", eff_rate, ". Will try restarting momentarily if this persists.");
         }
         this.bad_sample_rate += 1;
         if (this.bad_sample_rate > 1000) {
-          lib.log(LOG_WARNING, "SAMPLE RATE STILL BAD. Should be", sampleRate, "but seeing", eff_rate, ". Restarting app.");
+          console.warn("SAMPLE RATE STILL BAD. Should be", sampleRate, "but seeing", eff_rate, ". Restarting app.");
           // Ask the main app to reload the audio input device
           this.killed = true;
           this.port.postMessage({
