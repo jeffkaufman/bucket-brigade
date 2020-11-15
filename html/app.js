@@ -1498,10 +1498,10 @@ function update_active_users(user_summary, server_sample_rate, leader) {
     window.activeUsers.removeChild(window.activeUsers.lastChild);
   }
 
-  const wasLeading = imLeading;
   imLeading = (myUserid == leader);
 
-  if (imLeading && leadButtonState != "start-singing") {
+  if (imLeading && leadButtonState != "start-singing" &&
+      leadButtonState != "stop-singing") {
     window.takeLead.textContent = "Start Singing";
     leadButtonState = "start-singing";
     window.jumpToEnd.disabled = true;
