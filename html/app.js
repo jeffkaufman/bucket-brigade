@@ -244,6 +244,15 @@ window.bpmUpdate.addEventListener("click", () => {
   send_metadata.bpm = newBpm;
 });
 
+window.repeatsUpdate.addEventListener("click", () => {
+  const newRepeats = parseInt(window.repeats.value);
+  if (isNaN(newRepeats) || newRepeats < 0 || newRepeats > 20) {
+    window.repeats.value = "invalid";
+    return;
+  }
+  send_metadata.repeats = newRepeats;
+});
+
 window.bprUpdate.addEventListener("click", () => {
   const newBpr = parseInt(window.bpr.value);
   if (isNaN(newBpr) || newBpr < 0 || newBpr > 500) {
@@ -1352,6 +1361,7 @@ async function handle_message(event) {
     var song_start_clock = metadata["song_start_clock"];
     var client_read_clock = metadata["client_read_clock"];
     var server_bpm = metadata["bpm"];
+    var server_repeats = metadata["repeats"];
     var server_bpr = metadata["bpr"];
     var leader = metadata["leader"]
 
@@ -1392,6 +1402,9 @@ async function handle_message(event) {
 
       if (server_bpm) {
         window.bpm.value = server_bpm;
+      }
+      if (server_repeats) {
+        window.repeats.value = server_repeats;
       }
       if (server_bpr) {
         window.bpr.value = server_bpr;

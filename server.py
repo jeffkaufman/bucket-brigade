@@ -42,6 +42,7 @@ song_start_clock = None
 requested_track: Any = None
 
 bpm = None
+repeats = 0
 bpr = None
 leader = None
 
@@ -125,6 +126,7 @@ class User:
         self.is_monitored = False
         self.is_monitoring = False
         self.bpm_to_send = None
+        self.repeats_to_send = None
         self.bpr_to_send = None
         # For debugging purposes only
         self.last_seen_read_clock = None
@@ -206,10 +208,10 @@ def assign_delays(userid_lead) -> None:
 
     initial_position = 0
 
-    if bpr and bpm:
+    if bpr and bpm and repeats:
         beat_length_s = 60 / bpm
         repeat_length_s = beat_length_s * bpr
-        initial_position += int(repeat_length_s)
+        initial_position += int(repeat_length_s*repeats)
 
     if initial_position > 90:
         initial_position = 90
@@ -360,6 +362,7 @@ def handle_post_(in_data, new_events, query_string, print_status) -> Tuple[Any, 
     global backing_track_index
     global metronome_on
     global bpm
+    global repeats
     global bpr
     global leader
     global last_cleared_clock
@@ -432,6 +435,13 @@ def handle_post_(in_data, new_events, query_string, print_status) -> Tuple[Any, 
         bpm = int(bpm)
         for other_userid in users:
             users[other_userid].bpm_to_send = bpm
+
+    repeatss = query_params.get("repeats", None)
+    if repeatss:
+        repeats, = repeatss
+        repeats = int(repeats)
+        for other_userid in users:
+            users[other_userid].repeats_to_send = repeats
 
     bprs = query_params.get("bpr", None)
     if bprs:
@@ -570,10 +580,11 @@ def handle_post_(in_data, new_events, query_string, print_status) -> Tuple[Any, 
             pos = client_write_clock - n_samples
             update_audio(pos, n_samples, in_data, user.is_monitored)
 
-            if bpr and bpm:
-                repeat_pos = pos + repeat_length_samples()
-                if repeat_pos + n_samples < server_clock:
-                    update_audio(repeat_pos, n_samples, in_data, False)
+            if bpr and bpm and repeats:
+                for i in range(repeats):
+                    repeat_pos = pos + repeat_length_samples()*i
+                    if repeat_pos + n_samples < server_clock:
+                        update_audio(repeat_pos, n_samples, in_data, False)
 
     # Why subtract n_samples above and below? Because the future is to the
     #   right. So when a client asks for n samples at time t, what they
@@ -639,6 +650,7 @@ def handle_post_(in_data, new_events, query_string, print_status) -> Tuple[Any, 
         "queue_size": QUEUE_LENGTH / FRAME_SIZE,
         "events": events_to_send,
         "bpm": user.bpm_to_send,
+        "repeats": user.repeats_to_send,
         "bpr": user.bpr_to_send,
         "leader": leader,
     })
@@ -646,6 +658,7 @@ def handle_post_(in_data, new_events, query_string, print_status) -> Tuple[Any, 
     user.chats_to_send.clear()
     user.delay_to_send = None
     user.bpm_to_send = None
+    user.repeats_to_send = None
     user.bpr_to_send = None
 
     if print_status:

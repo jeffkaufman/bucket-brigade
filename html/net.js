@@ -265,7 +265,7 @@ export async function samples_to_server(outdata, target_url, send_metadata) {
   var { read_clock, write_clock, username, userid, chats, requestedLeadPosition,
         markStartSinging, markStopSinging, loopback_mode, n_samples,
         globalVolume, backingVolume, micVolumes, backingTrack, monitoredUserId,
-        event_data, bpm, bpr
+        event_data, bpm, repeats, bpr
       } = send_metadata;
   console.log("mss: " + markStartSinging);
   if (outdata === null) {
@@ -327,9 +327,12 @@ export async function samples_to_server(outdata, target_url, send_metadata) {
     if (bpm) {
       params.set('bpm', bpm);
     }
+    if (repeats) {
+      params.set('repeats', repeats);
+    }
     if (bpr) {
       params.set('bpr', bpr);
-    }      
+    }
 
     target_url.search = params.toString();
 
