@@ -35,9 +35,8 @@ export class ServerConnection extends ServerConnectionBase {
     this.audio_offset_seconds = audio_offset_seconds;
     this.read_clock = null;
     this.write_clock = null;
-    this.send_metadata = {
-      userid
-    };
+    this.userid = userid;
+    this.send_metadata = {};
     this.running = false;
     this.app_epoch = epoch;
   }
@@ -66,8 +65,7 @@ export class ServerConnection extends ServerConnectionBase {
   }
 
   set_metadata(send_metadata) {
-    // Merge dictionaries
-    Object.assign(this.send_metadata, send_metadata);
+    this.send_metadata = send_metadata;
   }
 
   async send(chunk) {
@@ -105,6 +103,7 @@ export class ServerConnection extends ServerConnectionBase {
       read_clock: this.read_clock,
       write_clock: this.write_clock,
       n_samples: chunk.length,
+      userid: this.userid,
       ... this.send_metadata
     });
     if (!response) {
@@ -262,11 +261,13 @@ export async function query_server_clock(target_url) {
 var xhrs_inflight = 0;
 export async function samples_to_server(outdata, target_url, send_metadata) {
   // Not a tremendous improvement over having too many parameters, but a bit.
-  var { read_clock, write_clock, username, userid, chatsToSend, requestedLeadPosition, markStartSinging, markStopSinging,
-        loopback_mode, n_samples, globalVolumeToSend, backingVolumeToSend,
-        micVolumesToSend, backingTrackToSend, monitoredUserIdToSend,
-        event_data, bpmToSend, bprToSend
+  console.log(send_metadata);
+  var { read_clock, write_clock, username, userid, chats, requestedLeadPosition,
+        markStartSinging, markStopSinging, loopback_mode, n_samples,
+        globalVolume, backingVolume, micVolumes, backingTrack, monitoredUserId,
+        event_data, bpm, bpr
       } = send_metadata;
+  console.log("mss: " + markStartSinging);
   if (outdata === null) {
     outdata = new Uint8Array();
   }
@@ -296,8 +297,8 @@ export async function samples_to_server(outdata, target_url, send_metadata) {
     }
     params.set('username', username);
     params.set('userid', userid);
-    if (chatsToSend.length) {
-      params.set('chat', JSON.stringify(chatsToSend));
+    if (chats) {
+      params.set('chat', JSON.stringify(chats));
     }
     if (requestedLeadPosition) {
       params.set('request_lead', '1');
@@ -308,26 +309,26 @@ export async function samples_to_server(outdata, target_url, send_metadata) {
     if (markStopSinging) {
       params.set('mark_stop_singing', '1');
     }
-    if (globalVolumeToSend != null) {
-      params.set('volume', globalVolumeToSend);
+    if (globalVolume != null) {
+      params.set('volume', globalVolume);
     }
-    if (backingVolumeToSend != null) {
-      params.set('backing_volume', backingVolumeToSend);
+    if (backingVolume != null) {
+      params.set('backing_volume', backingVolume);
     }
-    if (micVolumesToSend.length > 0) {
-      params.set('mic_volume', JSON.stringify(micVolumesToSend));
+    if (micVolumes) {
+      params.set('mic_volume', JSON.stringify(micVolumes));
     }
-    if (backingTrackToSend) {
-      params.set('track', backingTrackToSend);
+    if (backingTrack) {
+      params.set('track', backingTrack);
     }
-    if (monitoredUserIdToSend) {
-      params.set('monitor', monitoredUserIdToSend);
+    if (monitoredUserId) {
+      params.set('monitor', monitoredUserId);
     }
-    if (bpmToSend) {
-      params.set('bpm', bpmToSend);
+    if (bpm) {
+      params.set('bpm', bpm);
     }
-    if (bprToSend != null) {
-      params.set('bpr', bprToSend);
+    if (bpr) {
+      params.set('bpr', bpr);
     }      
 
     target_url.search = params.toString();

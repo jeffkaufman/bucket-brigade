@@ -65,6 +65,8 @@ const MAX_MS_PER_BATCH = 900;
 // this must be 2.5, 5, 10, 20, 40, or 60.
 const OPUS_FRAME_MS = 60;
 
+let send_metadata = {};
+
 lib.log(LOG_INFO, "Starting up");
 
 const myUserid = Math.round(Math.random()*100000000000)
@@ -197,31 +199,28 @@ function receiveChatMessage(username, message) {
   window.chatDisplay.scrollTop = window.chatDisplay.scrollHeight;
 }
 
-let chatsToSend = [];
 function sendChatMessage() {
   if (!window.chatEntry.value) return;
   receiveChatMessage(window.userName.value, window.chatEntry.value);
-  chatsToSend.push(window.chatEntry.value);
+  send_metadata.chats ||= [];
+  send_metadata.chats.push(window.chatEntry.value);
   window.chatEntry.value = "";
 }
 
 window.chatForm.addEventListener("submit", (e) => { sendChatMessage(); e.preventDefault(); });
 
 let leadButtonState = "take-lead";
-let requestedLeadPosition = false;
-let markStartSinging = false;
-let markStopSinging = false;
 function takeLeadClick() {
   if (leadButtonState == "take-lead") {
-    requestedLeadPosition = true;
+    send_metadata.requestedLeadPosition = true;
     // Action doesn't take effect until server confirms.
   } else if (leadButtonState == "start-singing") {
     window.takeLead.textContent = "Stop Singing";
-    markStartSinging = true;
+    send_metadata.markStartSinging = true;
     leadButtonState = "stop-singing";
   } else if (leadButtonState == "stop-singing") {
     window.takeLead.textContent = "Lead a Song";
-    markStopSinging = true;
+    send_metadata.markStopSinging = true;
     leadButtonState = "take-lead";
     window.jumpToEnd.disabled = false;
   } else {
@@ -236,24 +235,22 @@ window.jumpToEnd.addEventListener("click", () => {
   audio_offset_change();
 });
 
-let bpmToSend = null;
 window.bpmUpdate.addEventListener("click", () => {
   const newBpm = parseInt(window.bpm.value);
   if (isNaN(newBpm) || newBpm < 1 || newBpm > 500) {
     window.bpm.value = "invalid";
     return;
   }
-  bpmToSend = newBpm;
+  send_metadata.bpm = newBpm;
 });
 
-let bprToSend = null;
 window.bprUpdate.addEventListener("click", () => {
   const newBpr = parseInt(window.bpr.value);
   if (isNaN(newBpr) || newBpr < 0 || newBpr > 500) {
     window.bpr.value = "invalid";
     return;
   }
-  bprToSend = newBpr;
+  send_metadata.bpr = newBpr;
 });
 
 function persist(textFieldId) {
@@ -356,13 +353,18 @@ var client_read_slippage = document.getElementById('clientReadSlippage');
 export var start_hooks = [];
 export var stop_hooks = [];
 export var event_hooks = [];
-var event_data = [];
 var alarms = {};
 var alarms_fired = {};
 var cur_clock_cbs = [];
 
 export function declare_event(evid, offset) {
-  cur_clock_cbs.push( (clock)=>{ event_data.push({evid,clock:clock-(offset||0)*audioCtx.sampleRate}); } );
+  cur_clock_cbs.push( (clock)=>{
+    send_metadata.event_data ||= [];
+    send_metadata.event_data.push(
+      {evid,
+       clock:clock-(offset||0)*audioCtx.sampleRate}
+    );
+  });
   playerNode.port.postMessage({
     type: "request_cur_clock"
   });
@@ -1263,7 +1265,7 @@ async function handle_message(event) {
   } else if (msg.type == "cur_clock") {
     for (let cb of cur_clock_cbs) {
       cb(msg.clock);
-      lib.log(LOG_WARNING, "got clock "+msg.clock+" and event_data is now "+event_data);
+      lib.log(LOG_WARNING, "got clock "+msg.clock+" and event_data is now "+ send_metadata.event_data);
     }
     cur_clock_cbs = [];
     return
@@ -1299,42 +1301,10 @@ async function handle_message(event) {
     }
     lib.log(LOG_SPAM, "Got encoded chunk to send:", encoded_chunk);
 
-    var send_metadata = {
-      username: window.userName.value,
-      chatsToSend,
-      requestedLeadPosition,
-      markStartSinging,
-      markStopSinging,
-      loopback_mode,
-      globalVolumeToSend,
-      backingVolumeToSend,
-      micVolumesToSend,
-      backingTrackToSend,
-      monitoredUserIdToSend,
-      event_data,
-      bpmToSend,
-      bprToSend,
-    };
-    if (requestedLeadPosition) {
-      requestedLeadPosition = false;
-    }
-    if (markStartSinging) {
-      markStartSinging = false;
-    }
-    if (markStopSinging) {
-      markStopSinging = false;
-    }
-    chatsToSend = [];
-    globalVolumeToSend = null;
-    backingVolumeToSend = null;
-    micVolumesToSend = [];
-    backingTrackToSend = null;
-    monitoredUserIdToSend = null;
-    event_data = [];
-    bpmToSend = null;
-    bprToSend = null;
-
+    send_metadata.username = window.userName.value;
+    send_metadata.loopback_mode = loopback_mode;
     server_connection.set_metadata(send_metadata);
+    send_metadata = {}
     // XXX: interesting, it does not seem that these promises are guaranteed to resolve in order... and the worklet's buffer uses the first chunk's timestamp to decide where to start playing back, so if the first two chunks are swapped it has a big problem.
     const response = await server_connection.send(encoded_chunk);
     if (!response) {
@@ -1462,9 +1432,8 @@ function update_backing_tracks(tracks) {
   }
 }
 
-let backingTrackToSend = null;
 window.backingTrack.addEventListener("change", (e) => {
-  backingTrackToSend = window.backingTrack.value;
+  send_metadata.backingTrack = window.backingTrack.value;
 });
 
 let previous_user_summary_str = "";
@@ -1563,8 +1532,6 @@ function update_active_users(user_summary, server_sample_rate, leader) {
   previous_mic_volume_inputs_str = JSON.stringify(mic_volume_inputs);
 }
 
-let monitoredUserIdToSend = null;
-
 function endMonitoring(server_initiated) {
   if (micPaused) {
     toggle_mic();
@@ -1572,7 +1539,7 @@ function endMonitoring(server_initiated) {
   window.monitorUserToggle.innerText = "Begin Monitoring";
   window.monitorUserToggle.amMonitoring = false;
   if (!server_initiated) {
-    monitoredUserIdToSend = "end";
+    send_metadata.monitoredUserId = "end";
   }
 }
 
@@ -1588,7 +1555,7 @@ function beginMonitoring(option) {
 function startMonitoringUser(option) {
   window.micVolumeSetting.userid = option.userid;
   window.micVolumeSetting.value = option.mic_volume;
-  monitoredUserIdToSend = option.userid;
+  send_metadata.monitoredUserId = option.userid;
 }
 
 window.monitorUserSelect.addEventListener("change", (e) => {
@@ -1623,14 +1590,15 @@ window.monitorUserToggle.addEventListener("click", (e) => {
   }
 });
 
-let micVolumesToSend = [];
 window.micVolumeApply.addEventListener("click", (e) => {
   const option = window.monitorUserSelect.children[
     window.monitorUserSelect.selectedIndex];
   option.mic_volume = window.micVolumeSetting.value;
   option.textContent = option.username + " -- " + option.mic_volume;
-  micVolumesToSend.push([window.micVolumeSetting.userid,
-                         parseFloat(window.micVolumeSetting.value)]);
+  send_metadata.micVolumes ||= [];
+  send_metadata.micVolumes.push(
+    [window.micVolumeSetting.userid,
+     parseFloat(window.micVolumeSetting.value)]);
 });
 
 async function restart() {
@@ -1689,14 +1657,12 @@ window.startVolumeCalibration.addEventListener("click", () => {
   set_estimate_volume_mode(true);
 });
 
-let globalVolumeToSend = null;
 window.globalVolumeControl.addEventListener("change", () => {
-  globalVolumeToSend = window.globalVolumeControl.value;
+  send_metadata.globalVolume = window.globalVolumeControl.value;
 });
 
-let backingVolumeToSend = null;
 window.backingVolumeControl.addEventListener("change", () => {
-  backingVolumeToSend = window.backingVolumeControl.value;
+  send_metadata.backingVolume = window.backingVolumeControl.value;
 });
 
 log_level_select.addEventListener("change", () => {
