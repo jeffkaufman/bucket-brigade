@@ -483,7 +483,7 @@ def handle_post_(in_data, new_events, query_string, print_status) -> Tuple[Any, 
         song_start_clock = user.last_write_clock
         song_end_clock = 0
         metronome_on = False
-        if bpm and bpr:
+        if bpm and bpr and repeats:
             requested_track = METRONOME
         if requested_track:
             run_backing_track()
