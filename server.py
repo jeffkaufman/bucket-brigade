@@ -31,6 +31,7 @@ pr.disable()
 FRAME_SIZE = 128
 
 last_request_clock = None
+last_cleared_clock = None
 first_client_write_clock = None
 first_client_total_samples = None
 first_client_value = None
@@ -174,6 +175,7 @@ def run_backing_track() -> None:
 
     if requested_track == METRONOME:
         metronome_on = True
+        backfill_metronome()
     elif requested_track in tracks:
         with wave.open(os.path.join(AUDIO_DIR, requested_track)) as inf:
             if inf.getnchannels() != 1:
@@ -296,6 +298,10 @@ def write_metronome(clear_index, clear_samples):
 
     wrap_assign(audio_queue, clear_index, metronome_samples)
 
+def backfill_metronome():
+    # fill all time between song_start_clock and last_cleared_clock
+    # with the current beat
+    write_metronome(song_start_clock, last_cleared_clock - song_start_clock)
 
 def update_audio(pos, n_samples, in_data, is_monitored):
     old_audio = wrap_get(audio_queue, pos, n_samples)
@@ -351,6 +357,7 @@ def handle_post_(in_data, new_events, query_string, print_status) -> Tuple[Any, 
     global bpm
     global bpr
     global leader
+    global last_cleared_clock
 
     query_params = urllib.parse.parse_qs(query_string, strict_parsing=True)
 
@@ -462,7 +469,6 @@ def handle_post_(in_data, new_events, query_string, print_status) -> Tuple[Any, 
         metronome_on = False
         if bpm and bpr:
             requested_track = METRONOME
-            song_start_clock = user.last_write_clock + repeat_length_samples()
         if requested_track:
             run_backing_track()
 
@@ -493,6 +499,7 @@ def handle_post_(in_data, new_events, query_string, print_status) -> Tuple[Any, 
             n_people_queue, clear_index, np.zeros(clear_samples, np.int16))
         wrap_assign(
             monitor_queue, clear_index, np.zeros(clear_samples, np.float32))
+        last_cleared_clock = clear_index + clear_samples
 
         max_backing_track_samples = len(backing_track) - backing_track_index
         backing_track_samples = min(max_backing_track_samples, clear_samples)
