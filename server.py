@@ -611,7 +611,18 @@ def handle_post_(in_data, new_events, query_string, print_status) -> Tuple[Any, 
     elif user.is_monitoring:
         data = wrap_get(monitor_queue, client_read_clock - n_samples, n_samples)
     else:
-        data = wrap_get(audio_queue, client_read_clock - n_samples, n_samples)
+        # Only play audio during songs.  Mostly this is dealt with by
+        # only keeping input when a song is in progress, but the
+        # metronome, backing track, and round singing are also forms
+        # of input that check doesn't catch.
+        if song_start_clock and (
+                not song_end_clock or
+                client_read_clock - n_samples < song_end_clock):
+            data = wrap_get(audio_queue, client_read_clock - n_samples,
+                            n_samples)
+        else:
+            data = np.zeros(n_samples, np.float32)
+
         n_people = wrap_get(
             n_people_queue, client_read_clock - n_samples, n_samples)
 
