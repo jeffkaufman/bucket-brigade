@@ -72,6 +72,11 @@ audio_queue = np.zeros(QUEUE_LENGTH, np.float32)
 monitor_queue = np.zeros(QUEUE_LENGTH, np.float32)
 n_people_queue = np.zeros(QUEUE_LENGTH, np.int16)
 
+def clear_whole_buffer():
+    audio_queue.fill(0)
+    monitor_queue.fill(0)
+    n_people_queue.fill(0)
+
 max_position = DELAY_INTERVAL*LAYERING_DEPTH
 
 # For volume scaling.
@@ -217,7 +222,7 @@ def assign_delays(userid_lead) -> None:
     # Randomly shuffle the remaining users, and assign them to positions. If we
     # have more users then positions, then double up.
     # TODO: perhaps we should prefer to double up from the end?
-    max_position = DELAY_INTERVAL*2
+    max_position = initial_position + DELAY_INTERVAL*2
     for i, (_, userid) in enumerate(sorted(
             [(random.random(), userid)
              for userid in users
@@ -462,6 +467,7 @@ def handle_post_(in_data, new_events, query_string, print_status) -> Tuple[Any, 
         song_end_clock = 0
         metronome_on = False
         leader = userid
+        clear_whole_buffer()
 
     if query_params.get("mark_start_singing", None):
         song_start_clock = user.last_write_clock
