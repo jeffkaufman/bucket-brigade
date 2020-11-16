@@ -388,7 +388,7 @@ class AudioDecoder {
 
 export class BucketBrigadeContext extends EventTarget {
   constructor(options) {
-    var {micStream, apiUrl} = options;
+    var {micStream} = options;
     super();
 
     this.audioCtx = null;
@@ -398,7 +398,6 @@ export class BucketBrigadeContext extends EventTarget {
     this.decoder = null;
     this.encoding_latency_ms = null;
     this.micStream = micStream;
-    this.apiUrl = apiUrl;
   }
 
   ms_to_samples(ms) {
@@ -473,8 +472,23 @@ export class BucketBrigadeContext extends EventTarget {
     this.playerNode.port.postMessage(message);  // XXX huh, we aren't using transfer, and plausibly should be
   }
 
-  handle_message_unstarted(e) {
-    console.warn("message handler triggered before started:", e);
+  handle_message(event) {
+    var msg = event.data;
+    if (msg.type === "exception") {
+      throw msg.exception;
+    }
+    if (msg.type === "underflow") {
+      //window.lostConnectivity.style.display = "block";
+      //await restart();
+      // XXX: probably need to deal with this better, auto-restarting stuff
+      throw new Error("Underflow in SingerClient handle_message");
+      /* XXX: don't worry about this stuff for now */
+    }
+    this.dispatchEvent(new CustomEvent("workletMessage_", {
+      detail: {
+        msg
+      }
+    }));
     return;
   }
 
@@ -563,13 +577,28 @@ export class BucketBrigadeContext extends EventTarget {
     // The encoder stuff absolutely has to finish getting initialized before we start getting messages for it, or shit will get regrettably real. (It is designed in a non-threadsafe way, which is remarkable since javascript has no threads.)
 
     this.playerNode.port.onmessage = (e) => {
-      this.handle_message_unstarted(e);
+      this.handle_message(e);
     }
     this.micNode.connect(this.playerNode);
     this.playerNode.connect(this.audioCtx.destination);
 
     // XXX: This is not great, becase it will start the AudioWorklet, which will immediately proceed to start sending us audio, which we aren't ready for yet because we're about to go into calibration mode. However if we get enough to try to send to the server at this point, the ServerConnection will discard it anyway, since it hasn't been started yet.
     await this.reload_settings();
+  }
+
+  close() {
+    console.info("Closing BucketBrigadeContext");
+    this.micNode.disconnect();
+    this.micNode = null;
+    this.playerNode.disconnect();
+    this.playerNode = null;
+    close_stream(this.micStream);
+    this.micStream = null;
+    this.audioCtx.close();
+    this.audioCtx = null;
+    this.encoder = null;
+    this.decoder = null;
+    console.info("Closed BucketBrigadeContext");
   }
 
   // Should really be named "restart everything", which is what it does.
@@ -639,27 +668,37 @@ export class BucketBrigadeContext extends EventTarget {
   }
 }
 
-export class SingerClient extends EventTarget {
+export class BaseClient extends EventTarget {
+  constructor(options) {
+    var {apiUrl} = options;
+    super();
+
+    this.apiUrl = apiUrl;
+  }
+}
+
+export class SingerClient extends BaseClient {
   constructor(options) {
     var {context, secretId, speakerMuted, micMuted, extra} = options;
     // Stuff that probably doesn't go in the real API, and is subject to change or removal, but is useful for now
     // XXX: add loopback mode?
-    var {userid, username, audio_offset_seconds} = extra;
-    super();
+    var {username, audio_offset_seconds} = extra;
+    super(options);
 
     this.ctx = context;
     this.secretId = secretId;
     this.server_connection = new ServerConnection({
-      target_url: new URL(this.ctx.apiUrl),
+      target_url: new URL(this.apiUrl),
       audio_offset_seconds,
-      userid,
+      userid: secretId,
       epoch: 0,  // XXX epoch no longer useful?
     });
 
     this.hasConnectivity = true;  // XXX public readonly
+    this.diagnostics = {};  // XXX public readonly, not part of formal API
 
     // XXX ignoring speakermuted, micmuted?
-    this.userid = userid;
+    this.userid = secretId;
     this.username = username;
 
     this.mic_buf = [];
@@ -670,28 +709,24 @@ export class SingerClient extends EventTarget {
     this.encoder.reset();
     this.decoder.reset();
 
-    // XXX invasive coupling, use custom events on the context instead?
-    this.ctx.playerNode.port.onmessage = (event) => {
-      this.handle_message(event);
-    }
+    this.handle_message_bound = this.handle_message.bind(this);
+    this.ctx.addEventListener("workletMessage_", this.handle_message_bound);
   }
 
   async start_singing() {
     await this.server_connection.start();
   }
 
+  close() {
+    this.ctx.removeEventListener("workletMessage_", this.handle_message_bound);
+    this.server_connection.stop();
+    this.server_connection = null;
+  }
+
   async handle_message(event) {
-    var msg = event.data;
-    if (msg.type === "exception") {
-      throw msg.exception;
-    }
-    if (msg.type === "underflow") {
-      //window.lostConnectivity.style.display = "block";
-      //await restart();
-      // XXX: probably need to deal with this better, auto-restarting stuff
-      throw new Error("Underflow in SingerClient handle_message");
-      /* XXX: don't worry about this stuff for now
-    } else if (msg.type == "alarm") {
+    var msg = event.detail.msg;
+    /*
+    if (msg.type == "alarm") {
       if ((msg.time in alarms) && ! (msg.time in alarms_fired)) {
         console.info("calling alarm at "+msg.time)
         alarms[msg.time]();
@@ -705,19 +740,21 @@ export class SingerClient extends EventTarget {
       }
       cur_clock_cbs = [];
       return; */
-    } else if (msg.type != "samples_out") {
+    if (msg.type != "samples_out") {
+      this.close();
       throw new Error("Got message of unknown type: " + JSON.stringify(msg));
     }
 
     // If we see this change at any point, that means stop what we're doing.
     //var our_epoch = epoch;
 
-    console.debug("SPAM", "Got heard chunk:", msg);
+    //console.debug("SPAM", "Got heard chunk:", msg); // too spammy
 
     // Tricky metaprogramming bullshit to recover the object-nature of an object sent via postMessage
     var chunk = rebless(msg.chunk);
     this.mic_buf.push(chunk);
 
+    this.diagnostics.webAudioJankCurrent = msg.jank;
     // XXX: just for debugging
     // XXX: window.msWebAudioJankCurrent.value = Math.round(msg.jank) + "ms";
 
@@ -747,50 +784,28 @@ export class SingerClient extends EventTarget {
       // XXX: interesting, it does not seem that these promises are guaranteed to resolve in order... and the worklet's buffer uses the first chunk's timestamp to decide where to start playing back, so if the first two chunks are swapped it has a big problem.
       const response = await this.server_connection.send(encoded_chunk);
       if (!response) {
-        // XXX lost connectivity
+        // XXX lost connectivity -- what should happen here?
         this.hasConnectivity = false;
         this.dispatchEvent(new Event("connectivityChange"));
         //window.lostConnectivity.style.display = "block";
         //await restart();
+        this.close();
         return;
       }
       var { metadata, chunk: response_chunk, epoch: server_epoch } = response;
       if (!response_chunk) {
+        this.close();
         return;
       }
-      /*
-      if (our_epoch != epoch) {
-        console.warn("Ending message handler early due to stale epoch");
-        return;
-      }
-      if (server_epoch != epoch) {
-        console.warn("Ignoring message from server with old epoch");
-        return;
-      }
-      if (app_state != APP_RUNNING) {
-        console.warn("Ending message handler early because not running");
-        return;
-      }
-      */
 
       //console.debug("SPAM", "Got chunk from server:", response_chunk.interval, response_chunk, metadata);
       var play_chunk = await this.decoder.decode_chunk(response_chunk);
-      /*
-      if (our_epoch != epoch) {
-        console.warn("Ending message handler early due to stale epoch");
-        return;
-      }
-      if (app_state != APP_RUNNING) {
-        console.warn("Ending message handler early because not running");
-        return;
-      }
-      */
 
       console.debug("SPAM", "Decoded chunk from server:", play_chunk.interval, play_chunk);
+
       // XXX invasive coupling
       this.ctx.samples_to_worklet(play_chunk);
 
-      /*
       var queue_size = metadata["queue_size"];
       var user_summary = metadata["user_summary"] || [];
       var tracks = metadata["tracks"] || [];
@@ -804,6 +819,7 @@ export class SingerClient extends EventTarget {
       var server_bpr = metadata["bpr"];
       var leader = metadata["leader"]
 
+      /* XXX
       for (let ev of metadata["events"]) {
         alarms[ev["clock"]] = () => event_hooks.map(f=>f(ev["evid"]));
         console.info(ev);
@@ -812,54 +828,61 @@ export class SingerClient extends EventTarget {
           time: ev["clock"]
         });
       }
-
-      // Defer touching the DOM, just to be safe.
-      const connection_as_of_message = server_connection;
-      requestAnimationFrame(() => {
-        if (song_start_clock && song_start_clock > client_read_clock) {
-          window.startSingingCountdown.style.display = "block";
-          window.countdown.innerText = Math.round(
-            (song_start_clock - client_read_clock) / server_sample_rate) + "s";
-        } else {
-          window.startSingingCountdown.style.display = "none";
-        }
-
-
-        if (delay_seconds) {
-          if (delay_seconds > 0) {
-            audioOffset.value = delay_seconds;
-            // This will restart the world, so don't try to continue.
-            audio_offset_change();
-            return;
-          }
-        }
-
-        // XXX: DOM stuff below this line.
-        update_active_users(user_summary, server_sample_rate, leader);
-        chats.forEach((msg) => receiveChatMessage(msg[0], msg[1]));
-        update_backing_tracks(tracks);
-
-        if (server_bpm) {
-          window.bpm.value = server_bpm;
-        }
-        if (server_repeats) {
-          window.repeats.value = server_repeats;
-        }
-        if (server_bpr) {
-          window.bpr.value = server_bpr;
-        }
-
-        // This is how closely it's safe to follow behind us, if you get as unlucky as possible (and try to read _just_ before we write).
-        clientReadSlippage.value = connection_as_of_message.client_window_time + play_chunk.length_seconds;
-        // This is how far behind our target place in the audio stream we are. This must be added to the value above, to find out how closely it's safe to follow behind where we are _aiming_ to be. This value should be small and relatively stable, or something has gone wrong.
-        clientReadSlippage.value = connection_as_of_message.clientReadSlippage;
-      });
       */
+
+      // XXX: needs to be reimplemented in terms of alarms / marks
+      /*
+      if (song_start_clock && song_start_clock > client_read_clock) {
+        window.startSingingCountdown.style.display = "block";
+        window.countdown.innerText = Math.round(
+          (song_start_clock - client_read_clock) / server_sample_rate) + "s";
+      } else {
+        window.startSingingCountdown.style.display = "none";
+      }
+      */
+
+      // XXX: the server ordered us to change our offset. In the new world this is done.... some other way?
+      /*
+      if (delay_seconds) {
+        if (delay_seconds > 0) {
+          audioOffset.value = delay_seconds;
+          // This will restart the world, so don't try to continue.
+          audio_offset_change();
+          return;
+        }
+      }
+      */
+
+      // XXX: DOM stuff below this line.
+      /*
+      update_active_users(user_summary, server_sample_rate, leader);
+      chats.forEach((msg) => receiveChatMessage(msg[0], msg[1]));
+      update_backing_tracks(tracks);
+      */
+
+      // XXX: this is round stuff I guess? Not sure what the interface for this is.
+      /*
+      if (server_bpm) {
+        window.bpm.value = server_bpm;
+      }
+      if (server_repeats) {
+        window.repeats.value = server_repeats;
+      }
+      if (server_bpr) {
+        window.bpr.value = server_bpr;
+      }
+      */
+
+      // This is how closely it's safe to follow behind us, if you get as unlucky as possible (and try to read _just_ before we write).
+      this.diagnostics.client_total_time = this.server_connection.client_window_time + play_chunk.length_seconds;
+      // This is how far behind our target place in the audio stream we are. This must be added to the value above, to find out how closely it's safe to follow behind where we are _aiming_ to be. This value should be small and relatively stable, or something has gone wrong.
+      this.diagnostics.client_read_slippage = this.server_connection.clientReadSlippage;
+
+      this.dispatchEvent(new Event("diagnosticChange"));
     }
   }
 }
 
-// XXX missing close method
 export class VolumeCalibrator extends EventTarget {
   constructor(options) {
     var {context} = options;
@@ -868,24 +891,21 @@ export class VolumeCalibrator extends EventTarget {
     this.ctx = context;
     this.hasMicInput = true;  // XXX should be readonly
 
-    // XXX invasive coupling
-    this.ctx.playerNode.port.onmessage = (event) => {
-      this.handle_message(event);
-    }
+    this.handle_message_bound = this.handle_message.bind(this);
+    this.ctx.addEventListener("workletMessage_", this.handle_message_bound);
 
     // XXX etc.
     this.ctx.set_estimate_volume_mode(true);
   }
 
-  handle_message(event) {
-    var msg = event.data;
-    if (msg.type === "exception") {
-      throw msg.exception;
-    }
+  close() {
+    this.ctx.set_estimate_volume_mode(false);
+    this.ctx.removeEventListener("workletMessage_", this.handle_message_bound);
+  }
 
-    if (msg.type === "underflow") {
-      throw new Error("Underflow in VolumeCalibrator handle_message");
-    } else if (msg.type == "no_mic_input") {
+  handle_message(event) {
+    var msg = event.detail.msg;
+    if (msg.type == "no_mic_input") {
       this.hasMicInput = false;
       this.dispatchEvent(new Event("micInputChange"));
       return;
@@ -906,14 +926,13 @@ export class VolumeCalibrator extends EventTarget {
           inputGain: msg.input_gain,
         }
       }));
-      this.ctx.set_estimate_volume_mode(false);
+      this.close();
       return;
     }
   }
 }
 
 export class LatencyCalibrator extends EventTarget {
-  // XXX failed to define 'close()' yet
   constructor(options) {
     var {context, clickVolume} = options;
     super();
@@ -923,14 +942,17 @@ export class LatencyCalibrator extends EventTarget {
     this.ctx.click_volume_change(this.click_volume_);
     this.hasMicInput = true;  // XXX should be readonly
 
-    // XXX invasive coupling
-    this.ctx.playerNode.port.onmessage = (event) => {
-      this.handle_message(event);
-    }
+    this.handle_message_bound = this.handle_message.bind(this);
+    this.ctx.addEventListener("workletMessage_", this.handle_message_bound);
 
     // XXX: invasive coupling, and this maybe violates the desire to allow async construction of the context
     this.ctx.send_ignore_input(false);  // XXX: this actually appears to be ignored in this mode anyway
     this.ctx.set_estimate_latency_mode(true);
+  }
+
+  close() {
+    this.ctx.set_estimate_latency_mode(false);
+    this.ctx.removeEventListener("workletMessage_", this.handle_message_bound);
   }
 
   get clickVolume() {
@@ -943,14 +965,8 @@ export class LatencyCalibrator extends EventTarget {
   }
 
   handle_message(event) {
-    var msg = event.data;
-    if (msg.type === "exception") {
-      throw msg.exception;
-    }
-
-    if (msg.type === "underflow") {
-      throw new Error("Underflow in LatencyCalibrator handle_message");
-    } else if (msg.type == "no_mic_input") {
+    var msg = event.detail.msg;
+    if (msg.type == "no_mic_input") {
       this.hasMicInput = false;
       this.dispatchEvent(new Event("micInputChange"));
       return;
@@ -966,7 +982,6 @@ export class LatencyCalibrator extends EventTarget {
       }
 
       if (msg.p50 !== undefined) {
-        console.debug("GOOD BEEP");
         const latency_range = msg.p75 - msg.p25;
 
         beepDetails.est25to75 = latency_range;
@@ -974,13 +989,13 @@ export class LatencyCalibrator extends EventTarget {
         beepDetails.jank = msg.jank;
 
         if (msg.samples >= 7) {
-          this.ctx.set_estimate_latency_mode(false);  // XXX invasive coupling
+          this.close();
           beepDetails.done = true;
 
           if (latency_range <= 2) {
             beepDetails.success = true;
             // If we have measured latency within 2ms, that's good.
-            this.ctx.send_local_latency(); // XXX invasive coupling
+            this.ctx.send_local_latency();
           } else {
             beepDetails.success = false;
           }
@@ -1071,10 +1086,6 @@ function concat_typed_arrays(arrays, _constructor) {
     result_idx += a.length;
   });
   return result;
-}
-
-function wait(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 function rebless(o) {

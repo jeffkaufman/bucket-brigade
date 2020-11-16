@@ -1,4 +1,3 @@
-import * as lib from './lib.js';
 import {check} from './lib.js';
 
 const CLOCK_SERVER = Symbol("CLOCK_SERVER");
@@ -31,22 +30,6 @@ export class ClientClockReference extends ClockReference {
     get side() { return CLOCK_CLIENT; }
 }
 
-// sample rate, actual time, begin vs end??, time vs samples?? Interval? Timestamp / Clockstamp? TimeInterval / ClockInterval??? better name for the sample-oriented kind
-/*
-export class Clock {
-    constructor({ reference, clock }) {
-        check(reference !== undefined && clock !== undefined,
-            "Must provide reference and clock as named arguments");
-        check(reference instanceof ClockReference, "reference must be a ClockReference");
-        check(Number.isInteger(clock), "clock must be an integer (measured in samples)");
-
-        this.reference = reference;
-        this.clock = clock;
-    }
-} */
-
-// XXX not sure if construct from two clocks or two integers (or start and length)
-// XXX this is a mess
 export class ClockInterval {
     constructor({ reference, end, length }) {
         check(reference !== undefined, "Must provide reference as a named argument");
@@ -77,8 +60,6 @@ export class ClockInterval {
     }
 }
 
-// XXX
-// still need to deal with compression/decompression, and resampling... and not sure what happens with intervals and rounding on resampling.
 export class AudioChunkBase {
     constructor({ data, interval }) {
         check(data !== undefined && interval !== undefined, "Must provide data and interval as named arguments");
