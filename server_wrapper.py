@@ -20,6 +20,15 @@ import shm
 
 from typing import Any, Dict, List, Tuple
 
+import cProfile
+import pstats
+import io
+
+pr = cProfile.Profile()
+# enable for just a moment so the profile object isn't empty
+pr.enable()
+pr.disable()
+
 CHANNELS = 1
 
 OPUS_FRAME_MS = 60

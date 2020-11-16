@@ -15,19 +15,12 @@ import wave
 import threading
 import datetime
 
-import cProfile
-import pstats
-import io
 
 from typing import Any, Dict, List, Tuple, Iterable
 
 lock = threading.Lock()
 
 logging.basicConfig(filename='server.log',level=logging.DEBUG)
-pr = cProfile.Profile()
-# enable for just a moment so the profile object isn't empty
-pr.enable()
-pr.disable()
 
 FRAME_SIZE = 128
 
