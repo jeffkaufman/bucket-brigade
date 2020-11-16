@@ -438,6 +438,7 @@ class Player extends AudioWorkletProcessor {
       this.local_latency = msg.local_latency;
       return;
     } else if (msg.type == "latency_estimation_mode") {
+      console.debug("latency estimation mode in worklet:", msg.enabled);
       this.latency_measurement_mode = msg.enabled;
       if (this.latency_measurement_mode) {
         this.latency_calibrator = new LatencyCalibrator();
@@ -641,6 +642,7 @@ class Player extends AudioWorkletProcessor {
         }
         output = new Float32Array(output.length);
       } else {
+        // XXX: why do we have both of these separately?
         if (this.mic_pause_mode || this.ignore_input) {
           // Mute the microphone by replacing the input with zeros.
           input = new Float32Array(input.length);

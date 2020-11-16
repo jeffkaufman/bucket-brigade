@@ -10,7 +10,7 @@ class ServerConnectionBase {
   }
 
   // This is how far behind our target place in the audio stream we are. This must be added to the value above, to find out how closely it's safe to follow behind where we are _aiming_ to be. This value should be small and relatively stable, or something has gone wrong.
-  get client_read_slippage() {
+  get clientReadSlippage() {
     return (this.last_server_clock - this.read_clock - this.audio_offset) / this.clock_reference.sample_rate;
   }
 }
