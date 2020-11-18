@@ -13,6 +13,7 @@ import os
 import logging
 import wave
 import threading
+import datetime
 
 import cProfile
 import pstats
@@ -84,6 +85,124 @@ max_position = DELAY_INTERVAL*LAYERING_DEPTH
 N_PHANTOM_PEOPLE = 2
 
 AUDIO_DIR = os.path.join(os.path.dirname(__file__), "audio")
+RECORDINGS_DIRNAME = "recordings"
+RECORDINGS_DIR = os.path.join(
+    os.path.dirname(__file__), "html", RECORDINGS_DIRNAME)
+RECORDING_LISTING_HTML = os.path.join(RECORDINGS_DIR, "index.html")
+RECORDING_N_TO_KEEP = 20  # keep most recent only
+RECORDING_MAX_S = 60*60 # 1hr
+RECORDING_MAX_SAMPLES = RECORDING_MAX_S * SAMPLE_RATE
+
+RECORDING_ENABLED = True
+
+class Recorder:
+    def __init__(self):
+        self.out = None
+        self.written = 0
+        self.last_clock = None
+
+    @staticmethod
+    def recording_fname():
+        return os.path.join(
+            RECORDINGS_DIR,
+            datetime.datetime.now().strftime('%Y-%m-%d-%H%M%S.wav'))
+
+    @staticmethod
+    def read_offset():
+        # While we want to read from the specified clock position in
+        # the buffer, we don't want to do that until enough time has
+        # passed that whoever was going to sing has had a chance to.
+        return (max_position + 2)*SAMPLE_RATE
+
+    def start_(self):
+        self.cleanup_()
+
+        self.out = wave.open(self.recording_fname(), mode='wb')
+        self.out.setnchannels(1)
+        self.out.setsampwidth(2)
+        self.out.setframerate(SAMPLE_RATE)
+
+        self.written = 0
+        self.last_clock = song_start_clock - 1
+
+    def end_(self):
+        self.out.close()
+        self.out = None
+
+    def write_(self, samples):
+        self.out.writeframes((samples * 2**14).astype(np.int16))
+        self.written += len(samples)
+
+    def maybe_write(self, server_clock):
+        if self.out:
+            pass
+        elif (song_start_clock and
+            (song_start_clock + self.read_offset() <
+             server_clock <
+             song_start_clock + self.read_offset() + SAMPLE_RATE*5)):
+            self.start_()
+        else:
+            return
+
+        # Write any samples the desk that are now ready for writing.
+        # - The first unwritten sample is last_clock + 1
+        # - The last eligible sample is server_clock + read_offset
+        #   - Unless song_end_clock comes first
+        begin = self.last_clock + 1
+        end = server_clock - self.read_offset()
+        ready_to_close = False
+        if song_end_clock and song_end_clock < end:
+            end = song_end_clock
+            ready_to_close = True
+
+        n_samples = end - begin
+        if n_samples > QUEUE_LENGTH:
+            # Something has gone horribly wrong, probably involving
+            # losing and regaining connectivity in the middle of a
+            # song.  Oh well.
+            n_samples = QUEUE_LENGTH
+
+        if n_samples > 0:
+            self.write_(fix_volume(
+                wrap_get(audio_queue, begin, n_samples),
+                wrap_get(n_people_queue, begin, n_samples)))
+            self.last_clock += n_samples
+
+        if ready_to_close or self.written > RECORDING_MAX_SAMPLES:
+            self.end_()
+            self.update_directory_listing_()
+
+    def update_directory_listing_(self):
+        with open(RECORDING_LISTING_HTML, 'w') as outf:
+            def w(s):
+                outf.write(s)
+                outf.write("\n")
+            w("<html>")
+            w("<title>Recordings</title>")
+            w("<h1>Recordings</h1>")
+            w("<ul>")
+            for fname in reversed(sorted(os.listdir(RECORDINGS_DIR))):
+                if not fname.endswith(".wav"):
+                    continue
+                size = os.path.getsize(os.path.join(RECORDINGS_DIR, fname))
+                size_mb = size / 1024 / 1024
+                w("<li><a href='%s'>%s</a> (%.2f MB)" % (
+                    fname, fname, size_mb))
+            w("</ul>")
+            w("Because these files are large we only keep the most recent %s" %
+              RECORDING_N_TO_KEEP)
+            w("</html>")
+
+    def cleanup_(self):
+        recordings = os.listdir(RECORDINGS_DIR)
+        if len(recordings) <= RECORDING_N_TO_KEEP:
+            return
+
+        for fname in sorted(recordings)[:-RECORDING_N_TO_KEEP]:
+            os.remove(os.path.join(RECORDINGS_DIR, fname))
+        self.update_directory_listing_()
+
+recorder = Recorder() if RECORDING_ENABLED else None
 
 events: Dict[str, str] = {}
 
@@ -327,6 +446,18 @@ def repeat_length_samples():
     repeat_length_s = beat_length_s * bpr
     return int(repeat_length_s * SAMPLE_RATE)
 
+def fix_volume(data, n_people):
+    # We could scale volume by having n_people be the number of
+    # earlier people and then scale by a simple 1/n_people.  But a
+    # curve of (1 + X) / (n_people + X) falls a bit less
+    # dramatically and should sound better.
+    #
+    # Compare:
+    #   https://www.wolframalpha.com/input/?i=graph+%281%29+%2F+%28x%29+from+1+to+10
+    #   https://www.wolframalpha.com/input/?i=graph+%281%2B3%29+%2F+%28x%2B3%29+from+1+to+10
+    data = data * (1 + N_PHANTOM_PEOPLE) / (n_people + N_PHANTOM_PEOPLE)
+    data *= global_volume
+    return data
 
 def handle_json_post(in_json_raw, in_data):
     in_json = json.loads(in_json_raw)
@@ -376,6 +507,8 @@ def handle_post_(in_data, new_events, query_string, print_status) -> Tuple[Any, 
     #   consistent, and trust me that it's slightly nicer this way.
 
     server_clock = calculate_server_clock()
+    if recorder:
+        recorder.maybe_write(server_clock)
 
     client_write_clock = query_params.get("write_clock", None)
     if client_write_clock is not None:
@@ -626,17 +759,7 @@ def handle_post_(in_data, new_events, query_string, print_status) -> Tuple[Any, 
         n_people = wrap_get(
             n_people_queue, client_read_clock - n_samples, n_samples)
 
-        # We could scale volume by having n_people be the number of
-        # earlier people and then scale by a simple 1/n_people.  But a
-        # curve of (1 + X) / (n_people + X) falls a bit less
-        # dramatically and should sound better.
-        #
-        # Compare:
-        #   https://www.wolframalpha.com/input/?i=graph+%281%29+%2F+%28x%29+from+1+to+10
-        #   https://www.wolframalpha.com/input/?i=graph+%281%2B3%29+%2F+%28x%2B3%29+from+1+to+10
-        data = data * (1 + N_PHANTOM_PEOPLE) / (n_people + N_PHANTOM_PEOPLE)
-
-        data *= global_volume
+        data = fix_volume(data, n_people)
 
     events_to_send_list = list(events.items())
     events_to_send = [ {"evid":i[0], "clock":i[1]} for i in events_to_send_list ]
