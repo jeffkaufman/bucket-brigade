@@ -770,8 +770,8 @@ def handle_post_(in_data, new_events, query_string, print_status) -> Tuple[Any, 
     }
 
 
-    if song_start_clock:
-        x_audio_metadata["song_start_clock"] = song_start_clock
+    if state.song_start_clock:
+        x_audio_metadata["song_start_clock"] = state.song_start_clock
 
     x_audio_metadata.update(user.to_send)
     user.mark_sent()
