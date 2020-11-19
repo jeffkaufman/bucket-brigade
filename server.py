@@ -274,7 +274,7 @@ class User:
         self.send("bpm", state.bpm)
         self.send("repeats", state.repeats)
         self.send("bpr", state.bpr)
-        self.send("tracks", tracks)x
+        self.send("tracks", tracks)
 
     def flush(self) -> None:
         """Delete any state that shouldn't be persisted across reconnects"""
