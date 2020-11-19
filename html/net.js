@@ -6,11 +6,17 @@ class ServerConnectionBase {
 
   // This is how much notional time we take up between getting audio and sending it back, server-to-server. ("Notional" becuase the flow of samples is not continuous, so for most purposes the size of the chunks we send to the server must be added to this.)
   get client_window_time() {
+    if (!this.running) {
+      return undefined;
+    }
     return (this.read_clock - this.write_clock) / this.clock_reference.sample_rate;
   }
 
   // This is how far behind our target place in the audio stream we are. This must be added to the value above, to find out how closely it's safe to follow behind where we are _aiming_ to be. This value should be small and relatively stable, or something has gone wrong.
   get clientReadSlippage() {
+    if (!this.running) {
+      return undefined;
+    }
     return (this.last_server_clock - this.read_clock - this.audio_offset) / this.clock_reference.sample_rate;
   }
 }

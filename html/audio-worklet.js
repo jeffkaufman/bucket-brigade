@@ -639,7 +639,6 @@ class Player extends AudioWorkletProcessor {
         }
         output = new Float32Array(output.length);
       } else {
-        // XXX: why do we have both of these separately?
         if (this.mic_pause_mode || this.ignore_input) {
           // Mute the microphone by replacing the input with zeros.
           input = new Float32Array(input.length);

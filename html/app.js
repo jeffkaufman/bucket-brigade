@@ -111,11 +111,9 @@ export async function openMic(deviceId) {
 var server_connection;
 var loopback_mode;
 
+// XXX: I'm pretty sure these are dead, not sure if they wish to be revived.
 var synthetic_audio_source;
 var synthetic_click_interval;
-
-// Used to coordinate changes to various parameters while messages may still be in flight.
-//var epoch = 0;
 
 class AudioEncoder {
   constructor(path) {
@@ -462,6 +460,22 @@ export class BucketBrigadeContext extends EventTarget {
     });
   }
 
+  // XXX: the following two methods are legit but are supposed to be property accessors
+  set_mic_pause_mode(mode) {
+    this.playerNode.port.postMessage({
+      "type": "mic_pause_mode",
+      "enabled": mode
+    });
+  }
+
+  // XXX
+  set_speaker_pause_mode(mode) {
+    this.playerNode.port.postMessage({
+      "type": "mic_pause_mode",
+      "enabled": mode
+    });
+  }
+
   unsubscribe_and_stop_worklet() {
     this.removeEventListener("workletMessage_", this.active_handler);
     this.active_handler = null;
@@ -625,9 +639,6 @@ export class BucketBrigadeContext extends EventTarget {
     this.playerNode.port.onmessage = this.handle_message.bind(this);
     this.micNode.connect(this.playerNode);
     this.playerNode.connect(this.audioCtx.destination);
-
-    // XXX: This is not great, becase it will start the AudioWorklet, which will immediately proceed to start sending us audio, which we aren't ready for yet because we're about to go into calibration mode. However if we get enough to try to send to the server at this point, the ServerConnection will discard it anyway, since it hasn't been started yet.
-    //await this.reload_settings();
   }
 
   close() {
@@ -645,59 +656,8 @@ export class BucketBrigadeContext extends EventTarget {
     console.info("Closed BucketBrigadeContext");
   }
 
-  // Should really be named "restart everything", which is what it does.
   async reload_settings(startup) {
-    /* XXX
-    console.info("Resetting the world! Old epoch was:", epoch);
-    epoch +=1;
-    console.info("New epoch is:", epoch);
-    */
-
-    // XXX: Not guaranteed to be immediate; we should wait for it to confirm.
-    //this.stop_worklet();
-
-    //if (server_connection) {
-    //  server_connection.stop();
-    //  server_connection = null;
-    //}
-
-    //console.info("Stopped audio worklet"); // and server connection.");
-
-    //mic_buf = [];
-
-/*
-    loopback_mode = loopbackMode.value;
-
-    if (loopback_mode == "none" || loopback_mode == "server") {
-      server_connection = new ServerConnection({
-        // Support relative paths
-        target_url: new URL(serverPath.value, document.location),
-        audio_offset_seconds: parseInt(audioOffset.value),
-        userid: myUserid,
-        epoch
-      })
-    } else {
-      server_connection = new FakeServerConnection({
-        sample_rate: 48000,
-        epoch
-      })
-    }
-
-    console.info("Created new server connection, resetting encoder and decoder.");
-*/
-
-    await this.encoder.reset();
-    await this.decoder.reset();
-
-    //console.info("Reset encoder and decoder, starting audio worket again.");
-
-    // Send this before we set audio params, which declares us to be ready for audio
-    // XXX click_volume_change();
-    //this.playerNode.port.postMessage({
-    //  type: "stop"
-    //});
-
-    //this.start_worklet();
+    // XXX: this function is dead and no longer called, but still need to figure out where alarm/hook stuff goes.
 
     alarms_fired = {};
     for (let hook of start_hooks) {
@@ -710,10 +670,16 @@ export class SingerClient extends EventTarget {
   constructor(options) {
     super();
 
-    var {speakerMuted, micMuted, context} = options; // XXX unused;
+    var {speakerMuted, micMuted, context, secretId, apiUrl, offset, username} = options;
 
-    this.constructor_options = options; // XXX hacky
+    this.speakerMuted_ = speakerMuted;
+    this.micMuted_ = micMuted;
+
     this.ctx = context;
+    this.offset = offset;
+    this.secretId = secretId;
+    this.username = username;
+    this.apiUrl = apiUrl;
 
     this.hasConnectivity = false;  // XXX public readonly
     this.diagnostics = {};  // XXX public readonly, not part of formal API
@@ -722,7 +688,11 @@ export class SingerClient extends EventTarget {
       receive_cb: this.server_response.bind(this),
       failure_cb: this.server_failure.bind(this),
       metadata_cb: this.server_metadata_received.bind(this),
-      ...options
+      context: this.ctx,
+      offset: this.offset,
+      secretId: this.secretId,
+      username: this.username,
+      apiUrl: this.apiUrl,
     });
 
     this.handle_message_bound = this.handle_message.bind(this);
@@ -731,10 +701,30 @@ export class SingerClient extends EventTarget {
       this.hasConnectivity = true;
       this.mic_buf = [];
       this.ctx.subscribe_and_start_worklet(this.handle_message_bound);
+      this.ctx.set_mic_pause_mode(this.micMuted_);
+      this.ctx.set_speaker_pause_mode(this.speakerMuted_);
       this.dispatchEvent(new Event("connectivityChange"));
     }, err => {
       this.close();
     });
+  }
+
+  get speakerMuted() {
+    return this.speakerMuted_;
+  }
+
+  get micMuted() {
+    return this.micMuted_;
+  }
+
+  set speakerMuted(mode) {
+    this.speakerMuted_ = mode;
+    this.ctx.set_speaker_pause_mode(mode);
+  }
+
+  set micMuted(mode) {
+    this.micMuted_ = mode;
+    this.ctx.set_mic_pause_mode(mode);
   }
 
   close() {
@@ -745,15 +735,10 @@ export class SingerClient extends EventTarget {
     this.connection = null;
   }
 
-  new_random_id_hack() {
-    // Make us appear to be a new user, to work around issues with user session staleness on the server (and lack of a way to explicitly reset the state)
-    return Math.round(Math.random()*100000000000);
-  }
-
-  change_offset(new_slot) {
-    this.constructor_options.slot = new_slot;
+  change_offset(new_offset) {
+    this.offset = new_offset;
     if (!this.hasConnectivity) {
-      // XXX: this is wrong, will fail to change our slot properly if we change it in the middle of an outage (but this prevents complex and annoying races)
+      // XXX: this is wrong, will fail to change our offset properly if we change it in the middle of an outage (but this prevents complex and annoying races)
       return;
     }
 
@@ -764,12 +749,15 @@ export class SingerClient extends EventTarget {
     this.connection.close();
     this.connection = null;
 
-    this.constructor_options.secretId = this.new_random_id_hack();
     this.connection = new SingerClientConnection({
       receive_cb: this.server_response.bind(this),
       failure_cb: this.server_failure.bind(this),
       metadata_cb: this.server_metadata_received.bind(this),
-      ...this.constructor_options
+      context: this.ctx,
+      offset: this.offset,
+      secretId: this.secretId,
+      username: this.username,
+      apiUrl: this.apiUrl,
     });
 
 
@@ -784,9 +772,9 @@ export class SingerClient extends EventTarget {
   }
 
   // XXX: not great that this will just get dropped if we're reconnecting
-  send_metadata(key, value) {
+  x_send_metadata(key, value) {
     if (this.connection && this.hasConnectivity) {
-      this.connection.send_metadata(key, value);
+      this.connection.x_send_metadata(key, value);
     } else {
       console.warn("Can't send metadata when not connected");
     }
@@ -842,12 +830,15 @@ export class SingerClient extends EventTarget {
     this.ctx.unsubscribe_and_stop_worklet();
     this.dispatchEvent(new Event("connectivityChange"));
 
-    this.constructor_options.secretId = this.new_random_id_hack();
     this.connection = new SingerClientConnection({
       receive_cb: this.server_response.bind(this),
       failure_cb: this.server_failure.bind(this),
       metadata_cb: this.server_metadata_received.bind(this),
-      ...this.constructor_options
+      context: this.ctx,
+      offset: this.offset,
+      secretId: this.secretId,
+      username: this.username,
+      apiUrl: this.apiUrl,
     });
     this.connection.start_singing().then(result => {
       this.hasConnectivity = true;
@@ -861,20 +852,7 @@ export class SingerClient extends EventTarget {
   server_metadata_received(metadata) {
     console.info("Received metadata:", metadata);
 
-    var queue_size = metadata["queue_size"];
-    var user_summary = metadata["user_summary"] || [];
-    var tracks = metadata["tracks"] || [];
-    var chats = metadata["chats"] || [];
-    var delay_seconds = metadata["delay_seconds"];
-    var server_sample_rate = metadata["server_sample_rate"];
-    var song_start_clock = metadata["song_start_clock"];
-    var client_read_clock = metadata["client_read_clock"];
-    var server_bpm = metadata["bpm"];
-    var server_repeats = metadata["repeats"];
-    var server_bpr = metadata["bpr"];
-    var leader = metadata["leader"]
-
-    /* XXX
+    /* XXX need to fix this stuff up
     for (let ev of metadata["events"]) {
       alarms[ev["clock"]] = () => event_hooks.map(f=>f(ev["evid"]));
       console.info(ev);
@@ -885,58 +863,30 @@ export class SingerClient extends EventTarget {
     }
     */
 
-    // XXX: needs to be reimplemented in terms of alarms / marks
-    /*
-    if (song_start_clock && song_start_clock > client_read_clock) {
-      window.startSingingCountdown.style.display = "block";
-      window.countdown.innerText = Math.round(
-        (song_start_clock - client_read_clock) / server_sample_rate) + "s";
-    } else {
-      window.startSingingCountdown.style.display = "none";
-    }
-    */
-
-    // XXX: the server ordered us to change our offset. In the new world this is done.... some other way?
-    // XXX: hack hack hack
-    // XXX: this doesn't propagate to the offset field in the UI, not that it really matters
-    if (delay_seconds) {
-      if (delay_seconds > 0) {
-        this.change_offset(delay_seconds / 3);  // XXX ugh
-        return;
-      }
+    // XXX: Hack to deal with the fact that our user ID is not stable, so demo can't tell when we're leading
+    if (metadata.leader && this.secretId == metadata.leader) {
+      console.info("I am leader");
+      metadata.x_imLeading = true;
     }
 
-    // XXX: DOM stuff below this line.
-    // XXX XXX ugh
-    this.dispatchEvent(new CustomEvent("updateActiveUsers", {
+    // XXX: This is a backdoor hack for bucket brigade that should mostly get refactored away
+    this.dispatchEvent(new CustomEvent("x_metadataReceived", {
       detail: {
-        user_summary,
-        server_sample_rate,
-        leader,
+        metadata
       }
     }));
 
-    /*
-    chats.forEach((msg) => receiveChatMessage(msg[0], msg[1]));
-    update_backing_tracks(tracks);
-    */
-
-    // XXX: this is round stuff I guess? Not sure what the interface for this is.
-    /*
-    if (server_bpm) {
-      window.bpm.value = server_bpm;
-    }
-    if (server_repeats) {
-      window.repeats.value = server_repeats;
-    }
-    if (server_bpr) {
-      window.bpr.value = server_bpr;
-    }
-    */
     // This is how closely it's safe to follow behind us, if you get as unlucky as possible (and try to read _just_ before we write).
-    // XXX don't have the info to compute this here -> this.diagnostics.client_total_time = this.server_connection.client_window_time + play_chunk.length_seconds;
+    var client_window_time = this.connection?.server_connection?.client_window_time;
+    if (client_window_time) {
+      // We used to have access to the length of the chunk in seconds here, but it's missing since I split metadata handling from chunk handling, oops. So we divide.
+      this.diagnostics.client_total_time = client_window_time + metadata.n_samples / metadata.server_sample_rate;
+    }
+
     // This is how far behind our target place in the audio stream we are. This must be added to the value above, to find out how closely it's safe to follow behind where we are _aiming_ to be. This value should be small and relatively stable, or something has gone wrong.
-    // XXX don't have the info to compute this here -> this.diagnostics.client_read_slippage = this.server_connection.clientReadSlippage;
+    if (this.connection?.server_connection?.clientReadSlippage) {
+      this.diagnostics.client_read_slippage = this.connection.server_connection.clientReadSlippage;
+    }
 
     this.dispatchEvent(new Event("diagnosticChange"));
   }
@@ -948,7 +898,7 @@ export class SingerClient extends EventTarget {
 // but the ones related to encoding/decoding we can't.
 export class SingerClientConnection {
   constructor(options) {
-    var {context, secretId, slot, username, apiUrl, receive_cb, failure_cb, metadata_cb} = options;
+    var {context, secretId, offset, username, apiUrl, receive_cb, failure_cb, metadata_cb} = options;
     // XXX: add loopback mode?
 
     this.receive_cb = receive_cb;
@@ -957,8 +907,7 @@ export class SingerClientConnection {
 
     this.apiUrl = apiUrl;
 
-    this.slot = slot;
-    this.audio_offset_seconds = this.slot * 3;  // XXX
+    this.audio_offset_seconds = offset;
 
     this.ctx = context;
     this.secretId = secretId;
@@ -974,7 +923,9 @@ export class SingerClientConnection {
     this.userid = secretId;
     this.username = username;
 
-    this.metadata_to_send = {};
+    this.metadata_to_send = {
+      reset_user_state: true,  // on our first request from a new connection
+    };
     // XXX: should probably have these on here instead of the context? Unless they leak stuff (do they?) and we don't want to recreate them.
     this.encoder = this.ctx.encoder;
     this.decoder = this.ctx.decoder;
@@ -1001,7 +952,8 @@ export class SingerClientConnection {
     this.running = false;
   }
 
-  send_metadata(key, value) {
+  // Backdoor for bucket brigade to send things that shouldn't really be required in the proper API
+  x_send_metadata(key, value) {
     console.info("Setting metadata for next request:", key, value);
     this.metadata_to_send[key] = value;
   }
@@ -1012,7 +964,7 @@ export class SingerClientConnection {
     }
 
     var { metadata, chunk: response_chunk } = response;
-    if (!response_chunk) {  // XXX: this should never happen now, it should call failure instead
+    if (!response_chunk) {  // In theory this should never happen now, it should call failure instead
       this.server_failure();
       return;
     }
@@ -1026,7 +978,6 @@ export class SingerClientConnection {
       this.metadata_cb(metadata);
       return;
     }, err => {
-      // XXX: we never had an error case here, can the decoder even fail? I think we get here if the decoder throws an exception, do something sensible?
       this.server_failure(err);
       return;
     });
@@ -1068,7 +1019,7 @@ export class VolumeCalibrator extends EventTarget {
     this.hasMicInput = true;  // XXX should be readonly
 
     this.handle_message_bound = this.handle_message.bind(this);
-    this.ctx.addEventListener("workletMessage_", this.handle_message_bound);
+    this.ctx.subscribe_and_start_worklet(this.handle_message_bound);
 
     // XXX etc.
     this.ctx.set_estimate_volume_mode(true);
@@ -1076,7 +1027,7 @@ export class VolumeCalibrator extends EventTarget {
 
   close() {
     this.ctx.set_estimate_volume_mode(false);
-    this.ctx.removeEventListener("workletMessage_", this.handle_message_bound);
+    this.ctx.unsubscribe_and_stop_worklet();
   }
 
   handle_message(event) {
@@ -1119,7 +1070,7 @@ export class LatencyCalibrator extends EventTarget {
     this.hasMicInput = true;  // XXX should be readonly
 
     this.handle_message_bound = this.handle_message.bind(this);
-    this.ctx.addEventListener("workletMessage_", this.handle_message_bound);
+    this.ctx.subscribe_and_start_worklet(this.handle_message_bound);
 
     // XXX: invasive coupling, and this maybe violates the desire to allow async construction of the context
     this.ctx.send_ignore_input(false);  // XXX: this actually appears to be ignored in this mode anyway
@@ -1128,7 +1079,7 @@ export class LatencyCalibrator extends EventTarget {
 
   close() {
     this.ctx.set_estimate_latency_mode(false);
-    this.ctx.removeEventListener("workletMessage_", this.handle_message_bound);
+    this.ctx.unsubscribe_and_stop_worklet();
   }
 
   get clickVolume() {

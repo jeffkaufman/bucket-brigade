@@ -251,7 +251,6 @@ class User:
         self.last_heard_server_clock = last_heard_server_clock
         self.delay_samples = delay_samples
 
-        self.opus_state = None
         self.mic_volume = 1.0
         self.scaled_mic_volume = 1.0
         self.last_write_clock = None
@@ -269,9 +268,9 @@ class User:
         self.send("bpr", state.bpr)
         self.send("tracks", tracks)
 
+    # XXX: Are we sure we do not need to clear any of the other state across reconnects???
     def flush(self) -> None:
         """Delete any state that shouldn't be persisted across reconnects"""
-        self.opus_state = None
         self.last_seen_read_clock = None
         self.last_seen_write_clock = None
 
@@ -531,7 +530,9 @@ def handle_post_(in_data, new_events, query_string, print_status) -> Tuple[Any, 
     if not userid or not username:
         raise ValueError("missing username/id")
 
-    if client_write_clock is None:
+    reset_user_state, = query_params.get("reset_user_state", (None,))
+    # We used to do this by looking for missing client_write_clock, but that may be true on multiple requests, whereas this is only the first one.
+    if reset_user_state:
         # New session, write some debug info to disk
         logging.debug("*** New client:" + str(query_params) + "\n\n")
 
@@ -678,6 +679,7 @@ def handle_post_(in_data, new_events, query_string, print_status) -> Tuple[Any, 
                     f'{user.last_seen_write_clock} = '
                     f'{client_write_clock - n_samples - user.last_seen_write_clock})')
             if user.last_write_clock <= state.song_end_clock <= client_write_clock:
+                # XXX: I'm not sure we still consider this desirable?
                 user.send("delay_seconds", state.max_position)
 
         user.last_seen_write_clock = client_write_clock
@@ -689,6 +691,7 @@ def handle_post_(in_data, new_events, query_string, print_status) -> Tuple[Any, 
 
         in_data *= user.scaled_mic_volume
 
+        # XXX: I'm not sure we consider this desirable for ritual engine?
         # Don't keep any input unless a song is in progress.
         if (state.song_start_clock and client_write_clock > state.song_start_clock and
             (not state.song_end_clock or
