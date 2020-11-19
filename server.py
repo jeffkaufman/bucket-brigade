@@ -511,16 +511,8 @@ def handle_post_(in_data, new_events, query_string, print_status) -> Tuple[Any, 
     else:
         raise ValueError("no client read clock")
 
-    userid = None
-    userids = query_params.get("userid", None)
-
-    username = None
-    usernames = query_params.get("username", None)
-    if not userids or not usernames:
-        raise ValueError("missing username/id")
-
-    userid, = userids
-    username, = usernames
+    userid, = query_params.get("userid", [None])
+    username, = query_params.get("username", [None])
     if not userid or not username:
         raise ValueError("missing username/id")
 
@@ -535,49 +527,42 @@ def handle_post_(in_data, new_events, query_string, print_status) -> Tuple[Any, 
     update_users(userid, username, server_clock, client_read_clock)
     user = users[userid]
 
-    volumes = query_params.get("volume", None)
-    if volumes:
-        volume, = volumes
+    volume, = query_params.get("volume", [None])
+    if volume:
         state.global_volume = math.exp(6.908 * float(volume)) / 1000
 
-    backing_volumes = query_params.get("backing_volume", None)
-    if backing_volumes:
-        state.backing_volume, = backing_volumes
-        state.backing_volume = math.exp(6.908 * float(state.backing_volume)) / 1000
+    backing_volume, = query_params.get("backing_volume", [None])
+    if backing_volume:
+        state.backing_volume = math.exp(6.908 * float(backing_volume)) / 1000
 
-    msg_chats = query_params.get("chat", None)
+    msg_chats, = query_params.get("chat", [None])
     if msg_chats:
-        msg_chats, = msg_chats
         msg_chats = json.loads(msg_chats)
         for other_userid, other_user in users.items():
             if other_userid != userid:
                 for msg_chat in msg_chats:
                     other_user.chats_to_send.append((username, msg_chat))
 
-    bpms = query_params.get("bpm", None)
-    if bpms:
-        state.bpm, = bpms
-        state.bpm = int(state.bpm)
+    bpm, = query_params.get("bpm", [None])
+    if bpm:
+        state.bpm = int(bpm)
         for other_userid in users:
             users[other_userid].bpm_to_send = state.bpm
 
-    repeatss = query_params.get("repeats", None)
-    if repeatss:
-        state.repeats, = repeatss
-        state.repeats = int(state.repeats)
+    repeats, = query_params.get("repeats", [None])
+    if repeats:
+        state.repeats = int(repeats)
         for other_userid in users:
             users[other_userid].repeats_to_send = state.repeats
 
-    bprs = query_params.get("bpr", None)
-    if bprs:
-        state.bpr, = bprs
-        state.bpr = int(state.bpr)
+    bpr, = query_params.get("bpr", [None])
+    if bpr:
+        state.bpr = int(bpr)
         for other_userid in users:
             users[other_userid].bpr_to_send = state.bpr
 
-    mic_volumes = query_params.get("mic_volume", None)
-    if mic_volumes:
-        mic_volume, = mic_volumes
+    mic_volume, = query_params.get("mic_volume", [None])
+    if mic_volume:
         for other_userid, new_mic_volume in json.loads(mic_volume):
             if other_userid in users:
                 if new_mic_volume > 2:
@@ -592,9 +577,9 @@ def handle_post_(in_data, new_events, query_string, print_status) -> Tuple[Any, 
                 users[other_userid].scaled_mic_volume = math.exp(
                     6.908 * new_mic_volume * .5) / math.exp(6.908 * 0.5)
 
-    requested_tracks = query_params.get("track", None)
-    if requested_tracks and not state.song_start_clock:
-        state.requested_track, = requested_tracks
+    requested_track, = query_params.get("track", [None])
+    if requested_track and not state.song_start_clock:
+        state.requested_track = requested_track
 
     if query_params.get("request_lead", None):
         assign_delays(userid)
@@ -623,11 +608,9 @@ def handle_post_(in_data, new_events, query_string, print_status) -> Tuple[Any, 
         # They're done singing, send them to the end.
         user.delay_to_send = state.max_position
 
-    monitor_userids = query_params.get("monitor", None)
-    if monitor_userids:
-        monitor_userid, = monitor_userids
-        if monitor_userid:
-            setup_monitoring(userid, monitor_userid)
+    monitor_userid, = query_params.get("monitor", [None])
+    if monitor_userid:
+        setup_monitoring(userid, monitor_userid)
 
     # Audio from clients is summed, so we need to clear the circular
     #   buffer ahead of them. The range we are clearing was "in the
