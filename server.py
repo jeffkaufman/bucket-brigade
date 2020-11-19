@@ -251,24 +251,25 @@ def calculate_server_clock():
 
 class User:
     def __init__(self, userid, name, last_heard_server_clock, delay_samples) -> None:
+        self.list_keys = ["chats"]
+
         self.userid = userid
         self.name = name
         self.last_heard_server_clock = last_heard_server_clock
         self.delay_samples = delay_samples
-        self.chats_to_send: List[Any] = []
-        self.delay_to_send = None
+
         self.opus_state = None
         self.mic_volume = 1.0
         self.scaled_mic_volume = 1.0
         self.last_write_clock = None
         self.is_monitored = False
         self.is_monitoring = False
-        self.bpm_to_send = None
-        self.repeats_to_send = None
-        self.bpr_to_send = None
+
         # For debugging purposes only
         self.last_seen_read_clock = None
         self.last_seen_write_clock = None
+
+        self.mark_sent()
 
     def flush(self) -> None:
         """Delete any state that shouldn't be persisted across reconnects"""
@@ -276,7 +277,22 @@ class User:
         self.last_seen_read_clock = None
         self.last_seen_write_clock = None
 
+    def send(self, key, value):
+        if key in self.list_keys:
+            self.to_send[key].append(value)
+        else:
+            self.to_send[key] = value
+
+    def mark_sent(self):
+        self.to_send = {}
+        for key in self.list_keys:
+            self.to_send[key] = []
+
 users: Dict[str, Any] = {} # userid -> User
+def sendall(key, value, exclude=[]):
+    for userid, user in users.items():
+        if userid not in exclude:
+            user.send(key, value)
 
 def wrap_get(queue, start, len_vals) -> Any:
     start_in_queue = start % len(queue)
@@ -344,7 +360,7 @@ def assign_delays(userid_lead) -> None:
     if initial_position > 90:
         initial_position = 90
 
-    users[userid_lead].delay_to_send = initial_position + DELAY_INTERVAL
+    users[userid_lead].send("delay_seconds", initial_position + DELAY_INTERVAL)
 
     positions = [initial_position + x*DELAY_INTERVAL
                  for x in range(2, LAYERING_DEPTH)]
@@ -358,7 +374,7 @@ def assign_delays(userid_lead) -> None:
              for userid in users
              if userid != userid_lead])):
         position = positions[i % len(positions)]
-        users[userid].delay_to_send = position
+        users[userid].send("delay_seconds", position)
         state.max_position = max(position, state.max_position)
 
 def update_users(userid, username, server_clock, client_read_clock) -> None:
@@ -370,6 +386,9 @@ def update_users(userid, username, server_clock, client_read_clock) -> None:
     delay_samples = server_clock - client_read_clock
     if userid not in users:
         users[userid] = User(userid, username, server_clock, delay_samples)
+        users[userid].send("bpm", state.bpm)
+        users[userid].send("repeats", state.repeats)
+        users[userid].send("bpr", state.bpr)
     users[userid].last_heard_server_clock = server_clock
     users[userid].delay_samples = delay_samples
 
@@ -397,8 +416,8 @@ def setup_monitoring(monitoring_userid, monitored_userid) -> None:
     users[monitoring_userid].is_monitoring = True
     users[monitored_userid].is_monitored = True
 
-    users[monitoring_userid].delay_to_send = round(
-        users[monitored_userid].delay_samples / SAMPLE_RATE) + DELAY_INTERVAL
+    users[monitoring_userid].send("delay_seconds", round(
+        users[monitored_userid].delay_samples / SAMPLE_RATE) + DELAY_INTERVAL)
 
 def user_summary() -> List[Any]:
     summary = []
@@ -537,29 +556,23 @@ def handle_post_(in_data, new_events, query_string, print_status) -> Tuple[Any, 
 
     msg_chats, = query_params.get("chat", [None])
     if msg_chats:
-        msg_chats = json.loads(msg_chats)
-        for other_userid, other_user in users.items():
-            if other_userid != userid:
-                for msg_chat in msg_chats:
-                    other_user.chats_to_send.append((username, msg_chat))
+        for msg_chat in json.loads(msg_chats):
+            sendall("chats", (username, msg_chat), exclude=[userid])
 
     bpm, = query_params.get("bpm", [None])
     if bpm:
         state.bpm = int(bpm)
-        for other_userid in users:
-            users[other_userid].bpm_to_send = state.bpm
+        sendall("bpm", state.bpm)
 
     repeats, = query_params.get("repeats", [None])
     if repeats:
         state.repeats = int(repeats)
-        for other_userid in users:
-            users[other_userid].repeats_to_send = state.repeats
+        sendall("repeats", state.repeats)
 
     bpr, = query_params.get("bpr", [None])
     if bpr:
         state.bpr = int(bpr)
-        for other_userid in users:
-            users[other_userid].bpr_to_send = state.bpr
+        sendall("bpr", state.bpr)
 
     mic_volume, = query_params.get("mic_volume", [None])
     if mic_volume:
@@ -606,7 +619,7 @@ def handle_post_(in_data, new_events, query_string, print_status) -> Tuple[Any, 
         state.song_end_clock = user.last_write_clock
 
         # They're done singing, send them to the end.
-        user.delay_to_send = state.max_position
+        user.send("delay_seconds", state.max_position)
 
     monitor_userid, = query_params.get("monitor", [None])
     if monitor_userid:
@@ -669,7 +682,7 @@ def handle_post_(in_data, new_events, query_string, print_status) -> Tuple[Any, 
                     f'{user.last_seen_write_clock} = '
                     f'{client_write_clock - n_samples - user.last_seen_write_clock})')
             if user.last_write_clock <= state.song_end_clock <= client_write_clock:
-                user.delay_to_send = state.max_position
+                user.send("delay_seconds", state.max_position)
 
         user.last_seen_write_clock = client_write_clock
         if client_write_clock is not None:
@@ -741,16 +754,13 @@ def handle_post_(in_data, new_events, query_string, print_status) -> Tuple[Any, 
     #print(events_to_send)
     # TODO: chop events that are too old to be relevant?
 
-    # TODO: We could skip some of these keys when the values are null.
-    x_audio_metadata = json.dumps({
+    x_audio_metadata = {
         "server_clock": server_clock,
         "server_sample_rate": SAMPLE_RATE,
         "last_request_clock": saved_last_request_clock,
         "client_read_clock": client_read_clock,
         "client_write_clock": client_write_clock,
         "user_summary": user_summary(),
-        "chats": user.chats_to_send,
-        "delay_seconds": user.delay_to_send,
         "song_start_clock": state.song_start_clock,
         # It's kind of wasteful to send this on every response, but
         # it's not very many bytes, and let's just move on.
@@ -758,22 +768,18 @@ def handle_post_(in_data, new_events, query_string, print_status) -> Tuple[Any, 
         # The following uses units of 128-sample frames
         "queue_size": QUEUE_LENGTH / FRAME_SIZE,
         "events": events_to_send,
-        "bpm": user.bpm_to_send,
-        "repeats": user.repeats_to_send,
-        "bpr": user.bpr_to_send,
         "leader": state.leader,
-    })
+    }
 
-    user.chats_to_send.clear()
-    user.delay_to_send = None
-    user.bpm_to_send = None
-    user.repeats_to_send = None
-    user.bpr_to_send = None
+    for k,v in user.to_send.items():
+        x_audio_metadata[k] = v
+
+    user.mark_sent()
 
     if print_status:
         maybe_print_status()
 
-    return data, x_audio_metadata
+    return data, json.dumps(x_audio_metadata)
 
 def maybe_print_status() -> None:
     now = time.time()
