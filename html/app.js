@@ -1386,7 +1386,9 @@ async function handle_message(event) {
       // XXX: DOM stuff below this line.
       update_active_users(user_summary, server_sample_rate, leader);
       chats.forEach((msg) => receiveChatMessage(msg[0], msg[1]));
-      update_backing_tracks(tracks);
+      if (tracks) {
+        update_backing_tracks(tracks);
+      }
 
       if (server_bpm) {
         window.bpm.value = server_bpm;

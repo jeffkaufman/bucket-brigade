@@ -271,6 +271,11 @@ class User:
 
         self.mark_sent()
 
+        self.send("bpm", state.bpm)
+        self.send("repeats", state.repeats)
+        self.send("bpr", state.bpr)
+        self.send("tracks", tracks)x
+
     def flush(self) -> None:
         """Delete any state that shouldn't be persisted across reconnects"""
         self.opus_state = None
@@ -386,9 +391,7 @@ def update_users(userid, username, server_clock, client_read_clock) -> None:
     delay_samples = server_clock - client_read_clock
     if userid not in users:
         users[userid] = User(userid, username, server_clock, delay_samples)
-        users[userid].send("bpm", state.bpm)
-        users[userid].send("repeats", state.repeats)
-        users[userid].send("bpr", state.bpr)
+
     users[userid].last_heard_server_clock = server_clock
     users[userid].delay_samples = delay_samples
 
@@ -761,18 +764,16 @@ def handle_post_(in_data, new_events, query_string, print_status) -> Tuple[Any, 
         "client_read_clock": client_read_clock,
         "client_write_clock": client_write_clock,
         "user_summary": user_summary(),
-        "song_start_clock": state.song_start_clock,
-        # It's kind of wasteful to send this on every response, but
-        # it's not very many bytes, and let's just move on.
-        "tracks": tracks,
-        # The following uses units of 128-sample frames
-        "queue_size": QUEUE_LENGTH / FRAME_SIZE,
+        "queue_size": QUEUE_LENGTH / FRAME_SIZE, # in 128-sample frames
         "events": events_to_send,
         "leader": state.leader,
     }
 
     for k,v in user.to_send.items():
         x_audio_metadata[k] = v
+
+    if song_start_clock:
+        x_audio_metadata["song_start_clock"] = song_start_clock
 
     user.mark_sent()
 
