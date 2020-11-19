@@ -31,21 +31,36 @@ pr.disable()
 
 FRAME_SIZE = 128
 
-last_request_clock = None
-last_cleared_clock = None
-first_client_write_clock = None
-first_client_total_samples = None
-first_client_value = None
-global_volume = 1.0
-backing_volume = 1.0
-song_end_clock = 0
-song_start_clock = None
-requested_track: Any = None
+class State():
+    def __init__(self):
+        self.reset()
 
-bpm = None
-repeats = 0
-bpr = None
-leader = None
+    def reset(self):
+        self.last_request_clock = None
+        self.last_cleared_clock = None
+        self.global_volume = 1.0
+        self.backing_volume = 1.0
+        self.song_end_clock = 0
+        self.song_start_clock = None
+        self.requested_track: Any = None
+
+        self.bpm = None
+        self.repeats = 0
+        self.bpr = None
+        self.leftover_beat_samples = 0
+
+        self.leader = None
+
+        self.metronome_on = False
+        self.backing_track: Any = np.zeros(0)
+        self.backing_track_index = 0
+
+        self.max_position = DELAY_INTERVAL*LAYERING_DEPTH
+
+        self.last_status_ts = 0.0
+
+        if recorder:
+            recorder.reset()
 
 QUEUE_SECONDS = 120
 
@@ -79,8 +94,6 @@ def clear_whole_buffer():
     monitor_queue.fill(0)
     n_people_queue.fill(0)
 
-max_position = DELAY_INTERVAL*LAYERING_DEPTH
-
 # For volume scaling.
 N_PHANTOM_PEOPLE = 2
 
@@ -112,7 +125,7 @@ class Recorder:
         # While we want to read from the specified clock position in
         # the buffer, we don't want to do that until enough time has
         # passed that whoever was going to sing has had a chance to.
-        return (max_position + 2)*SAMPLE_RATE
+        return (state.max_position + 2)*SAMPLE_RATE
 
     def start_(self):
         self.cleanup_()
@@ -123,7 +136,7 @@ class Recorder:
         self.out.setframerate(SAMPLE_RATE)
 
         self.written = 0
-        self.last_clock = song_start_clock - 1
+        self.last_clock = state.song_start_clock - 1
 
     def end_(self):
         self.out.close()
@@ -133,13 +146,17 @@ class Recorder:
         self.out.writeframes((samples * 2**14).astype(np.int16))
         self.written += len(samples)
 
+    def reset(self):
+        if self.out:
+            self.end_()
+
     def maybe_write(self, server_clock):
         if self.out:
             pass
-        elif (song_start_clock and
-            (song_start_clock + self.read_offset() <
+        elif (state.song_start_clock and
+            (state.song_start_clock + self.read_offset() <
              server_clock <
-             song_start_clock + self.read_offset() + SAMPLE_RATE*5)):
+             state.song_start_clock + self.read_offset() + SAMPLE_RATE*5)):
             self.start_()
         else:
             return
@@ -151,8 +168,8 @@ class Recorder:
         begin = self.last_clock + 1
         end = server_clock - self.read_offset()
         ready_to_close = False
-        if song_end_clock and song_end_clock < end:
-            end = song_end_clock
+        if state.song_end_clock and state.song_end_clock < end:
+            end = state.song_end_clock
             ready_to_close = True
 
         n_samples = end - begin
@@ -203,6 +220,8 @@ class Recorder:
         self.update_directory_listing_()
 
 recorder = Recorder() if RECORDING_ENABLED else None
+
+state = State()
 
 events: Dict[str, str] = {}
 
@@ -290,47 +309,37 @@ def wrap_assign(queue, start, vals) -> None:
         queue[start_in_queue:(start_in_queue+first_section_size)] = vals[:first_section_size]
         queue[0:second_section_size] = vals[first_section_size:]
 
-metronome_on = False
-backing_track: Any = np.zeros(0)
-backing_track_index = 0
 def run_backing_track() -> None:
-    global backing_track
-    global backing_track_index
-    global requested_track
-    global metronome_on
-
-    if requested_track == METRONOME:
-        metronome_on = True
+    if state.requested_track == METRONOME:
+        state.metronome_on = True
         backfill_metronome()
-    elif requested_track in tracks:
-        with wave.open(os.path.join(AUDIO_DIR, requested_track)) as inf:
+    elif state.requested_track in tracks:
+        with wave.open(os.path.join(AUDIO_DIR, state.requested_track)) as inf:
             if inf.getnchannels() != 1:
                 raise Exception(
-                    "wrong number of channels on %s" % requested_track)
+                    "wrong number of channels on %s" % state.requested_track)
             if inf.getsampwidth() != 2:
                 raise Exception(
-                    "wrong sample width on %s" % requested_track)
+                    "wrong sample width on %s" % state.requested_track)
             if inf.getframerate() != 48000:
                 raise Exception(
-                    "wrong sample rate on %s" % requested_track)
+                    "wrong sample rate on %s" % state.requested_track)
 
-            backing_track = np.frombuffer(
+            state.backing_track = np.frombuffer(
                 inf.readframes(-1), np.int16).astype(np.float32) / (2**15)
-            backing_track *= 0.8 # turn it down a bit
-            backing_track_index = 0
+            state.backing_track *= 0.8 # turn it down a bit
+            state.backing_track_index = 0
 
     # Backing track is used only once.
-    requested_track = None
+    state.requested_track = None
 
 def assign_delays(userid_lead) -> None:
-    global max_position
-
     initial_position = 0
 
-    if bpr and bpm and repeats:
-        beat_length_s = 60 / bpm
-        repeat_length_s = beat_length_s * bpr
-        initial_position += int(repeat_length_s*repeats)
+    if state.bpr and state.bpm and state.repeats:
+        beat_length_s = 60 / state.bpm
+        repeat_length_s = beat_length_s * state.bpr
+        initial_position += int(repeat_length_s*state.repeats)
 
     if initial_position > 90:
         initial_position = 90
@@ -343,14 +352,14 @@ def assign_delays(userid_lead) -> None:
     # Randomly shuffle the remaining users, and assign them to positions. If we
     # have more users then positions, then double up.
     # TODO: perhaps we should prefer to double up from the end?
-    max_position = initial_position + DELAY_INTERVAL*2
+    state.max_position = initial_position + DELAY_INTERVAL*2
     for i, (_, userid) in enumerate(sorted(
             [(random.random(), userid)
              for userid in users
              if userid != userid_lead])):
         position = positions[i % len(positions)]
         users[userid].delay_to_send = position
-        max_position = max(position, max_position)
+        state.max_position = max(position, state.max_position)
 
 def update_users(userid, username, server_clock, client_read_clock) -> None:
     # Delete expired users BEFORE adding us to the list, so that our session
@@ -372,6 +381,9 @@ def clean_users(server_clock) -> None:
             to_delete.append(userid)
     for userid in to_delete:
         del users[userid]
+
+    if not users:
+        state.reset()
 
 def setup_monitoring(monitoring_userid, monitored_userid) -> None:
     for user in users.values():
@@ -401,14 +413,11 @@ def user_summary() -> List[Any]:
     summary.sort()
     return summary[:50]
 
-leftover_beat_samples = 0
 def write_metronome(clear_index, clear_samples):
-    global leftover_beat_samples
-
     metronome_samples = np.zeros(clear_samples, np.float32)
 
-    if bpm is not None:
-        beat_samples = SAMPLE_RATE * 60 // bpm
+    if state.bpm is not None:
+        beat_samples = SAMPLE_RATE * 60 // state.bpm
 
         # We now want to mark a beat at positions matching
         #   leftover_beat_samples + N*beat_samples
@@ -416,18 +425,18 @@ def write_metronome(clear_index, clear_samples):
         # just decrease leftover_beat_samples.
 
         remaining_clear_samples = clear_samples
-        while leftover_beat_samples < remaining_clear_samples:
-            remaining_clear_samples -= leftover_beat_samples
+        while state.leftover_beat_samples < remaining_clear_samples:
+            remaining_clear_samples -= state.leftover_beat_samples
             metronome_samples[-remaining_clear_samples] = 1
-            leftover_beat_samples = beat_samples
-        leftover_beat_samples -= remaining_clear_samples
+            state.leftover_beat_samples = beat_samples
+        state.leftover_beat_samples -= remaining_clear_samples
 
     wrap_assign(audio_queue, clear_index, metronome_samples)
 
 def backfill_metronome():
     # fill all time between song_start_clock and last_cleared_clock
     # with the current beat
-    write_metronome(song_start_clock, last_cleared_clock - song_start_clock)
+    write_metronome(state.song_start_clock, state.last_cleared_clock - state.song_start_clock)
 
 def update_audio(pos, n_samples, in_data, is_monitored):
     old_audio = wrap_get(audio_queue, pos, n_samples)
@@ -442,8 +451,8 @@ def update_audio(pos, n_samples, in_data, is_monitored):
     wrap_assign(n_people_queue, pos, new_n_people)
 
 def repeat_length_samples():
-    beat_length_s = 60 / bpm
-    repeat_length_s = beat_length_s * bpr
+    beat_length_s = 60 / state.bpm
+    repeat_length_s = beat_length_s * state.bpr
     return int(repeat_length_s * SAMPLE_RATE)
 
 def fix_volume(data, n_people):
@@ -456,7 +465,7 @@ def fix_volume(data, n_people):
     #   https://www.wolframalpha.com/input/?i=graph+%281%29+%2F+%28x%29+from+1+to+10
     #   https://www.wolframalpha.com/input/?i=graph+%281%2B3%29+%2F+%28x%2B3%29+from+1+to+10
     data = data * (1 + N_PHANTOM_PEOPLE) / (n_people + N_PHANTOM_PEOPLE)
-    data *= global_volume
+    data *= state.global_volume
     return data
 
 def handle_json_post(in_json_raw, in_data):
@@ -481,23 +490,6 @@ def handle_post(in_data, new_events, query_string, print_status) -> Tuple[Any, s
         return handle_post_(in_data, new_events, query_string, print_status)
 
 def handle_post_(in_data, new_events, query_string, print_status) -> Tuple[Any, str]:
-    global last_request_clock
-    global first_client_write_clock
-    global first_client_total_samples
-    global first_client_value
-    global global_volume
-    global backing_volume
-    global song_end_clock
-    global song_start_clock
-    global requested_track
-    global backing_track_index
-    global metronome_on
-    global bpm
-    global repeats
-    global bpr
-    global leader
-    global last_cleared_clock
-
     query_params = urllib.parse.parse_qs(query_string, strict_parsing=True)
 
     # NOTE NOTE NOTE:
@@ -546,12 +538,12 @@ def handle_post_(in_data, new_events, query_string, print_status) -> Tuple[Any, 
     volumes = query_params.get("volume", None)
     if volumes:
         volume, = volumes
-        global_volume = math.exp(6.908 * float(volume)) / 1000
+        state.global_volume = math.exp(6.908 * float(volume)) / 1000
 
     backing_volumes = query_params.get("backing_volume", None)
     if backing_volumes:
-        backing_volume, = backing_volumes
-        backing_volume = math.exp(6.908 * float(backing_volume)) / 1000
+        state.backing_volume, = backing_volumes
+        state.backing_volume = math.exp(6.908 * float(state.backing_volume)) / 1000
 
     msg_chats = query_params.get("chat", None)
     if msg_chats:
@@ -564,24 +556,24 @@ def handle_post_(in_data, new_events, query_string, print_status) -> Tuple[Any, 
 
     bpms = query_params.get("bpm", None)
     if bpms:
-        bpm, = bpms
-        bpm = int(bpm)
+        state.bpm, = bpms
+        state.bpm = int(state.bpm)
         for other_userid in users:
-            users[other_userid].bpm_to_send = bpm
+            users[other_userid].bpm_to_send = state.bpm
 
     repeatss = query_params.get("repeats", None)
     if repeatss:
-        repeats, = repeatss
-        repeats = int(repeats)
+        state.repeats, = repeatss
+        state.repeats = int(state.repeats)
         for other_userid in users:
-            users[other_userid].repeats_to_send = repeats
+            users[other_userid].repeats_to_send = state.repeats
 
     bprs = query_params.get("bpr", None)
     if bprs:
-        bpr, = bprs
-        bpr = int(bpr)
+        state.bpr, = bprs
+        state.bpr = int(state.bpr)
         for other_userid in users:
-            users[other_userid].bpr_to_send = bpr
+            users[other_userid].bpr_to_send = state.bpr
 
     mic_volumes = query_params.get("mic_volume", None)
     if mic_volumes:
@@ -601,35 +593,35 @@ def handle_post_(in_data, new_events, query_string, print_status) -> Tuple[Any, 
                     6.908 * new_mic_volume * .5) / math.exp(6.908 * 0.5)
 
     requested_tracks = query_params.get("track", None)
-    if requested_tracks and not song_start_clock:
-        requested_track, = requested_tracks
+    if requested_tracks and not state.song_start_clock:
+        state.requested_track, = requested_tracks
 
     if query_params.get("request_lead", None):
         assign_delays(userid)
-        song_start_clock = None
-        song_end_clock = 0
-        metronome_on = False
-        leader = userid
+        state.song_start_clock = None
+        state.song_end_clock = 0
+        state.metronome_on = False
+        state.leader = userid
         clear_whole_buffer()
 
     if query_params.get("mark_start_singing", None):
-        song_start_clock = user.last_write_clock
-        song_end_clock = 0
-        metronome_on = False
-        if bpm and bpr and repeats:
-            requested_track = METRONOME
-        if requested_track:
+        state.song_start_clock = user.last_write_clock
+        state.song_end_clock = 0
+        state.metronome_on = False
+        if state.bpm and state.bpr and state.repeats:
+            state.requested_track = METRONOME
+        if state.requested_track:
             run_backing_track()
 
     if query_params.get("mark_stop_singing", None):
         # stop the backing track from playing, if it's still going
-        backing_track_index = len(backing_track)
-        metronome_on = False
-        leader = None
-        song_end_clock = user.last_write_clock
+        state.backing_track_index = len(state.backing_track)
+        state.metronome_on = False
+        state.leader = None
+        state.song_end_clock = user.last_write_clock
 
         # They're done singing, send them to the end.
-        user.delay_to_send = max_position
+        user.delay_to_send = state.max_position
 
     monitor_userids = query_params.get("monitor", None)
     if monitor_userids:
@@ -641,41 +633,41 @@ def handle_post_(in_data, new_events, query_string, print_status) -> Tuple[Any, 
     #   buffer ahead of them. The range we are clearing was "in the
     #   future" as of the last request, and we never touch the future,
     #   so nothing has touched it yet "this time around".
-    if last_request_clock is not None:
-        clear_samples = min(server_clock - last_request_clock, QUEUE_LENGTH)
-        clear_index = last_request_clock
+    if state.last_request_clock is not None:
+        clear_samples = min(server_clock - state.last_request_clock, QUEUE_LENGTH)
+        clear_index = state.last_request_clock
         wrap_assign(
             n_people_queue, clear_index, np.zeros(clear_samples, np.int16))
         wrap_assign(
             monitor_queue, clear_index, np.zeros(clear_samples, np.float32))
-        last_cleared_clock = clear_index + clear_samples
+        state.last_cleared_clock = clear_index + clear_samples
 
-        max_backing_track_samples = len(backing_track) - backing_track_index
+        max_backing_track_samples = len(state.backing_track) - state.backing_track_index
         backing_track_samples = min(max_backing_track_samples, clear_samples)
         if backing_track_samples > 0:
             wrap_assign(
-                audio_queue, clear_index, backing_track[
-                    backing_track_index :
-                    backing_track_index + backing_track_samples]
-                * backing_volume)
-            backing_track_index += backing_track_samples
+                audio_queue, clear_index, state.backing_track[
+                    state.backing_track_index :
+                    state.backing_track_index + backing_track_samples]
+            * state.backing_volume)
+            state.backing_track_index += backing_track_samples
             clear_samples -= backing_track_samples
             clear_index += backing_track_samples
 
-            if backing_track_index == len(backing_track):
+            if state.backing_track_index == len(state.backing_track):
                 # the song has ended, mark it so
-                song_end_clock = clear_index
+                state.song_end_clock = clear_index
 
         if clear_samples > 0:
-            if metronome_on:
+            if state.metronome_on:
                 write_metronome(clear_index, clear_samples)
             else:
                 wrap_assign(
                     audio_queue, clear_index,
                     np.zeros(clear_samples, np.float32))
 
-    saved_last_request_clock = last_request_clock
-    last_request_clock = server_clock
+    saved_last_request_clock = state.last_request_clock
+    state.last_request_clock = server_clock
 
     n_samples = len(in_data)
 
@@ -693,8 +685,8 @@ def handle_post_(in_data, new_events, query_string, print_status) -> Tuple[Any, 
                     f'{client_write_clock - n_samples} - '
                     f'{user.last_seen_write_clock} = '
                     f'{client_write_clock - n_samples - user.last_seen_write_clock})')
-            if user.last_write_clock <= song_end_clock <= client_write_clock:
-                user.delay_to_send = max_position
+            if user.last_write_clock <= state.song_end_clock <= client_write_clock:
+                user.delay_to_send = state.max_position
 
         user.last_seen_write_clock = client_write_clock
         if client_write_clock is not None:
@@ -706,15 +698,15 @@ def handle_post_(in_data, new_events, query_string, print_status) -> Tuple[Any, 
         in_data *= user.scaled_mic_volume
 
         # Don't keep any input unless a song is in progress.
-        if (song_start_clock and client_write_clock > song_start_clock and
-            (not song_end_clock or
-             client_write_clock - n_samples < song_end_clock)):
+        if (state.song_start_clock and client_write_clock > state.song_start_clock and
+            (not state.song_end_clock or
+             client_write_clock - n_samples < state.song_end_clock)):
 
             pos = client_write_clock - n_samples
             update_audio(pos, n_samples, in_data, user.is_monitored)
 
-            if bpr and bpm and repeats:
-                for i in range(repeats):
+            if state.bpr and state.bpm and state.repeats:
+                for i in range(state.repeats):
                     repeat_pos = pos + repeat_length_samples()*i
                     if repeat_pos + n_samples < server_clock:
                         update_audio(repeat_pos, n_samples, in_data, False)
@@ -748,9 +740,9 @@ def handle_post_(in_data, new_events, query_string, print_status) -> Tuple[Any, 
         # only keeping input when a song is in progress, but the
         # metronome, backing track, and round singing are also forms
         # of input that check doesn't catch.
-        if song_start_clock and (
-                not song_end_clock or
-                client_read_clock - n_samples < song_end_clock):
+        if state.song_start_clock and (
+                not state.song_end_clock or
+                client_read_clock - n_samples < state.song_end_clock):
             data = wrap_get(audio_queue, client_read_clock - n_samples,
                             n_samples)
         else:
@@ -776,7 +768,7 @@ def handle_post_(in_data, new_events, query_string, print_status) -> Tuple[Any, 
         "user_summary": user_summary(),
         "chats": user.chats_to_send,
         "delay_seconds": user.delay_to_send,
-        "song_start_clock": song_start_clock,
+        "song_start_clock": state.song_start_clock,
         # It's kind of wasteful to send this on every response, but
         # it's not very many bytes, and let's just move on.
         "tracks": tracks,
@@ -786,7 +778,7 @@ def handle_post_(in_data, new_events, query_string, print_status) -> Tuple[Any, 
         "bpm": user.bpm_to_send,
         "repeats": user.repeats_to_send,
         "bpr": user.bpr_to_send,
-        "leader": leader,
+        "leader": state.leader,
     })
 
     user.chats_to_send.clear()
@@ -800,11 +792,9 @@ def handle_post_(in_data, new_events, query_string, print_status) -> Tuple[Any, 
 
     return data, x_audio_metadata
 
-last_status_ts = 0.0
 def maybe_print_status() -> None:
-    global last_status_ts
     now = time.time()
-    if now - last_status_ts < STATUS_PRINT_INTERVAL_S:
+    if now - state.last_status_ts < STATUS_PRINT_INTERVAL_S:
         return
 
     print("-"*70)
@@ -818,7 +808,7 @@ def maybe_print_status() -> None:
             "m" if is_monitored else " ",
             "M" if is_monitoring else " "))
 
-    last_status_ts = now
+    state.last_status_ts = now
 
 if __name__ == "__main__":
     print("Run server_wrapper.py or shm.py instead")
