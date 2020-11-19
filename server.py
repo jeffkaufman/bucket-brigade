@@ -756,6 +756,7 @@ def handle_post_(in_data, new_events, query_string, print_status) -> Tuple[Any, 
         "last_request_clock": saved_last_request_clock,
         "client_read_clock": client_read_clock,
         "client_write_clock": client_write_clock,
+        "n_samples": n_samples,
         "user_summary": user_summary(),
         "queue_size": QUEUE_LENGTH / FRAME_SIZE, # in 128-sample frames
         "events": events_to_send,

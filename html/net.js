@@ -16,14 +16,14 @@ class ServerConnectionBase {
 }
 
 export class ServerConnection extends ServerConnectionBase {
-  constructor({ target_url, audio_offset_seconds, userid, epoch }) {
+  constructor({ target_url, audio_offset_seconds, userid, receive_cb, failure_cb }) {
     super();
 
     check(
       target_url !== undefined &&
       audio_offset_seconds !== undefined &&
-      userid !== undefined,
-      "target_url, audio_offset_seconds, userid must be provided as named parameters");
+      userid !== undefined &&
+      "target_url, audio_offset_seconds, userid, receive_cb must be provided as named parameters");
     check(target_url instanceof URL, "target_url must be a URL");
     check(typeof audio_offset_seconds == "number", "audio_offset_seconds must be a number");
     check(Number.isInteger(userid), "userid must be an integer")
@@ -35,17 +35,19 @@ export class ServerConnection extends ServerConnectionBase {
     this.userid = userid;
     this.send_metadata = {};
     this.running = false;
-    this.app_epoch = epoch;
+    this.receive_cb = receive_cb;
+    this.failure_cb = failure_cb;
   }
 
   async start() {
-    if (this.running) {
+    if (this.running || this.starting) {
       console.warn("ServerConnection already started, ignoring");
       return;
     }
+    this.starting = true;
 
     const server_clock_data = await query_server_clock(this.target_url);
-    if (!server_clock_data) {
+    if (!server_clock_data || !this.starting) {
       return false;
     }
     var { server_clock, server_sample_rate } = server_clock_data;
@@ -54,10 +56,12 @@ export class ServerConnection extends ServerConnectionBase {
     this.audio_offset = this.audio_offset_seconds * server_sample_rate;
     this.read_clock = server_clock - this.audio_offset;
     this.running = true;
+    this.starting = false;
     return true;
   }
 
   stop() {
+    this.starting = false;
     this.running = false;
   }
 
@@ -65,14 +69,10 @@ export class ServerConnection extends ServerConnectionBase {
     this.send_metadata = send_metadata;
   }
 
-  async send(chunk) {
+  send(chunk) {
     if (!this.running) {
       console.warn("Not sending to server because not running");
-      return {
-        metadata: {},
-        epoch: this.app_epoch,
-        chunk: null
-      };
+      return;
     }
     chunk.check_clock_reference(this.clock_reference);
     var chunk_data = null;
@@ -96,47 +96,61 @@ export class ServerConnection extends ServerConnectionBase {
     var saved_read_clock = this.read_clock;
     var saved_write_clock = this.write_clock;
 
-    var response = await samples_to_server(chunk_data, this.target_url, {
+    /*var response = await */ samples_to_server(chunk_data, this.target_url, {
       read_clock: this.read_clock,
       write_clock: this.write_clock,
       n_samples: chunk.length,
       userid: this.userid,
       ... this.send_metadata
-    });
+    }).then(this.server_response.bind(this), this.server_failure.bind(this));
+  }
+
+  server_failure(e) {
+    console.warn("Failure talking to server:", e);
+    this.failure_cb();
+    this.stop();
+    return;
+  }
+
+  server_response(response) {
     if (!response) {
-      return null;
+      this.server_failure();
+      return;
     }
     if (!this.running) {
       console.warn("ServerConnection stopped while waiting for response from server");
-      return {
-        metadata: {},
-        epoch: this.app_epoch,
-        chunk: null
-      };
+      return;
     }
 
     var metadata = response.metadata;
-    check(this.server_sample_rate == metadata.sample_rate, "wrong sample rate from server");
-    check(saved_read_clock == metadata.client_read_clock, "wrong read clock from server");
-    check(saved_write_clock === null || saved_write_clock == metadata.client_write_clock, "wrong write clock from server");
+    try {
+      check(this.server_sample_rate == metadata.sample_rate, "wrong sample rate from server");
+      // XXX check(saved_read_clock == metadata.client_read_clock, "wrong read clock from server");
+      // XXX check(saved_write_clock === null || saved_write_clock == metadata.client_write_clock, "wrong write clock from server");
+    } catch(e) {
+      this.server_failure(e);
+      return;
+    }
+
     this.last_server_clock = metadata.server_clock;
 
     var result_interval = new ClockInterval({
       reference: this.clock_reference,
-      end: saved_read_clock,
-      length: chunk.length  // assume we got what we asked for; since it's compressed we can't check, but when we decompress it we will check automatically
+      end: metadata.client_read_clock,
+      length: metadata.n_samples,
     });
-    return {
+    this.receive_cb({
       epoch: this.app_epoch,
       metadata,
       chunk: new CompressedAudioChunk({
         interval: result_interval,
         data: new Uint8Array(response.data)
       })
-    };
+    });
   }
 }
 
+// XXX: this is now very broken
 export class FakeServerConnection extends ServerConnectionBase {
   constructor({ sample_rate, epoch }) {
     super();
@@ -211,9 +225,11 @@ export class FakeServerConnection extends ServerConnectionBase {
   }
 }
 
+// XXX this is not great, we will just hang around chaining 1s promises forever until the server comes back up... maybe that's what we want? but there's no higher-level control over the process.
 function fetch_with_retry(resource, init) {
   return fetch(resource, init).catch(async () => {
     await new Promise((resolve) => {
+      console.warn("fetch_with_retry failed, waiting 1s", resource);
       setTimeout(resolve, 1000);
     });
     return fetch_with_retry(resource, init);
@@ -225,7 +241,10 @@ export async function query_server_clock(target_url) {
   const fetch_init = {method: "get", cache: "no-store"};
   const fetch_result = await fetch(target_url, fetch_init)
     // Retry immediately on first failure; wait one second after subsequent ones
-    .catch(() => fetch_with_retry(target_url, fetch_init));
+    .catch(() => {
+      console.warn("First fetch failed in query_server_clock, retrying");
+      return fetch_with_retry(target_url, fetch_init)
+    });
 
   if (!fetch_result.ok) {
     throw({

@@ -50,10 +50,6 @@ class ClockedRingBuffer {
     this.last_write_clock = null;
   }
 
-  buffered_data() {
-    return this.buffered_data;
-  }
-
   // Note: We can get writes out of order, so having space left is
   //   no guarantee that a given write will succeed.
   space_left() {
@@ -70,10 +66,6 @@ class ClockedRingBuffer {
       throw "Bad offset:" + offset;
     }
     return real_offset;
-  }
-
-  get_read_clock() {
-    return this.read_clock;
   }
 
   read_into(buf) {
@@ -107,7 +99,7 @@ class ClockedRingBuffer {
       }
     }
     if (underflowed) {
-      this.port.postMessage({type: "underflow"});
+      // XXX this.port.postMessage({type: "underflow"});
     }
     if (errors.length > 0) {
       var err_uniq = Array.from(new Set(errors));
@@ -132,7 +124,7 @@ class ClockedRingBuffer {
       // XXX TODO: Seeing an underflow should make us allocate more client slack .... but that's tricky because it will cause a noticeable glitch on the server as our window expands (but at this point it's probably too late to prevent that)
       // * It would also make sense to instead just try to drop some audio and recover. (Although audio trapped in the audiocontext pipeline buffers cannot be dropped without restarting the whole thing.)
       // XXX this used to be an error log
-      lib.log_every(12800, "buf_read underflow", "Buffer underflow :-( leadin_samples:", this.leadin_samples, "read_clock:", this.read_clock, "buffered_data:", this.buffered_data, "space_left:", this.space_left());
+      lib.log_every(12800, "buf_read underflow", "Buffer underflow :-( leadin_samples:", this.leadin_samples, "read_clock:", this.read_clock, "buffered_data:", this.buffered_data, "space_left:", this.space_left(), "last_write_clock:", this.last_write_clock);
       this.read_clock++;
       this.buffered_data--;
       return null;
@@ -178,11 +170,16 @@ class ClockedRingBuffer {
       throw new Error("Buffer overflow");
     }
     if (!isNaN(this.buf[this.real_offset(write_clock)])) {
-      // This is a "false" buffer overflow -- we are overwriting some past data that the reader skipped over (presumably due to an underflow.) Just write it anyway.
+      // This is a "false" buffer overflow -- we are overwriting some past data that the reader skipped over (presumably due to an underflow.) Just write it anyway. (XXX: this should never happen I think, and I never observe it.)
       // XXX this used to be a warning log
       lib.log_every(12800, "sorta_overflow", "Writing over existing buffered data; write_clock:", write_clock, "read_clock:", this.read_clock, "buffered_data:", this.buffered_data, "space_left:", this.space_left());
     }
-    this.buf[this.real_offset(write_clock)] = value;
+    if (this.buffered_data >= 0) {
+      this.buf[this.real_offset(write_clock)] = value;
+    } else {
+      // Don't write into the buffer if we're behind the read pointer, it will just fuck us up later when we wrap around to it
+      lib.log_every(12800, "compensated_underflow", "Compensating for underflow by discarding data until we reach the read pointer");
+    }
     this.buffered_data++;
   }
 }

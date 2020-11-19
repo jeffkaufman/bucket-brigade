@@ -180,13 +180,17 @@ def do_GET(environ, start_response) -> None:
              "server_sample_rate": server.SAMPLE_RATE,
          })),
          ("Content-Type", "application/octet-stream")])
-    return b'',
+    # If we give a 0-byte response, Chrome Dev Tools gives a misleading error (see https://stackoverflow.com/questions/57477805/why-do-i-get-fetch-failed-loading-when-it-actually-worked)
+    return b'ok',
 
 def die500(start_response, e):
-    trb = "%s: %s\n\n%s" % (e.__class__.__name__, e, traceback.format_exc())
+    trb = ("%s: %s\n\n%s" % (e.__class__.__name__, e, traceback.format_exc())).encode("utf-8")
 
-    start_response('500 Internal Server Error', [
-        ('content-type', 'text/plain'),
+    start_response('200 OK', [  # XXX ?
+        ('Content-Type', 'text/plain'),
+        ("Access-Control-Allow-Origin", "*"),
+        ("Access-Control-Allow-Headers", "Content-Type, X-Event-Data"),
+        ("Access-Control-Expose-Headers", "X-Audio-Metadata"),
         ("X-Audio-Metadata", json.dumps({
             "kill_client": True,
             "message": str(e)

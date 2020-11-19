@@ -131,9 +131,18 @@ class AudioEncoder {
     if (ev.data?.type === 'exception') {
       throw ev.data.exception;
     }
-    var queue_entry = this.request_queue.shift();
+    if (this.request_queue.length == 0) {
+      // This may happen if we were reset, and is okay.
+      console.warn("AudioEncoder got response when no requests in flight", ev);
+      return;
+    }
     var response_id = ev.data.request_id;
-    check(queue_entry[0] == response_id, "Responses out of order", queue_entry, ev.data);
+    if(this.request_queue[0][0] != response_id) {
+      // This may happen if we were reset, and is okay.
+      console.warn("AudioEncoder got response not matching first in-flight request, discarding", ev, this.request_queue[0]);
+      return;
+    }
+    var queue_entry = this.request_queue.shift();
     if (ev.data.status != 0) {
       throw new Error("AudioEncoder RPC failed: " + JSON.stringify(ev.data));
     }
@@ -151,7 +160,7 @@ class AudioEncoder {
     });
   }
 
-  // MUST be called before ANY other RPCs
+  // MUST be called AND COMPLETE before ANY other RPCs
   async setup(cfg) {
     this.client_clock_reference = new ClientClockReference({
       sample_rate: cfg.sampling_rate
@@ -248,10 +257,10 @@ class AudioEncoder {
     return data;
   }
 
-  // XXX: should probably drain the queue?
   async reset() {
     this.client_clock = null;
     this.server_clock = null;
+    this.request_queue = [];
     return this.worker_rpc({
       reset: true
     });
@@ -272,9 +281,18 @@ class AudioDecoder {
     if (ev.data?.type === 'exception') {
       throw ev.data.exception;
     }
-    var queue_entry = this.request_queue.shift();
+    if (this.request_queue.length == 0) {
+      // This may happen if we were reset, and is okay.
+      console.warn("AudioDecoder got response when no requests in flight", ev);
+      return;
+    }
     var response_id = ev.data.request_id;
-    check(queue_entry[0] == response_id, "Responses out of order", queue_entry, ev.data);
+    if(this.request_queue[0][0] != response_id) {
+      // This may happen if we were reset, and is okay.
+      console.warn("AudioDecoder got response not matching first in-flight request, discarding", ev, this.request_queue[0]);
+      return;
+    }
+    var queue_entry = this.request_queue.shift();
     if (ev.data.status != 0) {
       throw new Error("AudioDecoder RPC failed: " + JSON.stringify(ev.data));
     }
@@ -303,10 +321,10 @@ class AudioDecoder {
     return this.worker_rpc(cfg);
   }
 
-  // XXX: should probably drain the queue?
   async reset() {
     this.client_clock = null;
     this.server_clock = null;
+    this.request_queue = [];
     return this.worker_rpc({
       reset: true
     });
@@ -444,6 +462,33 @@ export class BucketBrigadeContext extends EventTarget {
     });
   }
 
+  unsubscribe_and_stop_worklet() {
+    this.removeEventListener("workletMessage_", this.active_handler);
+    this.active_handler = null;
+    this.playerNode.port.postMessage({
+      type: "stop"
+    });
+  }
+
+  subscribe_and_start_worklet(handler) {
+    if (this.active_handler) {
+      console.error("Cannot have multiple active audio handlers on BucketBrigadeContext");
+      return;
+    }
+
+    this.addEventListener("workletMessage_", handler);
+    this.active_handler = handler
+
+    var audio_params = {
+      type: "audio_params",
+      synthetic_source: synthetic_audio_source,
+      click_interval: synthetic_click_interval,
+      loopback_mode,
+    }
+    // This will reset the audio worklet, flush its buffer, and start it up again.
+    this.playerNode.port.postMessage(audio_params);
+  }
+
   send_local_latency(local_latency_ms) {
     //var local_latency_ms = parseFloat(estLatency.innerText);
 
@@ -478,6 +523,7 @@ export class BucketBrigadeContext extends EventTarget {
       throw msg.exception;
     }
     if (msg.type === "underflow") {
+
       //window.lostConnectivity.style.display = "block";
       //await restart();
       // XXX: probably need to deal with this better, auto-restarting stuff
@@ -576,14 +622,12 @@ export class BucketBrigadeContext extends EventTarget {
 
     // The encoder stuff absolutely has to finish getting initialized before we start getting messages for it, or shit will get regrettably real. (It is designed in a non-threadsafe way, which is remarkable since javascript has no threads.)
 
-    this.playerNode.port.onmessage = (e) => {
-      this.handle_message(e);
-    }
+    this.playerNode.port.onmessage = this.handle_message.bind(this);
     this.micNode.connect(this.playerNode);
     this.playerNode.connect(this.audioCtx.destination);
 
     // XXX: This is not great, becase it will start the AudioWorklet, which will immediately proceed to start sending us audio, which we aren't ready for yet because we're about to go into calibration mode. However if we get enough to try to send to the server at this point, the ServerConnection will discard it anyway, since it hasn't been started yet.
-    await this.reload_settings();
+    //await this.reload_settings();
   }
 
   close() {
@@ -610,16 +654,14 @@ export class BucketBrigadeContext extends EventTarget {
     */
 
     // XXX: Not guaranteed to be immediate; we should wait for it to confirm.
-    this.playerNode.port.postMessage({
-      type: "stop"
-    });
+    //this.stop_worklet();
 
     //if (server_connection) {
     //  server_connection.stop();
     //  server_connection = null;
     //}
 
-    console.info("Stopped audio worklet"); // and server connection.");
+    //console.info("Stopped audio worklet"); // and server connection.");
 
     //mic_buf = [];
 
@@ -647,19 +689,15 @@ export class BucketBrigadeContext extends EventTarget {
     await this.encoder.reset();
     await this.decoder.reset();
 
-    console.info("Reset encoder and decoder, starting audio worket again.");
+    //console.info("Reset encoder and decoder, starting audio worket again.");
 
     // Send this before we set audio params, which declares us to be ready for audio
     // XXX click_volume_change();
-    var audio_params = {
-      type: "audio_params",
-      synthetic_source: synthetic_audio_source,
-      click_interval: synthetic_click_interval,
-      loopback_mode,
-      epoch: 0, // XXX epoch no longer used?
-    }
-    // This will reset the audio worklett, flush its buffer, and start it up again.
-    this.playerNode.port.postMessage(audio_params);
+    //this.playerNode.port.postMessage({
+    //  type: "stop"
+    //});
+
+    //this.start_worklet();
 
     alarms_fired = {};
     for (let hook of start_hooks) {
@@ -668,62 +706,93 @@ export class BucketBrigadeContext extends EventTarget {
   }
 }
 
-export class BaseClient extends EventTarget {
+export class SingerClient extends EventTarget {
   constructor(options) {
-    var {apiUrl} = options;
     super();
 
-    this.apiUrl = apiUrl;
-  }
-}
+    var {speakerMuted, micMuted, context} = options; // XXX unused;
 
-export class SingerClient extends BaseClient {
-  constructor(options) {
-    var {context, secretId, speakerMuted, micMuted, extra} = options;
-    // Stuff that probably doesn't go in the real API, and is subject to change or removal, but is useful for now
-    // XXX: add loopback mode?
-    var {username, audio_offset_seconds} = extra;
-    super(options);
-
+    this.constructor_options = options; // XXX hacky
     this.ctx = context;
-    this.secretId = secretId;
-    this.server_connection = new ServerConnection({
-      target_url: new URL(this.apiUrl),
-      audio_offset_seconds,
-      userid: secretId,
-      epoch: 0,  // XXX epoch no longer useful?
-    });
 
-    this.hasConnectivity = true;  // XXX public readonly
+    this.hasConnectivity = false;  // XXX public readonly
     this.diagnostics = {};  // XXX public readonly, not part of formal API
 
-    // XXX ignoring speakermuted, micmuted?
-    this.userid = secretId;
-    this.username = username;
-
-    this.mic_buf = [];
-    this.send_metadata = {};  // XXX: not sure why this is persistent
-    // XXX: should probably have these on here instead of the context? Unless they leak stuff (do they?) and we don't want to recreate them.
-    this.encoder = this.ctx.encoder;
-    this.decoder = this.ctx.decoder;
-    this.encoder.reset();
-    this.decoder.reset();
+    this.connection = new SingerClientConnection({
+      receive_cb: this.server_response.bind(this),
+      failure_cb: this.server_failure.bind(this),
+      metadata_cb: this.server_metadata_received.bind(this),
+      ...options
+    });
 
     this.handle_message_bound = this.handle_message.bind(this);
-    this.ctx.addEventListener("workletMessage_", this.handle_message_bound);
-  }
 
-  async start_singing() {
-    await this.server_connection.start();
+    this.connection.start_singing().then(result => {
+      this.hasConnectivity = true;
+      this.mic_buf = [];
+      this.ctx.subscribe_and_start_worklet(this.handle_message_bound);
+      this.dispatchEvent(new Event("connectivityChange"));
+    }, err => {
+      this.close();
+    });
   }
 
   close() {
-    this.ctx.removeEventListener("workletMessage_", this.handle_message_bound);
-    this.server_connection.stop();
-    this.server_connection = null;
+    this.ctx.unsubscribe_and_stop_worklet();
+    this.connection.close();
+
+    // Try to reduce leaks of expensive objects, if we get leaked by mistake
+    this.connection = null;
   }
 
-  async handle_message(event) {
+  new_random_id_hack() {
+    // Make us appear to be a new user, to work around issues with user session staleness on the server (and lack of a way to explicitly reset the state)
+    return Math.round(Math.random()*100000000000);
+  }
+
+  change_offset(new_slot) {
+    this.constructor_options.slot = new_slot;
+    if (!this.hasConnectivity) {
+      // XXX: this is wrong, will fail to change our slot properly if we change it in the middle of an outage (but this prevents complex and annoying races)
+      return;
+    }
+
+    this.hasConnectivity = false;
+    this.ctx.unsubscribe_and_stop_worklet();
+    this.dispatchEvent(new Event("connectivityChange"));
+
+    this.connection.close();
+    this.connection = null;
+
+    this.constructor_options.secretId = this.new_random_id_hack();
+    this.connection = new SingerClientConnection({
+      receive_cb: this.server_response.bind(this),
+      failure_cb: this.server_failure.bind(this),
+      metadata_cb: this.server_metadata_received.bind(this),
+      ...this.constructor_options
+    });
+
+
+    this.connection.start_singing().then(result => {
+      this.hasConnectivity = true;
+      this.mic_buf = [];
+      this.ctx.subscribe_and_start_worklet(this.handle_message_bound);
+      this.dispatchEvent(new Event("connectivityChange"));
+    }, err => {
+      this.close();
+    });
+  }
+
+  // XXX: not great that this will just get dropped if we're reconnecting
+  send_metadata(key, value) {
+    if (this.connection && this.hasConnectivity) {
+      this.connection.send_metadata(key, value);
+    } else {
+      console.warn("Can't send metadata when not connected");
+    }
+  }
+
+  handle_message(event) {
     var msg = event.detail.msg;
     /*
     if (msg.type == "alarm") {
@@ -745,11 +814,6 @@ export class SingerClient extends BaseClient {
       throw new Error("Got message of unknown type: " + JSON.stringify(msg));
     }
 
-    // If we see this change at any point, that means stop what we're doing.
-    //var our_epoch = epoch;
-
-    //console.debug("SPAM", "Got heard chunk:", msg); // too spammy
-
     // Tricky metaprogramming bullshit to recover the object-nature of an object sent via postMessage
     var chunk = rebless(msg.chunk);
     this.mic_buf.push(chunk);
@@ -759,127 +823,239 @@ export class SingerClient extends BaseClient {
     // XXX: window.msWebAudioJankCurrent.value = Math.round(msg.jank) + "ms";
 
     if (this.mic_buf.length >= this.ctx.sample_batch_size) { //XXX sbs should be on clients not context right?
+      console.debug("Got enough chunks:", this.mic_buf);
       var chunk = concat_chunks(this.mic_buf);
       console.debug("SPAM", "Encoding chunk to send:", chunk);
       this.mic_buf = [];
+      this.connection.send_chunk(chunk);
+    }
+  }
 
-      var encoded_chunk = await this.encoder.encode_chunk(chunk);
+  server_response(chunk) {
+    this.ctx.samples_to_worklet(chunk);
+  }
 
-      /*
-      if (app_state != APP_RUNNING) {
-        console.warn("Ending message handler early because not running");
+  server_failure(e) {
+    // The connection is already closed at this point
+    this.connection = null;
+    this.hasConnectivity = false;
+    this.ctx.unsubscribe_and_stop_worklet();
+    this.dispatchEvent(new Event("connectivityChange"));
+
+    this.constructor_options.secretId = this.new_random_id_hack();
+    this.connection = new SingerClientConnection({
+      receive_cb: this.server_response.bind(this),
+      failure_cb: this.server_failure.bind(this),
+      metadata_cb: this.server_metadata_received.bind(this),
+      ...this.constructor_options
+    });
+    this.connection.start_singing().then(result => {
+      this.hasConnectivity = true;
+      this.ctx.subscribe_and_start_worklet(this.handle_message_bound);
+      this.dispatchEvent(new Event("connectivityChange"));
+    }, err => {
+      this.close();
+    });
+  }
+
+  server_metadata_received(metadata) {
+    console.info("Received metadata:", metadata);
+
+    var queue_size = metadata["queue_size"];
+    var user_summary = metadata["user_summary"] || [];
+    var tracks = metadata["tracks"] || [];
+    var chats = metadata["chats"] || [];
+    var delay_seconds = metadata["delay_seconds"];
+    var server_sample_rate = metadata["server_sample_rate"];
+    var song_start_clock = metadata["song_start_clock"];
+    var client_read_clock = metadata["client_read_clock"];
+    var server_bpm = metadata["bpm"];
+    var server_repeats = metadata["repeats"];
+    var server_bpr = metadata["bpr"];
+    var leader = metadata["leader"]
+
+    /* XXX
+    for (let ev of metadata["events"]) {
+      alarms[ev["clock"]] = () => event_hooks.map(f=>f(ev["evid"]));
+      console.info(ev);
+      playerNode.port.postMessage({
+        type: "set_alarm",
+        time: ev["clock"]
+      });
+    }
+    */
+
+    // XXX: needs to be reimplemented in terms of alarms / marks
+    /*
+    if (song_start_clock && song_start_clock > client_read_clock) {
+      window.startSingingCountdown.style.display = "block";
+      window.countdown.innerText = Math.round(
+        (song_start_clock - client_read_clock) / server_sample_rate) + "s";
+    } else {
+      window.startSingingCountdown.style.display = "none";
+    }
+    */
+
+    // XXX: the server ordered us to change our offset. In the new world this is done.... some other way?
+    // XXX: hack hack hack
+    // XXX: this doesn't propagate to the offset field in the UI, not that it really matters
+    if (delay_seconds) {
+      if (delay_seconds > 0) {
+        this.change_offset(delay_seconds / 3);  // XXX ugh
         return;
       }
-      if (our_epoch != epoch) {
-        console.warn("Ending message handler early due to stale epoch");
+    }
+
+    // XXX: DOM stuff below this line.
+    // XXX XXX ugh
+    this.dispatchEvent(new CustomEvent("updateActiveUsers", {
+      detail: {
+        user_summary,
+        server_sample_rate,
+        leader,
+      }
+    }));
+
+    /*
+    chats.forEach((msg) => receiveChatMessage(msg[0], msg[1]));
+    update_backing_tracks(tracks);
+    */
+
+    // XXX: this is round stuff I guess? Not sure what the interface for this is.
+    /*
+    if (server_bpm) {
+      window.bpm.value = server_bpm;
+    }
+    if (server_repeats) {
+      window.repeats.value = server_repeats;
+    }
+    if (server_bpr) {
+      window.bpr.value = server_bpr;
+    }
+    */
+    // This is how closely it's safe to follow behind us, if you get as unlucky as possible (and try to read _just_ before we write).
+    // XXX don't have the info to compute this here -> this.diagnostics.client_total_time = this.server_connection.client_window_time + play_chunk.length_seconds;
+    // This is how far behind our target place in the audio stream we are. This must be added to the value above, to find out how closely it's safe to follow behind where we are _aiming_ to be. This value should be small and relatively stable, or something has gone wrong.
+    // XXX don't have the info to compute this here -> this.diagnostics.client_read_slippage = this.server_connection.clientReadSlippage;
+
+    this.dispatchEvent(new Event("diagnosticChange"));
+  }
+}
+
+// This is useful because we can stop() it when we need to reload the connection,
+// which gives us a place to cut off and consume stale callbacks / promises. The
+// ones related to the server itself, we can do in ServerConnection (and we do),
+// but the ones related to encoding/decoding we can't.
+export class SingerClientConnection {
+  constructor(options) {
+    var {context, secretId, slot, username, apiUrl, receive_cb, failure_cb, metadata_cb} = options;
+    // XXX: add loopback mode?
+
+    this.receive_cb = receive_cb;
+    this.failure_cb = failure_cb;
+    this.metadata_cb = metadata_cb;
+
+    this.apiUrl = apiUrl;
+
+    this.slot = slot;
+    this.audio_offset_seconds = this.slot * 3;  // XXX
+
+    this.ctx = context;
+    this.secretId = secretId;
+    this.server_connection = new ServerConnection({
+      target_url: new URL(this.apiUrl),
+      audio_offset_seconds: this.audio_offset_seconds,
+      userid: secretId,
+      receive_cb: this.server_response.bind(this),
+      failure_cb: this.server_failure.bind(this),
+    });
+
+    // XXX ignoring speakermuted, micmuted?
+    this.userid = secretId;
+    this.username = username;
+
+    this.metadata_to_send = {};
+    // XXX: should probably have these on here instead of the context? Unless they leak stuff (do they?) and we don't want to recreate them.
+    this.encoder = this.ctx.encoder;
+    this.decoder = this.ctx.decoder;
+    this.encoder.reset();
+    this.decoder.reset();
+
+    this.running = true;
+  }
+
+  async start_singing() {
+    return this.server_connection.start();
+  }
+
+  close() {
+    this.server_connection.stop();
+    this.server_connection = null;
+    this.decoder.reset();
+    this.decoder = null;
+    this.encoder.reset();
+    this.encoder = null;
+    this.receive_cb = null;
+    this.failure_cb = null;
+    this.metadata_cb = null;
+    this.running = false;
+  }
+
+  send_metadata(key, value) {
+    console.info("Setting metadata for next request:", key, value);
+    this.metadata_to_send[key] = value;
+  }
+
+  server_response(response) {
+    if (!this.running) {
+      return;
+    }
+
+    var { metadata, chunk: response_chunk } = response;
+    if (!response_chunk) {  // XXX: this should never happen now, it should call failure instead
+      this.server_failure();
+      return;
+    }
+
+    this.decoder.decode_chunk(response_chunk).then(play_chunk => {
+      if (!this.running) {
         return;
       }
-      */
+      console.debug("SPAM", "Decoded chunk from server:", play_chunk.interval, play_chunk);
+      this.receive_cb(play_chunk);
+      this.metadata_cb(metadata);
+      return;
+    }, err => {
+      // XXX: we never had an error case here, can the decoder even fail? I think we get here if the decoder throws an exception, do something sensible?
+      this.server_failure(err);
+      return;
+    });
+  }
+
+  server_failure(e) {
+    if (!this.running) {
+      return;
+    }
+    this.failure_cb(e);
+    this.close();
+  }
+
+  send_chunk(chunk) {
+    this.encoder.encode_chunk(chunk).then(encoded_chunk => {
+      if (!this.running) {
+        return;
+      }
       console.debug("SPAM", "Got encoded chunk to send:", encoded_chunk);
 
-      this.send_metadata.username = this.username;
-      // XXX send_metadata.loopback_mode = loopback_mode;
-      this.server_connection.set_metadata(this.send_metadata);
-      this.send_metadata = {}
+      this.metadata_to_send.username = this.username;
+      // XXX this.metadata_to_send.loopback_mode = loopback_mode;
+      this.server_connection.set_metadata(this.metadata_to_send);
+      this.metadata_to_send = {}
       // XXX: interesting, it does not seem that these promises are guaranteed to resolve in order... and the worklet's buffer uses the first chunk's timestamp to decide where to start playing back, so if the first two chunks are swapped it has a big problem.
-      const response = await this.server_connection.send(encoded_chunk);
-      if (!response) {
-        // XXX lost connectivity -- what should happen here?
-        this.hasConnectivity = false;
-        this.dispatchEvent(new Event("connectivityChange"));
-        //window.lostConnectivity.style.display = "block";
-        //await restart();
-        this.close();
-        return;
-      }
-      var { metadata, chunk: response_chunk, epoch: server_epoch } = response;
-      if (!response_chunk) {
-        this.close();
-        return;
-      }
-
-      //console.debug("SPAM", "Got chunk from server:", response_chunk.interval, response_chunk, metadata);
-      var play_chunk = await this.decoder.decode_chunk(response_chunk);
-
-      console.debug("SPAM", "Decoded chunk from server:", play_chunk.interval, play_chunk);
-
-      // XXX invasive coupling
-      this.ctx.samples_to_worklet(play_chunk);
-
-      var queue_size = metadata["queue_size"];
-      var user_summary = metadata["user_summary"] || [];
-      var tracks = metadata["tracks"] || [];
-      var chats = metadata["chats"] || [];
-      var delay_seconds = metadata["delay_seconds"];
-      var server_sample_rate = metadata["server_sample_rate"];
-      var song_start_clock = metadata["song_start_clock"];
-      var client_read_clock = metadata["client_read_clock"];
-      var server_bpm = metadata["bpm"];
-      var server_repeats = metadata["repeats"];
-      var server_bpr = metadata["bpr"];
-      var leader = metadata["leader"]
-
-      /* XXX
-      for (let ev of metadata["events"]) {
-        alarms[ev["clock"]] = () => event_hooks.map(f=>f(ev["evid"]));
-        console.info(ev);
-        playerNode.port.postMessage({
-          type: "set_alarm",
-          time: ev["clock"]
-        });
-      }
-      */
-
-      // XXX: needs to be reimplemented in terms of alarms / marks
-      /*
-      if (song_start_clock && song_start_clock > client_read_clock) {
-        window.startSingingCountdown.style.display = "block";
-        window.countdown.innerText = Math.round(
-          (song_start_clock - client_read_clock) / server_sample_rate) + "s";
-      } else {
-        window.startSingingCountdown.style.display = "none";
-      }
-      */
-
-      // XXX: the server ordered us to change our offset. In the new world this is done.... some other way?
-      /*
-      if (delay_seconds) {
-        if (delay_seconds > 0) {
-          audioOffset.value = delay_seconds;
-          // This will restart the world, so don't try to continue.
-          audio_offset_change();
-          return;
-        }
-      }
-      */
-
-      // XXX: DOM stuff below this line.
-      /*
-      update_active_users(user_summary, server_sample_rate, leader);
-      chats.forEach((msg) => receiveChatMessage(msg[0], msg[1]));
-      update_backing_tracks(tracks);
-      */
-
-      // XXX: this is round stuff I guess? Not sure what the interface for this is.
-      /*
-      if (server_bpm) {
-        window.bpm.value = server_bpm;
-      }
-      if (server_repeats) {
-        window.repeats.value = server_repeats;
-      }
-      if (server_bpr) {
-        window.bpr.value = server_bpr;
-      }
-      */
-
-      // This is how closely it's safe to follow behind us, if you get as unlucky as possible (and try to read _just_ before we write).
-      this.diagnostics.client_total_time = this.server_connection.client_window_time + play_chunk.length_seconds;
-      // This is how far behind our target place in the audio stream we are. This must be added to the value above, to find out how closely it's safe to follow behind where we are _aiming_ to be. This value should be small and relatively stable, or something has gone wrong.
-      this.diagnostics.client_read_slippage = this.server_connection.clientReadSlippage;
-
-      this.dispatchEvent(new Event("diagnosticChange"));
-    }
+      this.server_connection.send(encoded_chunk);
+    }, err => {
+      this.server_failure(err);
+    });
   }
 }
 
