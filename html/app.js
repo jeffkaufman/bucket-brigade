@@ -772,9 +772,9 @@ export class SingerClient extends EventTarget {
   }
 
   // XXX: not great that this will just get dropped if we're reconnecting
-  x_send_metadata(key, value) {
+  x_send_metadata(key, value, append) {
     if (this.connection && this.hasConnectivity) {
-      this.connection.x_send_metadata(key, value);
+      this.connection.x_send_metadata(key, value, append);
     } else {
       console.warn("Can't send metadata when not connected");
     }
@@ -953,9 +953,16 @@ export class SingerClientConnection {
   }
 
   // Backdoor for bucket brigade to send things that shouldn't really be required in the proper API
-  x_send_metadata(key, value) {
+  x_send_metadata(key, value, append) {
     console.info("Setting metadata for next request:", key, value);
-    this.metadata_to_send[key] = value;
+    if (append) {
+      if (!(key in this.metadata_to_send)) {
+        this.metadata_to_send[key] = [];
+      }
+      this.metadata_to_send[key].push(value);
+    } else {
+      this.metadata_to_send[key] = value;
+    }
   }
 
   server_response(response) {
