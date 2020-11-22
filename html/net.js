@@ -28,7 +28,7 @@ export class ServerConnection extends ServerConnectionBase {
     check(
       target_url !== undefined &&
       audio_offset_seconds !== undefined &&
-      userid !== undefined &&
+      userid !== undefined,
       "target_url, audio_offset_seconds, userid, receive_cb must be provided as named parameters");
     check(target_url instanceof URL, "target_url must be a URL");
     check(typeof audio_offset_seconds == "number", "audio_offset_seconds must be a number");
@@ -378,21 +378,32 @@ export async function samples_to_server(outdata, target_url, send_metadata) {
 
 // Only called when readystate is 4 (done)
 function handle_xhr_result(xhr, resolve, reject) {
+  --xhrs_inflight;
+
   if (xhr.status == 200) {
     var metadata = JSON.parse(xhr.getResponseHeader("X-Audio-Metadata"));
     console.debug("SPAM", "metadata:", metadata);
-    console.debug("SPAM", "Got XHR response w/ ID:", xhr.debug_id, "result:", xhr.response, " -- still in flight:", --xhrs_inflight);
-    if (metadata["kill_client"]) {
-      console.error("Received kill from server:", metadata["message"]);
-      return reject("Received kill from server: " + metadata["message"]);
-    }
+    console.debug("SPAM", "Got XHR response w/ ID:", xhr.debug_id, "result:", xhr.response, " -- still in flight:", xhrs_inflight);
 
     return resolve({
       metadata: metadata,
       data: xhr.response
     });
   } else {
-    console.error("XHR failed w/ ID:", xhr.debug_id, "stopping:", xhr, " -- still in flight:", --xhrs_inflight);
+    console.error("XHR failed w/ ID:", xhr.debug_id, "stopping:", xhr, " -- still in flight:", xhrs_inflight);
+    var metadata_raw = xhr.getResponseHeader("X-Audio-Metadata");
+
+    if (metadata_raw) {
+      try {
+        var metadata = JSON.parse(metadata_raw);
+        console.debug("SPAM", "metadata on failed XHR:", metadata);
+        if (metadata.kill_client) {
+          console.error("Received kill from server:", metadata.message);
+          return reject("Received kill from server: " + metadata.message);
+        }
+      } catch { /* ignore JSON parse failure when already failing */ }
+    }
+
     return reject("XHR failed w/ status " + xhr.status);
   }
 }

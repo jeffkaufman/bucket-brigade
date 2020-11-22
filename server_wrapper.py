@@ -186,7 +186,7 @@ def do_GET(environ, start_response) -> None:
 def die500(start_response, e):
     trb = ("%s: %s\n\n%s" % (e.__class__.__name__, e, traceback.format_exc())).encode("utf-8")
 
-    start_response('200 OK', [  # XXX ?
+    start_response('500 Internal Server Error', [
         ('Content-Type', 'text/plain'),
         ("Access-Control-Allow-Origin", "*"),
         ("Access-Control-Allow-Headers", "Content-Type, X-Event-Data"),
