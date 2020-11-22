@@ -67,26 +67,6 @@ export class MicEnumerator {
   }
 }
 
-export var start_hooks = [];
-export var stop_hooks = [];
-export var event_hooks = [];
-var alarms = {};
-var alarms_fired = {};
-var cur_clock_cbs = [];
-
-export function declare_event(evid, offset) {
-  cur_clock_cbs.push( (clock)=>{
-    send_metadata.event_data ||= [];
-    send_metadata.event_data.push(
-      {evid,
-       clock:clock-(offset||0)*audioCtx.sampleRate} // XXX
-    );
-  });
-  playerNode.port.postMessage({
-    type: "request_cur_clock"
-  });
-}
-
 export async function openMic(deviceId) {
   try {
     return await navigator.mediaDevices.getUserMedia({
@@ -667,6 +647,13 @@ export class BucketBrigadeContext extends EventTarget {
 }
 
 export class SingerClient extends EventTarget {
+  // Events we send:
+  // * connectivityChange (see hasConnectivity)
+  // * diagnosticChange (see diagnostics)
+  // XXX unimp: * newMark { "delay": [seconds until it happens], "data": [arbitrary] }
+  // XXX unimp: * markReached { "data" }
+  // * x_metadataRecieved { metdata: { ... } }
+
   constructor(options) {
     super();
 
@@ -684,6 +671,45 @@ export class SingerClient extends EventTarget {
     this.hasConnectivity = false;  // XXX public readonly
     this.diagnostics = {};  // XXX public readonly, not part of formal API
 
+    // XXX: direct port of event machinery, probably needs some reworking
+    // XXX: not sure how it will fail if things happen during connectivity outages, but it probably will
+    this.start_hooks = [];
+    this.stop_hooks = [];
+    this.event_hooks = [];
+    this.alarms = {};
+    this.alarms_fired = {};
+    this.cur_clock_cbs = [];
+
+    this.handle_message_bound = this.handle_message.bind(this);
+
+    this.ctx.set_mic_pause_mode(this.micMuted_);
+    this.ctx.set_speaker_pause_mode(this.speakerMuted_);
+
+    this.connect_();
+  }
+
+  declare_event(evid, offset) {
+    this.cur_clock_cbs.push( (clock)=>{
+      this.send_metadata("event_data", {
+        evid,
+        clock:clock-(offset||0)*this.ctx.audioCtx.sampleRate}, true);  // XXX invasive coupling
+    });
+    this.ctx.playerNode.port.postMessage({  // XXX invasive coupling
+      type: "request_cur_clock"
+    });
+  }
+
+  disconnect_() {
+    this.hasConnectivity = false;
+    this.dispatchEvent(new Event("connectivityChange"));
+
+    this.ctx.unsubscribe_and_stop_worklet();
+
+    this.connection.close();
+    this.connection = null;
+  }
+
+  connect_() {
     this.connection = new SingerClientConnection({
       receive_cb: this.server_response.bind(this),
       failure_cb: this.server_failure.bind(this),
@@ -695,14 +721,10 @@ export class SingerClient extends EventTarget {
       apiUrl: this.apiUrl,
     });
 
-    this.handle_message_bound = this.handle_message.bind(this);
-
     this.connection.start_singing().then(result => {
       this.hasConnectivity = true;
       this.mic_buf = [];
       this.ctx.subscribe_and_start_worklet(this.handle_message_bound);
-      this.ctx.set_mic_pause_mode(this.micMuted_);
-      this.ctx.set_speaker_pause_mode(this.speakerMuted_);
       this.dispatchEvent(new Event("connectivityChange"));
     }, err => {
       this.close();
@@ -742,32 +764,8 @@ export class SingerClient extends EventTarget {
       return;
     }
 
-    this.hasConnectivity = false;
-    this.ctx.unsubscribe_and_stop_worklet();
-    this.dispatchEvent(new Event("connectivityChange"));
-
-    this.connection.close();
-    this.connection = null;
-
-    this.connection = new SingerClientConnection({
-      receive_cb: this.server_response.bind(this),
-      failure_cb: this.server_failure.bind(this),
-      metadata_cb: this.server_metadata_received.bind(this),
-      context: this.ctx,
-      offset: this.offset,
-      secretId: this.secretId,
-      username: this.username,
-      apiUrl: this.apiUrl,
-    });
-
-    this.connection.start_singing().then(result => {
-      this.hasConnectivity = true;
-      this.mic_buf = [];
-      this.ctx.subscribe_and_start_worklet(this.handle_message_bound);
-      this.dispatchEvent(new Event("connectivityChange"));
-    }, err => {
-      this.close();
-    });
+    this.disconnect_();
+    this.connect_();
   }
 
   // XXX: not great that this will just get dropped if we're reconnecting
@@ -781,22 +779,22 @@ export class SingerClient extends EventTarget {
 
   handle_message(event) {
     var msg = event.detail.msg;
-    /*
+
     if (msg.type == "alarm") {
-      if ((msg.time in alarms) && ! (msg.time in alarms_fired)) {
+      if ((msg.time in this.alarms) && ! (msg.time in this.alarms_fired)) {
         console.info("calling alarm at "+msg.time)
-        alarms[msg.time]();
-        alarms_fired[msg.time] = true;
+        this.alarms[msg.time]();
+        this.alarms_fired[msg.time] = true;
       }
       return;
     } else if (msg.type == "cur_clock") {
-      for (let cb of cur_clock_cbs) {
+      for (let cb of this.cur_clock_cbs) {
         cb(msg.clock);
-        console.warn("got clock "+msg.clock+" and event_data is now "+ send_metadata.event_data);
+        // console.warn("got clock "+msg.clock+" and event_data is now "+ send_metadata.event_data);
       }
-      cur_clock_cbs = [];
-      return; */
-    if (msg.type != "samples_out") {
+      this.cur_clock_cbs = [];
+      return;
+    } else if (msg.type != "samples_out") {
       this.close();
       throw new Error("Got message of unknown type: " + JSON.stringify(msg));
     }
@@ -824,48 +822,27 @@ export class SingerClient extends EventTarget {
   }
 
   server_failure(e) {
-    // The connection is already closed at this point
+    // The connection is already closed at this point, don't close it again
     this.connection = null;
     this.hasConnectivity = false;
     this.ctx.unsubscribe_and_stop_worklet();
     this.dispatchEvent(new Event("connectivityChange"));
 
-    this.connection = new SingerClientConnection({
-      receive_cb: this.server_response.bind(this),
-      failure_cb: this.server_failure.bind(this),
-      metadata_cb: this.server_metadata_received.bind(this),
-      context: this.ctx,
-      offset: this.offset,
-      secretId: this.secretId,
-      username: this.username,
-      apiUrl: this.apiUrl,
-    });
-
-    this.connection.start_singing().then(result => {
-      this.hasConnectivity = true;
-      this.mic_buf = [];
-      this.ctx.subscribe_and_start_worklet(this.handle_message_bound);
-      this.dispatchEvent(new Event("connectivityChange"));
-    }, err => {
-      this.close();
-    });
+    this.connect_();
   }
 
   server_metadata_received(metadata) {
     console.info("Received metadata:", metadata);
 
-    /* XXX need to fix this stuff up
     for (let ev of metadata["events"]) {
-      alarms[ev["clock"]] = () => event_hooks.map(f=>f(ev["evid"]));
-      console.info(ev);
-      playerNode.port.postMessage({
+      this.alarms[ev["clock"]] = () => this.event_hooks.map(f=>f(ev["evid"]));
+      this.ctx.playerNode.port.postMessage({  // XXX invasive coupling
         type: "set_alarm",
         time: ev["clock"]
       });
     }
-    */
 
-    // XXX: Hack to deal with the fact that our user ID is not stable, so demo can't tell when we're leading
+    // XXX: Hack that is no longer necessary and can be undone
     if (metadata.leader && this.secretId == metadata.leader) {
       console.info("I am leader");
       metadata.x_imLeading = true;
