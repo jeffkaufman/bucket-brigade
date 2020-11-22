@@ -1,7 +1,7 @@
 import {check} from './lib.js';
 
 import {ServerConnection, FakeServerConnection} from './net.js';
-import {AudioChunk, CompressedAudioChunk, AudioChunkBase, git PlaceholderChunk, concat_chunks, ClockInterval, ClientClockReference, ServerClockReference} from './audiochunk.js';
+import {AudioChunk, CompressedAudioChunk, AudioChunkBase, PlaceholderChunk, concat_chunks, ClockInterval, ClientClockReference, ServerClockReference} from './audiochunk.js';
 
 // Work around some issues related to caching and error reporting
 //   by forcing this to load up top, before we try to 'addModule' it.
