@@ -102,7 +102,7 @@ export class ServerConnection extends ServerConnectionBase {
     var saved_read_clock = this.read_clock;
     var saved_write_clock = this.write_clock;
 
-    /*var response = await */ samples_to_server(chunk_data, this.target_url, {
+    samples_to_server(chunk_data, this.target_url, {
       read_clock: this.read_clock,
       write_clock: this.write_clock,
       n_samples: chunk.length,
@@ -120,7 +120,7 @@ export class ServerConnection extends ServerConnectionBase {
 
   server_response(response) {
     if (!response) {
-      this.server_failure();
+      this.server_failure("No server response");
       return;
     }
     if (!this.running) {
@@ -283,19 +283,18 @@ export async function query_server_clock(target_url) {
 var xhrs_inflight = 0;
 export async function samples_to_server(outdata, target_url, send_metadata) {
   console.log(send_metadata);
-  console.log("mss: " + send_metadata.markStartSinging);
   if (outdata === null) {
     outdata = new Uint8Array();
   }
 
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     var xhr = new XMLHttpRequest();
     xhr.onerror = () => {
-      resolve(null);
+      reject("xhr.onerror fired");
     }
     xhr.onreadystatechange = () => {
       if (xhr.readyState == 4 /* done*/) {
-        handle_xhr_result(xhr, resolve);
+        handle_xhr_result(xhr, resolve, reject);
       }
     };
     xhr.debug_id = Date.now();
@@ -364,7 +363,7 @@ export async function samples_to_server(outdata, target_url, send_metadata) {
     // Arbitrary cap; browser cap is 8(?) after which they queue
     if (xhrs_inflight >= 4) {
       console.warn("NOT SENDING XHR w/ ID:", xhr.debug_id, " due to limit -- already in flight:", xhrs_inflight);
-      resolve(null);
+      return resolve(null);
     }
 
     console.debug("SPAM", "Sending XHR w/ ID:", xhr.debug_id, "already in flight:", xhrs_inflight++, "; data size:", outdata.length);
@@ -378,21 +377,14 @@ export async function samples_to_server(outdata, target_url, send_metadata) {
 }
 
 // Only called when readystate is 4 (done)
-function handle_xhr_result(xhr, resolve) {
-  /* XXX: this state is no longer shared with us easily
-  if (!running) {
-    console.warn("Got XHR onreadystatechange w/ID:", xhr.debug_id, "for xhr:", xhr, " when done running; still in flight:", --xhrs_inflight);
-    return reject();
-  }
-  */
-
+function handle_xhr_result(xhr, resolve, reject) {
   if (xhr.status == 200) {
     var metadata = JSON.parse(xhr.getResponseHeader("X-Audio-Metadata"));
     console.debug("SPAM", "metadata:", metadata);
     console.debug("SPAM", "Got XHR response w/ ID:", xhr.debug_id, "result:", xhr.response, " -- still in flight:", --xhrs_inflight);
     if (metadata["kill_client"]) {
-      console.error("Received kill from server");
-      resolve(null);
+      console.error("Received kill from server:", metadata["message"]);
+      return reject("Received kill from server: " + metadata["message"]);
     }
 
     return resolve({
@@ -401,6 +393,6 @@ function handle_xhr_result(xhr, resolve) {
     });
   } else {
     console.error("XHR failed w/ ID:", xhr.debug_id, "stopping:", xhr, " -- still in flight:", --xhrs_inflight);
-    resolve(null);
+    return reject("XHR failed w/ status " + xhr.status);
   }
 }

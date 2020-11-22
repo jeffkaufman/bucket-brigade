@@ -760,7 +760,6 @@ export class SingerClient extends EventTarget {
       apiUrl: this.apiUrl,
     });
 
-
     this.connection.start_singing().then(result => {
       this.hasConnectivity = true;
       this.mic_buf = [];
@@ -804,6 +803,7 @@ export class SingerClient extends EventTarget {
 
     // Tricky metaprogramming bullshit to recover the object-nature of an object sent via postMessage
     var chunk = rebless(msg.chunk);
+    console.debug("Got chunk, mic_buf len was:", this.mic_buf.length, "chunk is", chunk);
     this.mic_buf.push(chunk);
 
     this.diagnostics.webAudioJankCurrent = msg.jank;
@@ -840,8 +840,10 @@ export class SingerClient extends EventTarget {
       username: this.username,
       apiUrl: this.apiUrl,
     });
+
     this.connection.start_singing().then(result => {
       this.hasConnectivity = true;
+      this.mic_buf = [];
       this.ctx.subscribe_and_start_worklet(this.handle_message_bound);
       this.dispatchEvent(new Event("connectivityChange"));
     }, err => {
@@ -887,7 +889,7 @@ export class SingerClient extends EventTarget {
     if (this.connection?.server_connection?.clientReadSlippage) {
       this.diagnostics.client_read_slippage = this.connection.server_connection.clientReadSlippage;
     }
-
+    console.info("CWT:", client_window_time, "CTT:", this.diagnostics.client_total_time, "CRS:", this.diagnostics.client_read_slippage);
     this.dispatchEvent(new Event("diagnosticChange"));
   }
 }
@@ -1129,7 +1131,7 @@ export class LatencyCalibrator extends EventTarget {
           if (latency_range <= 2) {
             beepDetails.success = true;
             // If we have measured latency within 2ms, that's good.
-            this.ctx.send_local_latency();
+            this.ctx.send_local_latency(msg.p50);
           } else {
             beepDetails.success = false;
           }

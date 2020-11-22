@@ -385,7 +385,7 @@ class Player extends AudioWorkletProcessor {
         });
       };
       this.clock_reference = new ClientClockReference({ sample_rate: sampleRate });
-      this.local_latency = 150;  // rough initial guess; XXX pretty sure this is wrong units
+      this.local_latency = 150 * sampleRate / 1000;  // rough initial guess;
       this.click_volume = 0;
     })
   }
