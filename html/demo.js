@@ -489,6 +489,7 @@ async function start_stop() {
 
 let previous_backing_track_str = "";
 function update_backing_tracks(tracks) {
+  console.info("Updating backing tracks:", tracks);
   if (JSON.stringify(tracks) == previous_backing_track_str) {
     return;
   }
@@ -801,7 +802,7 @@ async function start_singing() {
 
     var queue_size = metadata["queue_size"];
     var user_summary = metadata["user_summary"] || [];
-    var tracks = metadata["tracks"] || [];
+    var tracks = metadata["tracks"];
     var chats = metadata["chats"] || [];
     var delay_seconds = metadata["delay_seconds"];
     var server_sample_rate = metadata["server_sample_rate"];
