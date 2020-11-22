@@ -17,8 +17,18 @@ export class ClockReference {
         return this.side == other.side && this.sample_rate == other.sample_rate;
     }
 
-    rebless() {
-        Object.setPrototypeOf(this, eval(this.type).prototype);
+    static thaw(o) {
+        var rv;
+        if (o.type == "ServerClockReference") {
+            rv = new ServerClockReference({
+                sample_rate: o.sample_rate
+            });
+        } else {
+            rv = new ClientClockReference({
+                sample_rate: o.sample_rate
+            });
+        }
+        return rv;
     }
 }
 
@@ -54,9 +64,16 @@ export class ClockInterval {
         return this.end - this.length;
     }
 
-    rebless() {
-        Object.setPrototypeOf(this.reference, ClockReference.prototype);
-        this.reference.rebless();
+    static thaw(o) {
+        if (o === undefined) {
+            return o;
+        }
+        var rv = new ClockInterval({
+            reference: ClockReference.thaw(o.reference),
+            end: o.end,
+            length: o.length
+        });
+        return rv;
     }
 }
 
@@ -83,10 +100,20 @@ export class AudioChunkBase {
     get reference() { return this.interval.reference; }
     get sample_rate() { return this.interval.sample_rate; }
 
-    rebless() {
-        Object.setPrototypeOf(this, eval(this.type).prototype);
-        Object.setPrototypeOf(this.interval, ClockInterval.prototype);
-        this.interval.rebless();
+    static thaw(o) {
+        var rv;
+        if (o.type == "AudioChunk") {
+            rv = new AudioChunk({
+                data: o.data,
+                interval: ClockInterval.thaw(o.interval),
+            });
+        } else {
+            rv = new CompressedAudioChunk({
+                data: o.data,
+                interval: ClockInterval.thaw(o.interval),
+            });
+        }
+        return rv;
     }
 }
 
@@ -138,13 +165,13 @@ export class PlaceholderChunk {
     get length_seconds() { return this.interval.length_seconds; }
     get sample_rate() { return this.reference.sample_rate; }
 
-    rebless() {
-        Object.setPrototypeOf(this.reference, ClockReference.prototype);
-        this.reference.rebless();
-        if (this.interval !== undefined) {
-            Object.setPrototypeOf(this.interval, ClockInterval.prototype);
-            this.interval.rebless();
-        }
+    static thaw(o) {
+        var rv = new PlaceholderChunk({
+            reference: ClockReference.thaw(o.reference),
+            length: o.length,
+            interval: ClockInterval.thaw(o.interval),
+        });
+        return rv;
     }
 }
 

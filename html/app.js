@@ -1,7 +1,7 @@
 import {check} from './lib.js';
 
 import {ServerConnection, FakeServerConnection} from './net.js';
-import {AudioChunk, CompressedAudioChunk, PlaceholderChunk, concat_chunks, ClockInterval, ClientClockReference, ServerClockReference} from './audiochunk.js';
+import {AudioChunk, CompressedAudioChunk, AudioChunkBase, git PlaceholderChunk, concat_chunks, ClockInterval, ClientClockReference, ServerClockReference} from './audiochunk.js';
 
 // Work around some issues related to caching and error reporting
 //   by forcing this to load up top, before we try to 'addModule' it.
@@ -34,13 +34,13 @@ export class MicEnumerator {
   async wait_for_mic_permissions() {
     var perm_status = await navigator.permissions.query({name: "microphone"}).catch(() => null);
     if (!perm_status) {
-      force_permission_prompt();
+      this.force_permission_prompt();
       return;
     }
     if (perm_status.state == "granted" || perm_status.state == "denied") {
       return;
     }
-    force_permission_prompt();
+    this.force_permission_prompt();
     return new Promise((resolve, reject) => {
       perm_status.onchange = (e) => {
         if (e.target.state == "granted" || e.target.state == "denied") {
@@ -690,7 +690,7 @@ export class SingerClient extends EventTarget {
 
   declare_event(evid, offset) {
     this.cur_clock_cbs.push( (clock)=>{
-      this.send_metadata("event_data", {
+      this.x_send_metadata("event_data", {
         evid,
         clock:clock-(offset||0)*this.ctx.audioCtx.sampleRate}, true);  // XXX invasive coupling
     });
@@ -800,7 +800,7 @@ export class SingerClient extends EventTarget {
     }
 
     // Tricky metaprogramming bullshit to recover the object-nature of an object sent via postMessage
-    var chunk = rebless(msg.chunk);
+    var chunk = thaw(msg.chunk);
     console.debug("Got chunk, mic_buf len was:", this.mic_buf.length, "chunk is", chunk);
     this.mic_buf.push(chunk);
 
@@ -1200,12 +1200,23 @@ function concat_typed_arrays(arrays, _constructor) {
   return result;
 }
 
+/*
 function rebless(o) {
   if (o.type !== undefined) {
     Object.setPrototypeOf(o, eval(o.type).prototype);
   }
   if (o.rebless) {
     o.rebless();
+  }
+  return o;
+}
+*/
+
+function thaw(o) {
+  if (o.type == "PlaceholderChunk") {
+    o = PlaceholderChunk.thaw(o);
+  } else if (o.type == "AudioChunk" || o.type == "CompressedAudioChunk") {
+    o = AudioChunkBase.thaw(o);
   }
   return o;
 }

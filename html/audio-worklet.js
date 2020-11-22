@@ -1,7 +1,7 @@
 import * as lib from './lib.js';
 import {check} from './lib.js';
 
-import {AudioChunk, PlaceholderChunk, ClientClockReference, ClockInterval} from './audiochunk.js'
+import {AudioChunk, PlaceholderChunk, AudioChunkBase, ClientClockReference, ClockInterval} from './audiochunk.js'
 
 // This trick allows us to load this file as a regular module, which in turn
 //   allows us to flush it from the cache when needed, as a workaround for
@@ -184,12 +184,23 @@ class ClockedRingBuffer {
   }
 }
 
+/*
 function rebless(o) {
   if (o.type !== undefined) {
     Object.setPrototypeOf(o, eval(o.type).prototype);
   }
   if (o.rebless) {
     o.rebless();
+  }
+  return o;
+}
+*/
+
+function thaw(o) {
+  if (o.type == "PlaceholderChunk") {
+    o = PlaceholderChunk.thaw(o);
+  } else if (o.type == "AudioChunk" || o.type == "CompressedAudioChunk") {
+    o = AudioChunkBase.thaw(o);
   }
   return o;
 }
@@ -485,7 +496,7 @@ class Player extends AudioWorkletProcessor {
       return;
     }
 
-    var chunk = rebless(msg.chunk);
+    var chunk = thaw(msg.chunk);
     this.play_buffer.write_chunk(chunk);
     // console.debug("VERYSPAM", "new play buffer:", this.play_buffer);
   }
