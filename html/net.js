@@ -282,14 +282,8 @@ export async function query_server_clock(target_url) {
 
 var xhrs_inflight = 0;
 export async function samples_to_server(outdata, target_url, send_metadata) {
-  // Not a tremendous improvement over having too many parameters, but a bit.
   console.log(send_metadata);
-  var { read_clock, write_clock, username, userid, chats, requestedLeadPosition,
-        markStartSinging, markStopSinging, loopback_mode, n_samples,
-        globalVolume, backingVolume, micVolumes, backingTrack, monitoredUserId,
-        event_data, bpm, repeats, bpr
-      } = send_metadata;
-  console.log("mss: " + markStartSinging);
+  console.log("mss: " + send_metadata.markStartSinging);
   if (outdata === null) {
     outdata = new Uint8Array();
   }
@@ -308,52 +302,61 @@ export async function samples_to_server(outdata, target_url, send_metadata) {
 
     var params = new URLSearchParams();
 
-    params.set('read_clock', read_clock);
-    params.set('n_samples', n_samples);
-    if (write_clock !== null) {
-      params.set('write_clock', write_clock);
+    // Going forward, I would like to simplify by:
+    // (1) using the same names for parameters on the server and the client
+    // (2) only setting parameters if we want to send them, and always sending them as-is
+    // The below has been carefully crafted to preserve the exact behavior we had before, when we had a separate "if" statement for every single parameter.
+
+    const param_map = {
+      chats: 'chat',
+      requestedLeadPosition: 'request_lead',
+      markStartSinging: 'mark_start_singing',
+      markStopSinging: 'mark_stop_singing',
+      globalVolume: 'volume',
+      backingVolume: 'backing_volume',
+      micVolumes: 'mic_volume',
+      backingTrack: 'track',
+      monitoredUserId: 'monitor',
+      loopback_mode: 'loopback',
     }
-    if (loopback_mode == "server") {
-      params.set('loopback', true);
-      console.debug("SPAM", "looping back samples at server");
-    }
-    params.set('username', username);
-    params.set('userid', userid);
-    if (chats) {
-      params.set('chat', JSON.stringify(chats));
-    }
-    if (requestedLeadPosition) {
-      params.set('request_lead', '1');
-    }
-    if (markStartSinging) {
-      params.set('mark_start_singing', '1');
-    }
-    if (markStopSinging) {
-      params.set('mark_stop_singing', '1');
-    }
-    if (globalVolume != null) {
-      params.set('volume', globalVolume);
-    }
-    if (backingVolume != null) {
-      params.set('backing_volume', backingVolume);
-    }
-    if (micVolumes) {
-      params.set('mic_volume', JSON.stringify(micVolumes));
-    }
-    if (backingTrack) {
-      params.set('track', backingTrack);
-    }
-    if (monitoredUserId) {
-      params.set('monitor', monitoredUserId);
-    }
-    if (bpm != null) {
-      params.set('bpm', bpm);
-    }
-    if (repeats != null) {
-      params.set('repeats', repeats);
-    }
-    if (bpr != null) {
-      params.set('bpr', bpr);
+
+    const skip_params = ['event_data'];
+    const truthy_params = ['track', 'monitor'];
+    const nonnull_params = ['write_clock', 'volume', 'backing_volume', 'bpm', 'repeats', 'bpr'];
+    const stringify_params = ['chat', 'mic_volume'];
+    const flag_params = ['request_lead', 'mark_start_singing', 'mark_stop_singing'];
+
+    for (var k in send_metadata) {
+      var v = send_metadata[k];
+      //console.log("BEFORE MAPPING:", k, v);
+
+      if (k in param_map) {
+        k = param_map[k];
+      }
+
+      var send_v = v;
+      if (skip_params.includes(k))
+        continue;
+      if (truthy_params.includes(k) && !v)
+        continue;
+      if (nonnull_params.includes(k) && v === null)
+        continue;
+      if (stringify_params.includes(k))
+        send_v = JSON.stringify(v);
+      if (flag_params.includes(k))
+        send_v = '1';
+      if (k == "loopback") {
+        if (v == "server") {
+          console.debug("SPAM", "looping back samples at server");
+          send_v = true;
+        } else {
+          continue;
+        }
+      }
+
+      //console.log("AFTER MAPPING:", k, send_v);
+      // Default is to send the parameter exactly as we received it
+      params.set(k, send_v);
     }
 
     target_url.search = params.toString();
@@ -367,7 +370,7 @@ export async function samples_to_server(outdata, target_url, send_metadata) {
     console.debug("SPAM", "Sending XHR w/ ID:", xhr.debug_id, "already in flight:", xhrs_inflight++, "; data size:", outdata.length);
     xhr.open("POST", target_url, true);
     xhr.setRequestHeader("Content-Type", "application/octet-stream");
-    xhr.setRequestHeader("X-Event-Data", JSON.stringify(event_data));
+    xhr.setRequestHeader("X-Event-Data", JSON.stringify(send_metadata.event_data));
     xhr.responseType = "arraybuffer";
     xhr.send(outdata);
     console.debug("SPAM", "... XHR sent.");
