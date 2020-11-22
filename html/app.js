@@ -460,7 +460,6 @@ export class BucketBrigadeContext extends EventTarget {
     });
   }
 
-  // XXX: the following two methods are legit but are supposed to be property accessors
   set_mic_pause_mode(mode) {
     this.playerNode.port.postMessage({
       "type": "mic_pause_mode",
@@ -468,10 +467,9 @@ export class BucketBrigadeContext extends EventTarget {
     });
   }
 
-  // XXX
   set_speaker_pause_mode(mode) {
     this.playerNode.port.postMessage({
-      "type": "mic_pause_mode",
+      "type": "speaker_pause_mode",
       "enabled": mode
     });
   }
@@ -512,9 +510,11 @@ export class BucketBrigadeContext extends EventTarget {
     // Convert from ms to samples.
     var local_latency = Math.round(local_latency_ms * this.audioCtx.sampleRate / 1000); // XXX
 
-    if (synthetic_audio_source !== null) {
+    if (synthetic_audio_source) {
       local_latency = 0;
     }
+
+    console.info("Sending local latency:", local_latency_ms, local_latency);
     this.playerNode.port.postMessage({
       "type": "local_latency",
       "local_latency": local_latency,
@@ -921,7 +921,6 @@ export class SingerClientConnection {
       failure_cb: this.server_failure.bind(this),
     });
 
-    // XXX ignoring speakermuted, micmuted?
     this.userid = secretId;
     this.username = username;
 
