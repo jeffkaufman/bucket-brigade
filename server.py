@@ -600,7 +600,8 @@ def handle_post_(in_data, new_events, query_string, print_status) -> Tuple[Any, 
         clear_whole_buffer()
 
     if query_params.get("mark_start_singing", None):
-        state.song_start_clock = user.last_write_clock
+        # XXX: There is some confusion over exactly where the start marker should go, but it should be a value that we are guaranteed to have, so the song doesn't fail to start. (So not the write clock.)
+        state.song_start_clock = client_read_clock
         state.song_end_clock = 0
         state.metronome_on = False
         if state.bpm and state.bpr and state.repeats:
