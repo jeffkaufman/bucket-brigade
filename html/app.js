@@ -801,7 +801,7 @@ export class SingerClient extends EventTarget {
 
     // Tricky metaprogramming bullshit to recover the object-nature of an object sent via postMessage
     var chunk = thaw(msg.chunk);
-    console.debug("Got chunk, mic_buf len was:", this.mic_buf.length, "chunk is", chunk);
+    //console.debug("Got chunk, mic_buf len was:", this.mic_buf.length, "chunk is", chunk);
     this.mic_buf.push(chunk);
 
     this.diagnostics.webAudioJankCurrent = msg.jank;
