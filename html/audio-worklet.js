@@ -611,7 +611,10 @@ class Player extends AudioWorkletProcessor {
           console.warn("SAMPLE RATE STILL BAD. Should be", sampleRate, "but seeing", eff_rate, ". Restarting app.");
           // Ask the main app to reload the audio input device
           this.killed = true;
-          throw new Error("Your computer's audio system is lagging a lot, which is breaking the app. Please disconnect any bluetooth headphones or speakers, close unnecessary apps / reduce load on your computer, then refresh the page and try again.");
+          throw {
+            message: "Your computer's audio system is lagging a lot, which is breaking the app. Please disconnect any bluetooth headphones or speakers, close unnecessary apps / reduce load on your computer, then refresh the page and try again.",
+            unpreventable: true,
+          };
         }
       }
     }
