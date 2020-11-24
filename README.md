@@ -12,7 +12,10 @@ virtualenv venv  # optional
 . venv/bin/activate  # optional
 pip install -r requirements.txt
 ```
-
+If you're on a Mac, you will need to install the Opus C library:
+```
+brew install opus-tools 
+```
 Now, you will need two separate terminals (or screen/tmux sessions or similar.)
 
 Serve the static files:
@@ -23,7 +26,7 @@ python -mhttp.server
 
 Serve the app backend:
 ```
-./server.py
+./server_wrapper.py
 ```
 
 The static file server will run on http://localhost:8000/ . The app server will run on http://localhost:8081/ .
