@@ -79,11 +79,13 @@ USER_LIFETIME_SAMPLES = SAMPLE_RATE * 5
 QUEUE_LENGTH = (QUEUE_SECONDS * SAMPLE_RATE // FRAME_SIZE * FRAME_SIZE)
 
 audio_queue = np.zeros(QUEUE_LENGTH, np.float32)
+backing_queue = np.zeros(QUEUE_LENGTH, np.float32)
 monitor_queue = np.zeros(QUEUE_LENGTH, np.float32)
 n_people_queue = np.zeros(QUEUE_LENGTH, np.int16)
 
 def clear_whole_buffer():
     audio_queue.fill(0)
+    backing_queue.fill(0)
     monitor_queue.fill(0)
     n_people_queue.fill(0)
 
@@ -175,6 +177,7 @@ class Recorder:
         if n_samples > 0:
             self.write_(fix_volume(
                 wrap_get(audio_queue, begin, n_samples),
+                wrap_get(backing_queue, begin, n_samples),
                 wrap_get(n_people_queue, begin, n_samples)))
             self.last_clock += n_samples
 
@@ -445,7 +448,7 @@ def write_metronome(clear_index, clear_samples):
             state.leftover_beat_samples = beat_samples
         state.leftover_beat_samples -= remaining_clear_samples
 
-    wrap_assign(audio_queue, clear_index, metronome_samples)
+    wrap_assign(backing_queue, clear_index, metronome_samples)
 
 def backfill_metronome():
     # fill all time between song_start_clock and last_cleared_clock
@@ -469,7 +472,7 @@ def repeat_length_samples():
     repeat_length_s = beat_length_s * state.bpr
     return int(repeat_length_s * SAMPLE_RATE)
 
-def fix_volume(data, n_people):
+def fix_volume(data, backing_data, n_people):
     # We could scale volume by having n_people be the number of
     # earlier people and then scale by a simple 1/n_people.  But a
     # curve of (1 + X) / (n_people + X) falls a bit less
@@ -478,7 +481,8 @@ def fix_volume(data, n_people):
     # Compare:
     #   https://www.wolframalpha.com/input/?i=graph+%281%29+%2F+%28x%29+from+1+to+10
     #   https://www.wolframalpha.com/input/?i=graph+%281%2B3%29+%2F+%28x%2B3%29+from+1+to+10
-    data = data * (1 + N_PHANTOM_PEOPLE) / (n_people + N_PHANTOM_PEOPLE)
+    data *= (1 + N_PHANTOM_PEOPLE) / (n_people + N_PHANTOM_PEOPLE)
+    data += (backing_data * (state.backing_volume * (1 if state.metronome_on else 0.2)))
     data *= state.global_volume
     return data
 
@@ -634,16 +638,17 @@ def handle_post_(in_data, new_events, query_string, print_status) -> Tuple[Any, 
             n_people_queue, clear_index, np.zeros(clear_samples, np.int16))
         wrap_assign(
             monitor_queue, clear_index, np.zeros(clear_samples, np.float32))
+        wrap_assign(
+            audio_queue, clear_index, np.zeros(clear_samples, np.float32))
         state.last_cleared_clock = clear_index + clear_samples
 
         max_backing_track_samples = len(state.backing_track) - state.backing_track_index
         backing_track_samples = min(max_backing_track_samples, clear_samples)
         if backing_track_samples > 0:
             wrap_assign(
-                audio_queue, clear_index, state.backing_track[
+                backing_queue, clear_index, state.backing_track[
                     state.backing_track_index :
-                    state.backing_track_index + backing_track_samples]
-            * state.backing_volume)
+                    state.backing_track_index + backing_track_samples])
             state.backing_track_index += backing_track_samples
             clear_samples -= backing_track_samples
             clear_index += backing_track_samples
@@ -657,7 +662,7 @@ def handle_post_(in_data, new_events, query_string, print_status) -> Tuple[Any, 
                 write_metronome(clear_index, clear_samples)
             else:
                 wrap_assign(
-                    audio_queue, clear_index,
+                    backing_queue, clear_index,
                     np.zeros(clear_samples, np.float32))
 
     saved_last_request_clock = state.last_request_clock
@@ -741,13 +746,16 @@ def handle_post_(in_data, new_events, query_string, print_status) -> Tuple[Any, 
                 client_read_clock - n_samples < state.song_end_clock):
             data = wrap_get(audio_queue, client_read_clock - n_samples,
                             n_samples)
+            backing_data = wrap_get(backing_queue, client_read_clock - n_samples,
+                                    n_samples)
         else:
             data = np.zeros(n_samples, np.float32)
+            backing_data = np.zeros(n_samples, np.float32)
 
         n_people = wrap_get(
             n_people_queue, client_read_clock - n_samples, n_samples)
 
-        data = fix_volume(data, n_people)
+        data = fix_volume(data, backing_data, n_people)
 
     events_to_send_list = list(events.items())
     events_to_send = [ {"evid":i[0], "clock":i[1]} for i in events_to_send_list ]
