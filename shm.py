@@ -19,8 +19,8 @@ MESSAGE_TYPE_RESPONSE = 2
 #   4 bytes: data length
 #   N bytes: data
 MAX_JSON_LENGTH = 10000
-MAX_DATA_LENGTH = 200000
-BUFFER_SIZE = 1 + 2 + MAX_JSON_LENGTH + 2 + MAX_DATA_LENGTH
+MAX_DATA_LENGTH = 199998
+BUFFER_SIZE = 1 + 2 + MAX_JSON_LENGTH + 4 + MAX_DATA_LENGTH
 
 def attach_or_create(name):
     name = "shm://" + name
