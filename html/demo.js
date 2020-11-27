@@ -519,6 +519,9 @@ window.backingTrack.addEventListener("change", (e) => {
 let previous_user_summary_str = "";
 let previous_mic_volume_inputs_str = "";
 
+// userid > consoleChannel div
+const consoleChannels = new Map();
+
 function update_active_users(user_summary, server_sample_rate, imLeading) {
   for (var i = 0; i < user_summary.length; i++) {
     const userid = user_summary[i][3];
@@ -560,6 +563,7 @@ function update_active_users(user_summary, server_sample_rate, imLeading) {
   }
 
   const mic_volume_inputs = [];
+  const userids = new Set();
   for (var i = 0; i < user_summary.length; i++) {
     const offset_s = user_summary[i][0];
     const name = user_summary[i][1];
@@ -567,6 +571,7 @@ function update_active_users(user_summary, server_sample_rate, imLeading) {
     const userid = user_summary[i][3];
 
     mic_volume_inputs.push([name, userid, mic_volume]);
+    userids.add(userid);
 
     const tr = document.createElement('tr');
 
@@ -580,29 +585,67 @@ function update_active_users(user_summary, server_sample_rate, imLeading) {
 
     window.activeUsers.appendChild(tr);
   }
+  for (const existingUserId of consoleChannels.keys()) {
+    if (!userids.has(existingUserId)) {
+      window.mixingConsole.removeChild(consoleChannels[existingUserId]);
+      consoleChannels.delete(existingUserId);
+    }
+  }
+  for (const newUserId of userids) {
+    if (!consoleChannels.has(newUserId)) {
+      const consoleChannel = document.createElement("div");
+      consoleChannel.classList.add("consoleChannel");
+
+      const channelName = document.createElement("span");
+      channelName.classList.add("channelName");
+      // set channelName 
+
+      const channelVolume = document.createElement("span");
+      channelVolume.classList.add("channelVolume");
+
+      const channelVolumeIndicator = document.createElement("span");
+      channelVolumeIndicator.classList.add("channelVolumeIndicator");
+      channelVolume.appendChild(channelVolumeIndicator);
+
+      const channelVolumeInput = document.createElement("input");
+      channelVolumeInput.classList.add("channelVolumeInput");
+      channelVolumeInput.type = "text";
+      
+      const monitorButton = document.createElement("button");
+      monitorButton.appendChild(document.createTextNode("mon"));
+      monitorButton.addEventListener("click", ()=>{monitorButtonClick(newUserId)});
+
+      const muteButton = document.createElement("button");
+      muteButton.appendChild(document.createTextNode("mute"));
+      monitorButton.addEventListener("click", ()=>{muteButtonClick(newUserId)});
+
+      const updateButton = document.createElement("button");
+      updateButton.appendChild(document.createTextNode("update"));
+      monitorButton.addEventListener("click", ()=>{updateButtonClick(newUserId)});
+
+      consoleChannel.appendChild(channelName);
+      consoleChannel.appendChild(channelVolume);
+      consoleChannel.appendChild(channelVolumeInput);
+      consoleChannel.appendChild(monitorButton);
+      consoleChannel.appendChild(muteButton);
+      consoleChannel.appendChild(updateButton);
+      window.mixingConsole.appendChild(consoleChannel);
+      consoleChannels[newUserId] = consoleChannel;
+    }
+  }
 
   mic_volume_inputs.sort();
   if (JSON.stringify(mic_volume_inputs) != previous_mic_volume_inputs_str) {
-    while (window.monitorUserSelect.firstChild) {
-      window.monitorUserSelect.removeChild(window.monitorUserSelect.lastChild);
-    }
-    const initialOption = document.createElement('option');
-    initialOption.textContent = "Select User";
-    window.monitorUserSelect.appendChild(initialOption);
-
+  
     for (var i = 0; i < mic_volume_inputs.length; i++) {
-      const option = document.createElement('option');
 
       const name = mic_volume_inputs[i][0];
       const userid = mic_volume_inputs[i][1];
       const vol = mic_volume_inputs[i][2];
 
-      option.textContent = (vol === 1.0) ? name : (name + " -- " + vol);
-      option.username = name;
-      option.userid = userid;
-      option.mic_volume = vol;
-
-      window.monitorUserSelect.appendChild(option);
+      consoleChannels[userid].children[0].innerText = name;
+      consoleChannels[userid].children[2].value = vol;
+      
     }
   }
   previous_mic_volume_inputs_str = JSON.stringify(mic_volume_inputs);
