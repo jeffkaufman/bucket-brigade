@@ -650,8 +650,8 @@ export class SingerClient extends EventTarget {
   // Events we send:
   // * connectivityChange (see hasConnectivity)
   // * diagnosticChange (see diagnostics)
-  // XXX unimp: * newMark { "delay": [seconds until it happens], "data": [arbitrary] }
-  // XXX unimp: * markReached { "data" }
+  // * newMark { "delay": [seconds until it happens], "data": [arbitrary] }
+  // * markReached { "data" }
   // * x_metadataRecieved { metdata: { ... } }
 
   constructor(options) {
@@ -676,6 +676,7 @@ export class SingerClient extends EventTarget {
     this.start_hooks = [];
     this.stop_hooks = [];
     this.event_hooks = [];
+
     this.alarms = {};
     this.alarms_fired = {};
     this.cur_clock_cbs = [];
@@ -684,6 +685,15 @@ export class SingerClient extends EventTarget {
 
     this.ctx.set_mic_pause_mode(this.micMuted_);
     this.ctx.set_speaker_pause_mode(this.speakerMuted_);
+
+    // Hack on the new CustomEvent-based mark stuff into the old event_hooks system
+    this.event_hooks.push((data) => {
+      this.dispatchEvent(new CustomEvent("markReached", {
+        detail: {
+          data
+        }
+      }));
+    })
 
     this.connect_();
   }
@@ -834,7 +844,32 @@ export class SingerClient extends EventTarget {
   server_metadata_received(metadata) {
     console.info("Received metadata:", metadata);
 
-    for (let ev of metadata["events"]) {
+    var events = metadata["events"] || [];
+
+    if (metadata["backing_track_start_clock"]) {
+      // Fake an event
+      events.push({
+        evid: "backingTrackStart",
+        clock: metadata["backing_track_start_clock"],
+      });
+    }
+
+    if (metadata["backing_track_end_clock"]) {
+      // Fake an event
+      events.push({
+        evid: "backingTrackEnd",
+        clock: metadata["backing_track_end_clock"],
+      });
+    }
+
+    for (let ev of events) {
+      this.dispatchEvent(new CustomEvent("newMark", {
+        detail: {
+          data: ev["evid"],
+          delay: (ev["clock"] - metadata["client_read_clock"]) / this.ctx.sampleRate
+        }
+      }));
+
       this.alarms[ev["clock"]] = () => this.event_hooks.map(f=>f(ev["evid"]));
       this.ctx.playerNode.port.postMessage({  // XXX invasive coupling
         type: "set_alarm",
