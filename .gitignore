@@ -130,3 +130,7 @@ dmypy.json
 
 # Emacs backup files
 *~
+
+# Bucket-brigade-specific files
+html/recordings
+!html/recordings/.keep
