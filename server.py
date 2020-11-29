@@ -612,6 +612,12 @@ def handle_post_(in_data, new_events, query_string, print_status) -> Tuple[Any, 
             state.requested_track = METRONOME
         if state.requested_track:
             run_backing_track()
+            # These must be separate from song_start/end_clock, because they
+            #   are used for video sync and must be EXACTLY at the moment the
+            #   backing track starts/ends, not merely close.
+            sendall("backing_track_start_clock", server_clock)
+            sendall("backing_track_end_clock", server_clock + len(state.backing_track))
+
 
     if query_params.get("mark_stop_singing", None):
         # stop the backing track from playing, if it's still going
