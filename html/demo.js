@@ -521,22 +521,56 @@ let previous_mic_volume_inputs_str = "";
 
 // userid > consoleChannel div
 const consoleChannels = new Map();
+window.consoleChannels = consoleChannels;
 
-function update_active_users(user_summary, server_sample_rate, imLeading) {
-  for (var i = 0; i < user_summary.length; i++) {
-    const userid = user_summary[i][3];
-    if (userid != myUserid) {
-      const is_monitoring = user_summary[i][4];
-      if (window.monitorUserToggle.amMonitoring && is_monitoring) {
-        // If someone else has started monitoring, we're done.
-        endMonitoring(/*server_initiated=*/true);
+let monitoredUserId = null;
+
+function mixerMonitorButtonClick(userid) {
+  if (singer_client) {
+    if (monitoredUserId) {
+      consoleChannels.get(monitoredUserId).children[3].classList.remove('activeButton');
+    }
+    if (monitoredUserId === userid) {
+      singer_client.x_send_metadata("monitoredUserId", "end");
+      monitoredUserId = null;
+      if (micPaused) {
+        toggle_mic();
+      }
+    }
+    else {
+      singer_client.x_send_metadata("monitoredUserId", userid);
+      monitoredUserId = userid;
+      consoleChannels.get(userid).children[3].classList.add('activeButton');
+      if (!micPaused) {
+        toggle_mic();
       }
     }
   }
+}
 
-  if (window.monitorUserToggle.amMonitoring) {
-    return;  // XXX: why?
+function mixerMuteButtonClick(userid) {
+
+}
+
+function mixerUpdateButtonClick(userid) {
+  if (!singer_client) {
+    // XXX: UI doesn't reflect that we can't do this when we're not connected, should have that in the UI controls state machine
+    return;
   }
+
+  var newvolume = parseFloat(consoleChannels.get(userid).children[2].value);
+  if (newvolume >= 0 && newvolume <= 2) {
+    singer_client.x_send_metadata(
+      "micVolumes",
+      [userid, newvolume],
+       true);
+  }
+  else {
+    consoleChannels.get(userid).children[2].value = "invalid";
+  }
+}
+
+function update_active_users(user_summary, server_sample_rate, imLeading) {
 
   if (imLeading && leadButtonState != "start-singing" &&
       leadButtonState != "stop-singing") {
@@ -587,7 +621,7 @@ function update_active_users(user_summary, server_sample_rate, imLeading) {
   }
   for (const existingUserId of consoleChannels.keys()) {
     if (!userids.has(existingUserId)) {
-      window.mixingConsole.removeChild(consoleChannels[existingUserId]);
+      window.mixingConsole.removeChild(consoleChannels.get(existingUserId));
       consoleChannels.delete(existingUserId);
     }
   }
@@ -613,15 +647,15 @@ function update_active_users(user_summary, server_sample_rate, imLeading) {
       
       const monitorButton = document.createElement("button");
       monitorButton.appendChild(document.createTextNode("mon"));
-      monitorButton.addEventListener("click", ()=>{monitorButtonClick(newUserId)});
+      monitorButton.addEventListener("click", ()=>{mixerMonitorButtonClick(newUserId)});
 
       const muteButton = document.createElement("button");
       muteButton.appendChild(document.createTextNode("mute"));
-      monitorButton.addEventListener("click", ()=>{muteButtonClick(newUserId)});
+      muteButton.addEventListener("click", ()=>{mixerMuteButtonClick(newUserId)});
 
       const updateButton = document.createElement("button");
       updateButton.appendChild(document.createTextNode("update"));
-      monitorButton.addEventListener("click", ()=>{updateButtonClick(newUserId)});
+      updateButton.addEventListener("click", ()=>{mixerUpdateButtonClick(newUserId)});
 
       consoleChannel.appendChild(channelName);
       consoleChannel.appendChild(channelVolume);
@@ -630,7 +664,7 @@ function update_active_users(user_summary, server_sample_rate, imLeading) {
       consoleChannel.appendChild(muteButton);
       consoleChannel.appendChild(updateButton);
       window.mixingConsole.appendChild(consoleChannel);
-      consoleChannels[newUserId] = consoleChannel;
+      consoleChannels.set(newUserId, consoleChannel);
     }
   }
 
@@ -643,91 +677,13 @@ function update_active_users(user_summary, server_sample_rate, imLeading) {
       const userid = mic_volume_inputs[i][1];
       const vol = mic_volume_inputs[i][2];
 
-      consoleChannels[userid].children[0].innerText = name;
-      consoleChannels[userid].children[2].value = vol;
+      consoleChannels.get(userid).children[0].innerText = name;
+      consoleChannels.get(userid).children[2].value = vol;
       
     }
   }
   previous_mic_volume_inputs_str = JSON.stringify(mic_volume_inputs);
 }
-
-function endMonitoring(server_initiated) {
-  if (micPaused) {
-    toggle_mic();
-  }
-  window.monitorUserToggle.innerText = "Begin Monitoring";
-  window.monitorUserToggle.amMonitoring = false;
-  if (!server_initiated) {
-    if (singer_client) {
-      singer_client.x_send_metadata("monitoredUserId", "end");
-    }
-  }
-}
-
-function beginMonitoring(option) {
-  if (!micPaused) {
-    toggle_mic();
-  }
-  window.monitorUserToggle.innerText = "End Monitoring";
-  window.monitorUserToggle.amMonitoring = true;
-  startMonitoringUser(option);
-}
-
-function startMonitoringUser(option) {
-  window.micVolumeSetting.userid = option.userid;
-  window.micVolumeSetting.value = option.mic_volume;
-  if (singer_client) {
-    singer_client.x_send_metadata("monitoredUserId", option.userid);
-  }
-}
-
-window.monitorUserSelect.addEventListener("change", (e) => {
-  if (window.monitorUserToggle.amMonitoring) {
-    if (window.monitorUserSelect.selectedIndex > 0) {
-      const option = window.monitorUserSelect.children[
-        window.monitorUserSelect.selectedIndex];
-      if (option.userid) {
-        startMonitoringUser(option);
-        return;
-      }
-    }
-    endMonitoring(/*server_initiated=*/false);
-  }
-});
-
-window.monitorUserToggle.addEventListener("click", (e) => {
-  if (window.monitorUserSelect.selectedIndex < 0) {
-    return;
-  }
-  const option = window.monitorUserSelect.children[
-    window.monitorUserSelect.selectedIndex];
-  if (!window.monitorUserToggle.amMonitoring && !option.userid) {
-    // Not monitoring and no one to monitor, nothing to do.
-    return;
-  }
-
-  if (!window.monitorUserToggle.amMonitoring) {
-    beginMonitoring(option);
-  } else {
-    endMonitoring(/*server_initiated=*/false);
-  }
-});
-
-window.micVolumeApply.addEventListener("click", (e) => {
-  if (!singer_client) {
-    // XXX: UI doesn't reflect that we can't do this when we're not connected, should have that in the UI controls state machine
-    return;
-  }
-  const option = window.monitorUserSelect.children[
-    window.monitorUserSelect.selectedIndex];
-  option.mic_volume = window.micVolumeSetting.value;
-  option.textContent = option.username + " -- " + option.mic_volume;
-  var newvolume = parseFloat(window.micVolumeSetting.value);
-  singer_client.x_send_metadata(
-    "micVolumes",
-    [window.micVolumeSetting.userid, newvolume],
-     true);
-});
 
 async function stop() {
   if (app_state != APP_RUNNING &&

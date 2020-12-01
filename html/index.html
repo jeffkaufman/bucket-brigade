@@ -121,13 +121,6 @@ body {
 #crashBug {
   display: none;
 }
-#monitoring {
-  border: 1px solid black;
-  padding-top: 1em;
-  padding-left: 1em;
-  margin-top: 1em;
-  border-radius: 0.25em;
-}
 #nameSelector {
   display: none;
 }
@@ -172,6 +165,9 @@ body {
 }
 .channelVolumeInput {
   width: 4em;
+}
+.activeButton {
+  background-color: red;
 }
 
 </style> 
@@ -513,15 +509,6 @@ Beats Per Repeat (for rounds): <input type=text id=bpr></input>
     Backing Track Volume Control (0-2):
     <input type=text id=backingVolumeControl>
     <br>
-    <div id=monitoring>
-    Monitoring
-    <p>
-    Select User:  <select id=monitorUserSelect></select>
-    <button id=monitorUserToggle>Begin Monitoring</button>
-    <br>
-    Set Mic Volume (0-2): <input type=text id=micVolumeSetting></input>
-    <button id=micVolumeApply>Apply Volume</button>
-    </div>
     <div id=mixingConsole>
     </div>
 
