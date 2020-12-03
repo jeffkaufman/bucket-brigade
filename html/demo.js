@@ -240,7 +240,7 @@ window.latencyCalibrationRetry.addEventListener("click", () => {
   switch_app_state(APP_CALIBRATING_LATENCY);
 });
 
-window.latencyCalibrationGiveUp.addEventListener("click", () => {
+function enableSpectatorMode() {
   // This forcibly mutes us, ignoring the mute button.
   bucket_ctx.send_ignore_input(true);  // XXX: private
 
@@ -251,7 +251,9 @@ window.latencyCalibrationGiveUp.addEventListener("click", () => {
   // No reason to continue with volume calibration, go right to running.
   switch_app_state(APP_RUNNING);
   start_singing();
-});
+};
+
+window.latencyCalibrationGiveUp.addEventListener("click", enableSpectatorMode); 
 
 function persist(textFieldId) {
   const textField = document.getElementById(textFieldId);
@@ -379,6 +381,9 @@ function set_controls() {
 
   setVisibleIn(window.micToggleButton, [APP_RUNNING, APP_RESTARTING], "inline-block");
   setVisibleIn(window.speakerToggleButton, [APP_RUNNING, APP_RESTARTING], "inline-block");
+
+  setVisibleIn(window.latencyCalibrationInstructions, [APP_STOPPED, APP_INITIALIZING, APP_CALIBRATING_LATENCY,
+    APP_CALIBRATING_LATENCY_CONTINUE]);
 
   setVisibleIn(window.calibration, [APP_CALIBRATING_LATENCY,
                                     APP_CALIBRATING_LATENCY_CONTINUE]);
@@ -685,7 +690,6 @@ function update_active_users(user_summary, server_sample_rate, imLeading) {
       else if (percentage_volume > 100) {
         percentage_volume = 100;
       }
-      console.log(percentage_volume);
 
       consoleChannels.get(userid).children[0].innerText = name;
       consoleChannels.get(userid).children[2].value = vol;
@@ -939,7 +943,7 @@ function do_latency_calibration() {
   });
 }
 
-async function start() {
+async function start(spectatorMode=false) {
   var micStream = await bb.openMic(inSelect.value);
 
   bucket_ctx = new bb.BucketBrigadeContext({
@@ -948,7 +952,9 @@ async function start() {
 
   await bucket_ctx.start_bucket();
 
-  if (!disableLatencyMeasurement.checked) {
+  if (spectatorMode) {
+    enableSpectatorMode(); 
+  } else if (!disableLatencyMeasurement.checked) {
     do_latency_calibration();
     switch_app_state(APP_CALIBRATING_LATENCY);
   } else {
@@ -972,7 +978,13 @@ function tutorial_answer(button) {
   const answer = button.innerText;
   const question = button.parentElement.id;
   hide_buttons_and_append_answer(button.parentElement, button.innerText);
-  if (question === "q_headphones_present") {
+  if (question === "q_singing_listening") {
+    if (answer == "Singing and Listening") {
+      window.q_headphones_present.style.display = 'block';
+    } else {
+      start(/*spectatorMode=*/true);
+    }
+  } else if (question === "q_headphones_present") {
     if (answer == "Yes") {
       window.q_headphones_wired.style.display = 'block';
     } else {
@@ -993,12 +1005,6 @@ function tutorial_answer(button) {
       window.final_detach_wireless.style.display = 'block';
     }
   }
-}
-
-function hide_tutorial() {
-  window.tutorial.style.display = 'none';
-  window.nameSelector.display = 'block';
-  window.mainApp.display = 'block';
 }
 
 document.querySelectorAll(".dismiss_tutorial").forEach(
