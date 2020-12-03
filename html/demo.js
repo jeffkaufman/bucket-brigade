@@ -603,8 +603,9 @@ function update_active_users(user_summary, server_sample_rate, imLeading) {
     const name = user_summary[i][1];
     const mic_volume = user_summary[i][2];
     const userid = user_summary[i][3];
+    const rms_volume = user_summary[i][6];
 
-    mic_volume_inputs.push([name, userid, mic_volume]);
+    mic_volume_inputs.push([name, userid, mic_volume, rms_volume]);
     userids.add(userid);
 
     const tr = document.createElement('tr');
@@ -676,10 +677,19 @@ function update_active_users(user_summary, server_sample_rate, imLeading) {
       const name = mic_volume_inputs[i][0];
       const userid = mic_volume_inputs[i][1];
       const vol = mic_volume_inputs[i][2];
+      const rms_volume = mic_volume_inputs[i][3];
+      let percentage_volume = (((Math.log(rms_volume*1000))/6.908)+1)*50;
+      if (percentage_volume < 0) {
+        percentage_volume = 0;
+      }
+      else if (percentage_volume > 100) {
+        percentage_volume = 100;
+      }
+      console.log(percentage_volume);
 
       consoleChannels.get(userid).children[0].innerText = name;
       consoleChannels.get(userid).children[2].value = vol;
-      
+      consoleChannels.get(userid).children[1].children[0].style.width = percentage_volume+'%'
     }
   }
   previous_mic_volume_inputs_str = JSON.stringify(mic_volume_inputs);
