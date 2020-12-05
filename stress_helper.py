@@ -12,6 +12,8 @@ import wave
 
 PACKET_INTERVAL = 0.6 # 600ms
 PACKET_SAMPLES = int(server.SAMPLE_RATE * PACKET_INTERVAL)
+OFFSET = 12
+READ_WRITE_OFFSET = 2
 
 enc = opuslib.Encoder(
   server.SAMPLE_RATE, server_wrapper.CHANNELS, opuslib.APPLICATION_AUDIO)
@@ -53,13 +55,14 @@ def stress(n_rounds, users_per_client, worker_name, url, should_sleep):
   userid = int(random.random()*10000000)
   timing = []
   full_start = int(time.time())
+  clock_start = int((time.time() - OFFSET) * server.SAMPLE_RATE)
   for i in range(n_rounds):
     start = time.time()
 
-    ts = full_start + PACKET_SAMPLES * (i//users_per_client)
+    ts = clock_start + PACKET_SAMPLES * (i//users_per_client)
     resp = s.post(
-      url='%s?read_clock=%s&userid=%s%s&username=%s'
-        % (url, ts, userid, i%users_per_client, worker_name),
+      url='%s?read_clock=%s&write_clock=%s&userid=%s%s&username=%s'
+        % (url, ts, ts - (READ_WRITE_OFFSET * server.SAMPLE_RATE), userid, i%users_per_client, worker_name),
       data=data,
       headers={
           'Content-Type': 'application/octet-stream',
@@ -74,7 +77,7 @@ def stress(n_rounds, users_per_client, worker_name, url, should_sleep):
     timing.append(duration*1000)
 
     full_duration = end - full_start
-    expected_full_elapsed = i * PACKET_INTERVAL
+    expected_full_elapsed = (i//users_per_client) * PACKET_INTERVAL
 
     if should_sleep:
       if full_duration < expected_full_elapsed:
