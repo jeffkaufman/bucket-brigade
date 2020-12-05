@@ -559,7 +559,13 @@ export class BucketBrigadeContext extends EventTarget {
     //window.msBatchSize.value = INITIAL_MS_PER_BATCH;
 
     console.debug("micStream is", this.micStream);
-    this.micNode = new MediaStreamAudioSourceNode(this.audioCtx, { mediaStream: this.micStream });
+    try {
+      this.micNode = new MediaStreamAudioSourceNode(this.audioCtx, { mediaStream: this.micStream });
+    }
+    catch (e) {
+      alert("Please click the lock to the left of the URL, set 'Microphone' to 'Allow', and then click 'OK'");
+      window.location.reload();
+    }
 
     //XXX: the AudioWorkletProcessor just seems to get leaked here, every time we stop and restart. I'm not sure if there's a way to prevent that without reloading the page... (or avoiding reallocating it when we stop and start.)
     await this.audioCtx.audioWorklet.addModule('audio-worklet.js');
