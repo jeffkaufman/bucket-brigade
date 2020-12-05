@@ -259,6 +259,7 @@ class User:
         self.last_write_clock = None
         self.is_monitored = False
         self.is_monitoring = False
+        self.rms_volume = 0
 
         # For debugging purposes only
         self.last_seen_read_clock = None
@@ -426,7 +427,8 @@ def user_summary() -> List[Any]:
             user.mic_volume,
             userid,
             user.is_monitoring,
-            user.is_monitored))
+            user.is_monitored,
+            user.rms_volume))
     summary.sort()
     return summary[:50]
 
@@ -574,6 +576,10 @@ def handle_post_(in_data, new_events, query_string, print_status) -> Tuple[Any, 
     if bpr:
         state.bpr = int(bpr)
         sendall("bpr", state.bpr)
+
+    rms_volume, = query_params.get("rms_volume", [None])
+    if rms_volume:
+        user.rms_volume = float(rms_volume)
 
     mic_volume, = query_params.get("mic_volume", [None])
     if mic_volume:
@@ -801,13 +807,14 @@ def maybe_print_status() -> None:
     print("-"*70)
 
     for delay, name, mic_volume, userid, is_monitored, \
-        is_monitoring in user_summary():
-        print ("%s %s vol=%.2f %s %s" % (
+        is_monitoring, rms_volume in user_summary():
+        print ("%s %s vol=%.2f %s %s rms=%.5f" % (
             str(delay).rjust(3),
             name.rjust(30),
             mic_volume,
             "m" if is_monitored else " ",
-            "M" if is_monitoring else " "))
+            "M" if is_monitoring else " ",
+            rms_volume))
 
     state.last_status_ts = now
 

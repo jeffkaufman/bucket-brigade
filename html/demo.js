@@ -240,7 +240,7 @@ window.latencyCalibrationRetry.addEventListener("click", () => {
   switch_app_state(APP_CALIBRATING_LATENCY);
 });
 
-window.latencyCalibrationGiveUp.addEventListener("click", () => {
+function enableSpectatorMode() {
   // This forcibly mutes us, ignoring the mute button.
   bucket_ctx.send_ignore_input(true);  // XXX: private
 
@@ -251,7 +251,9 @@ window.latencyCalibrationGiveUp.addEventListener("click", () => {
   // No reason to continue with volume calibration, go right to running.
   switch_app_state(APP_RUNNING);
   start_singing();
-});
+};
+
+window.latencyCalibrationGiveUp.addEventListener("click", enableSpectatorMode); 
 
 function persist(textFieldId) {
   const textField = document.getElementById(textFieldId);
@@ -379,6 +381,9 @@ function set_controls() {
 
   setVisibleIn(window.micToggleButton, [APP_RUNNING, APP_RESTARTING], "inline-block");
   setVisibleIn(window.speakerToggleButton, [APP_RUNNING, APP_RESTARTING], "inline-block");
+
+  setVisibleIn(window.latencyCalibrationInstructions, [APP_STOPPED, APP_INITIALIZING, APP_CALIBRATING_LATENCY,
+    APP_CALIBRATING_LATENCY_CONTINUE]);
 
   setVisibleIn(window.calibration, [APP_CALIBRATING_LATENCY,
                                     APP_CALIBRATING_LATENCY_CONTINUE]);
@@ -519,21 +524,58 @@ window.backingTrack.addEventListener("change", (e) => {
 let previous_user_summary_str = "";
 let previous_mic_volume_inputs_str = "";
 
-function update_active_users(user_summary, server_sample_rate, imLeading) {
-  for (var i = 0; i < user_summary.length; i++) {
-    const userid = user_summary[i][3];
-    if (userid != myUserid) {
-      const is_monitoring = user_summary[i][4];
-      if (window.monitorUserToggle.amMonitoring && is_monitoring) {
-        // If someone else has started monitoring, we're done.
-        endMonitoring(/*server_initiated=*/true);
+// userid > consoleChannel div
+const consoleChannels = new Map();
+window.consoleChannels = consoleChannels;
+
+let monitoredUserId = null;
+
+function mixerMonitorButtonClick(userid) {
+  if (singer_client) {
+    if (monitoredUserId) {
+      consoleChannels.get(monitoredUserId).children[3].classList.remove('activeButton');
+    }
+    if (monitoredUserId === userid) {
+      singer_client.x_send_metadata("monitoredUserId", "end");
+      monitoredUserId = null;
+      if (micPaused) {
+        toggle_mic();
+      }
+    }
+    else {
+      singer_client.x_send_metadata("monitoredUserId", userid);
+      monitoredUserId = userid;
+      consoleChannels.get(userid).children[3].classList.add('activeButton');
+      if (!micPaused) {
+        toggle_mic();
       }
     }
   }
+}
 
-  if (window.monitorUserToggle.amMonitoring) {
-    return;  // XXX: why?
+function mixerMuteButtonClick(userid) {
+
+}
+
+function mixerUpdateButtonClick(userid) {
+  if (!singer_client) {
+    // XXX: UI doesn't reflect that we can't do this when we're not connected, should have that in the UI controls state machine
+    return;
   }
+
+  var newvolume = parseFloat(consoleChannels.get(userid).children[2].value);
+  if (newvolume >= 0 && newvolume <= 2) {
+    singer_client.x_send_metadata(
+      "micVolumes",
+      [userid, newvolume],
+       true);
+  }
+  else {
+    consoleChannels.get(userid).children[2].value = "invalid";
+  }
+}
+
+function update_active_users(user_summary, server_sample_rate, imLeading) {
 
   if (imLeading && leadButtonState != "start-singing" &&
       leadButtonState != "stop-singing") {
@@ -560,13 +602,16 @@ function update_active_users(user_summary, server_sample_rate, imLeading) {
   }
 
   const mic_volume_inputs = [];
+  const userids = new Set();
   for (var i = 0; i < user_summary.length; i++) {
     const offset_s = user_summary[i][0];
     const name = user_summary[i][1];
     const mic_volume = user_summary[i][2];
     const userid = user_summary[i][3];
+    const rms_volume = user_summary[i][6];
 
-    mic_volume_inputs.push([name, userid, mic_volume]);
+    mic_volume_inputs.push([name, userid, mic_volume, rms_volume]);
+    userids.add(userid);
 
     const tr = document.createElement('tr');
 
@@ -580,111 +625,79 @@ function update_active_users(user_summary, server_sample_rate, imLeading) {
 
     window.activeUsers.appendChild(tr);
   }
+  for (const existingUserId of consoleChannels.keys()) {
+    if (!userids.has(existingUserId)) {
+      window.mixingConsole.removeChild(consoleChannels.get(existingUserId));
+      consoleChannels.delete(existingUserId);
+    }
+  }
+  for (const newUserId of userids) {
+    if (!consoleChannels.has(newUserId)) {
+      const consoleChannel = document.createElement("div");
+      consoleChannel.classList.add("consoleChannel");
+
+      const channelName = document.createElement("span");
+      channelName.classList.add("channelName");
+      // set channelName 
+
+      const channelVolume = document.createElement("span");
+      channelVolume.classList.add("channelVolume");
+
+      const channelVolumeIndicator = document.createElement("span");
+      channelVolumeIndicator.classList.add("channelVolumeIndicator");
+      channelVolume.appendChild(channelVolumeIndicator);
+
+      const channelVolumeInput = document.createElement("input");
+      channelVolumeInput.classList.add("channelVolumeInput");
+      channelVolumeInput.type = "text";
+      
+      const monitorButton = document.createElement("button");
+      monitorButton.appendChild(document.createTextNode("mon"));
+      monitorButton.addEventListener("click", ()=>{mixerMonitorButtonClick(newUserId)});
+
+      const muteButton = document.createElement("button");
+      muteButton.appendChild(document.createTextNode("mute"));
+      muteButton.addEventListener("click", ()=>{mixerMuteButtonClick(newUserId)});
+
+      const updateButton = document.createElement("button");
+      updateButton.appendChild(document.createTextNode("update"));
+      updateButton.addEventListener("click", ()=>{mixerUpdateButtonClick(newUserId)});
+
+      consoleChannel.appendChild(channelName);
+      consoleChannel.appendChild(channelVolume);
+      consoleChannel.appendChild(channelVolumeInput);
+      consoleChannel.appendChild(monitorButton);
+      consoleChannel.appendChild(muteButton);
+      consoleChannel.appendChild(updateButton);
+      window.mixingConsole.appendChild(consoleChannel);
+      consoleChannels.set(newUserId, consoleChannel);
+    }
+  }
 
   mic_volume_inputs.sort();
   if (JSON.stringify(mic_volume_inputs) != previous_mic_volume_inputs_str) {
-    while (window.monitorUserSelect.firstChild) {
-      window.monitorUserSelect.removeChild(window.monitorUserSelect.lastChild);
-    }
-    const initialOption = document.createElement('option');
-    initialOption.textContent = "Select User";
-    window.monitorUserSelect.appendChild(initialOption);
-
+  
     for (var i = 0; i < mic_volume_inputs.length; i++) {
-      const option = document.createElement('option');
 
       const name = mic_volume_inputs[i][0];
       const userid = mic_volume_inputs[i][1];
       const vol = mic_volume_inputs[i][2];
+      const rms_volume = mic_volume_inputs[i][3];
+      let percentage_volume = (((Math.log(rms_volume*1000))/6.908)+1)*50;
+      if (percentage_volume < 0) {
+        percentage_volume = 0;
+      }
+      else if (percentage_volume > 100) {
+        percentage_volume = 100;
+      }
 
-      option.textContent = (vol === 1.0) ? name : (name + " -- " + vol);
-      option.username = name;
-      option.userid = userid;
-      option.mic_volume = vol;
-
-      window.monitorUserSelect.appendChild(option);
+      consoleChannels.get(userid).children[0].innerText = name;
+      consoleChannels.get(userid).children[2].value = vol;
+      consoleChannels.get(userid).children[1].children[0].style.width = percentage_volume+'%'
     }
   }
   previous_mic_volume_inputs_str = JSON.stringify(mic_volume_inputs);
 }
-
-function endMonitoring(server_initiated) {
-  if (micPaused) {
-    toggle_mic();
-  }
-  window.monitorUserToggle.innerText = "Begin Monitoring";
-  window.monitorUserToggle.amMonitoring = false;
-  if (!server_initiated) {
-    if (singer_client) {
-      singer_client.x_send_metadata("monitoredUserId", "end");
-    }
-  }
-}
-
-function beginMonitoring(option) {
-  if (!micPaused) {
-    toggle_mic();
-  }
-  window.monitorUserToggle.innerText = "End Monitoring";
-  window.monitorUserToggle.amMonitoring = true;
-  startMonitoringUser(option);
-}
-
-function startMonitoringUser(option) {
-  window.micVolumeSetting.userid = option.userid;
-  window.micVolumeSetting.value = option.mic_volume;
-  if (singer_client) {
-    singer_client.x_send_metadata("monitoredUserId", option.userid);
-  }
-}
-
-window.monitorUserSelect.addEventListener("change", (e) => {
-  if (window.monitorUserToggle.amMonitoring) {
-    if (window.monitorUserSelect.selectedIndex > 0) {
-      const option = window.monitorUserSelect.children[
-        window.monitorUserSelect.selectedIndex];
-      if (option.userid) {
-        startMonitoringUser(option);
-        return;
-      }
-    }
-    endMonitoring(/*server_initiated=*/false);
-  }
-});
-
-window.monitorUserToggle.addEventListener("click", (e) => {
-  if (window.monitorUserSelect.selectedIndex < 0) {
-    return;
-  }
-  const option = window.monitorUserSelect.children[
-    window.monitorUserSelect.selectedIndex];
-  if (!window.monitorUserToggle.amMonitoring && !option.userid) {
-    // Not monitoring and no one to monitor, nothing to do.
-    return;
-  }
-
-  if (!window.monitorUserToggle.amMonitoring) {
-    beginMonitoring(option);
-  } else {
-    endMonitoring(/*server_initiated=*/false);
-  }
-});
-
-window.micVolumeApply.addEventListener("click", (e) => {
-  if (!singer_client) {
-    // XXX: UI doesn't reflect that we can't do this when we're not connected, should have that in the UI controls state machine
-    return;
-  }
-  const option = window.monitorUserSelect.children[
-    window.monitorUserSelect.selectedIndex];
-  option.mic_volume = window.micVolumeSetting.value;
-  option.textContent = option.username + " -- " + option.mic_volume;
-  var newvolume = parseFloat(window.micVolumeSetting.value);
-  singer_client.x_send_metadata(
-    "micVolumes",
-    [window.micVolumeSetting.userid, newvolume],
-     true);
-});
 
 async function stop() {
   if (app_state != APP_RUNNING &&
@@ -930,7 +943,7 @@ function do_latency_calibration() {
   });
 }
 
-async function start() {
+async function start(spectatorMode=false) {
   var micStream = await bb.openMic(inSelect.value);
 
   bucket_ctx = new bb.BucketBrigadeContext({
@@ -939,7 +952,9 @@ async function start() {
 
   await bucket_ctx.start_bucket();
 
-  if (!disableLatencyMeasurement.checked) {
+  if (spectatorMode) {
+    enableSpectatorMode(); 
+  } else if (!disableLatencyMeasurement.checked) {
     do_latency_calibration();
     switch_app_state(APP_CALIBRATING_LATENCY);
   } else {
@@ -963,7 +978,13 @@ function tutorial_answer(button) {
   const answer = button.innerText;
   const question = button.parentElement.id;
   hide_buttons_and_append_answer(button.parentElement, button.innerText);
-  if (question === "q_headphones_present") {
+  if (question === "q_singing_listening") {
+    if (answer == "Singing and Listening") {
+      window.q_headphones_present.style.display = 'block';
+    } else {
+      start(/*spectatorMode=*/true);
+    }
+  } else if (question === "q_headphones_present") {
     if (answer == "Yes") {
       window.q_headphones_wired.style.display = 'block';
     } else {
@@ -984,12 +1005,6 @@ function tutorial_answer(button) {
       window.final_detach_wireless.style.display = 'block';
     }
   }
-}
-
-function hide_tutorial() {
-  window.tutorial.style.display = 'none';
-  window.nameSelector.display = 'block';
-  window.mainApp.display = 'block';
 }
 
 document.querySelectorAll(".dismiss_tutorial").forEach(

@@ -79,6 +79,7 @@ body {
   margin: 0.25em;
 }
 .headphoneAdvice,
+#q_headphones_present,
 #q_wired_headphones_available,
 #q_headphones_wired,
 #final_attach_wired,
@@ -121,13 +122,6 @@ body {
 #crashBug {
   display: none;
 }
-#monitoring {
-  border: 1px solid black;
-  padding-top: 1em;
-  padding-left: 1em;
-  margin-top: 1em;
-  border-radius: 0.25em;
-}
 #nameSelector {
   display: none;
 }
@@ -147,11 +141,43 @@ body {
   margin: 1em;
   padding: 1em;
 }
-</style>
+#mixingConsole {
+  border: 1px solid black;
+}
+.consoleChannel {
+  margin: 0.5em;
+}
+.consoleChannel > * {
+  display: inline-block;
+}
+.channelVolume {
+  width: 100px;
+  height: 1em;
+}
+.channelVolumeIndicator {
+  width: 50%;
+  height: 100%;
+  background: blue;
+  display: inline-block;
+}
+.channelName {
+  width: 8em;
+  overflow: hidden;
+}
+.channelVolumeInput {
+  width: 4em;
+}
+.activeButton {
+  background-color: red;
+}
+
+</style> 
+
 <link rel=stylesheet href=lyrics.css>
 </head>
 
 <h1>Bucket Brigade Singing</h1>
+
 <div id=currentEvent>loading...</div>
 
 <div class=warning id=pleaseBeKind>
@@ -209,6 +235,11 @@ Automatic recordings of the most recent few songs: <a target="_blank" href="reco
 
 <p>
 
+    <div id=q_singing_listening>
+      Are you planning on singing or just listening?
+      <button>Singing and Listening</button>
+      <button>Only Listening</button>
+    </div>
 
     <div id=q_headphones_present>
       Are you using headphones?
@@ -484,14 +515,7 @@ Beats Per Repeat (for rounds): <input type=text id=bpr></input>
     Backing Track Volume Control (0-2):
     <input type=text id=backingVolumeControl>
     <br>
-    <div id=monitoring>
-    Monitoring
-    <p>
-    Select User:  <select id=monitorUserSelect></select>
-    <button id=monitorUserToggle>Begin Monitoring</button>
-    <br>
-    Set Mic Volume (0-2): <input type=text id=micVolumeSetting></input>
-    <button id=micVolumeApply>Apply Volume</button>
+    <div id=mixingConsole>
     </div>
 
 </div>

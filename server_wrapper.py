@@ -96,6 +96,9 @@ def handle_json_clear_events():
     shm.ShmClient.handle_post(
         shared_memory, json.dumps({'clear_events': True}), [])
 
+def calculate_volume(in_data):
+    return np.sqrt(np.mean(in_data**2))
+
 def handle_post(userid, n_samples, in_data_raw, new_events,
                 query_string, print_status=True) -> Tuple[Any, str]:
     try:
@@ -126,6 +129,8 @@ def handle_post(userid, n_samples, in_data_raw, new_events,
         n_samples = len(in_data)
     if n_samples != len(in_data):
         raise ValueError("Client is confused about how many samples it sent (got %s expected %s" % (n_samples, len(in_data)))
+
+    query_string += '&rms_volume=%s'%calculate_volume(in_data)
 
     if shared_memory is not None:
         data, x_audio_metadata = handle_json_post(
