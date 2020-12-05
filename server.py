@@ -786,7 +786,7 @@ def handle_post_(in_data, new_events, query_string, print_status) -> Tuple[Any, 
         "queue_size": QUEUE_LENGTH / FRAME_SIZE, # in 128-sample frames
         "events": events_to_send,
         "leader": state.leader,
-        "n_people": n_people[0],
+        "n_people": int(n_people[0]),
     }
 
 
