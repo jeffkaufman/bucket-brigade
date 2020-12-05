@@ -744,6 +744,7 @@ def handle_post_(in_data, new_events, query_string, print_status) -> Tuple[Any, 
                 f'{client_read_clock - n_samples - user.last_seen_read_clock})')
     user.last_seen_read_clock = client_read_clock
 
+    n_people = [-1]
     if query_params.get("loopback", [None])[0] == "true":
         data = in_data
     elif user.is_monitoring:
@@ -785,6 +786,7 @@ def handle_post_(in_data, new_events, query_string, print_status) -> Tuple[Any, 
         "queue_size": QUEUE_LENGTH / FRAME_SIZE, # in 128-sample frames
         "events": events_to_send,
         "leader": state.leader,
+        "n_people": n_people[0],
     }
 
 
