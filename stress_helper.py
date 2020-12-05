@@ -8,14 +8,13 @@ import random
 import time
 import requests
 import json
+import wave
 
 PACKET_INTERVAL = 0.6 # 600ms
 PACKET_SAMPLES = int(server.SAMPLE_RATE * PACKET_INTERVAL)
 
 enc = opuslib.Encoder(
   server.SAMPLE_RATE, server_wrapper.CHANNELS, opuslib.APPLICATION_AUDIO)
-zeros = np.zeros(PACKET_SAMPLES, dtype=np.float32).reshape(
-  [-1, server_wrapper.OPUS_FRAME_SAMPLES])
 
 def stress(n_rounds, users_per_client, worker_name, url, should_sleep):
   n_rounds = int(n_rounds)
@@ -27,11 +26,27 @@ def stress(n_rounds, users_per_client, worker_name, url, should_sleep):
     # avoid having everyone at the same offset
     time.sleep(random.random() * PACKET_INTERVAL)
 
-  data = server_wrapper.pack_multi([
-    np.frombuffer(
-      enc.encode_float(packet.tobytes(), server_wrapper.OPUS_FRAME_SAMPLES),
-      np.uint8)
-    for packet in zeros]).tobytes()
+  with wave.open("stress.wav") as inf:
+    if inf.getnchannels() != 1:
+        raise Exception(
+            "wrong number of channels on %s" % state.requested_track)
+    if inf.getsampwidth() != 2:
+        raise Exception(
+            "wrong sample width on %s" % state.requested_track)
+    if inf.getframerate() != 48000:
+        raise Exception(
+            "wrong sample rate on %s" % state.requested_track)
+
+    audio_data = np.frombuffer(
+        inf.readframes(-1), np.int16).astype(np.float32) / (2**15)
+    audio_data = audio_data[:PACKET_SAMPLES]
+    audio_packets = audio_data.reshape([-1, server_wrapper.OPUS_FRAME_SAMPLES])
+
+    data = server_wrapper.pack_multi([
+      np.frombuffer(
+        enc.encode_float(packet.tobytes(), server_wrapper.OPUS_FRAME_SAMPLES),
+        np.uint8)
+      for packet in audio_packets]).tobytes()
 
   s = requests.Session()
 
@@ -41,7 +56,7 @@ def stress(n_rounds, users_per_client, worker_name, url, should_sleep):
   for i in range(n_rounds):
     start = time.time()
 
-    ts = full_start + PACKET_SAMPLES * i
+    ts = full_start + PACKET_SAMPLES * (i//users_per_client)
     resp = s.post(
       url='%s?read_clock=%s&userid=%s%s&username=%s'
         % (url, ts, userid, i%users_per_client, worker_name),
@@ -66,6 +81,6 @@ def stress(n_rounds, users_per_client, worker_name, url, should_sleep):
         time.sleep(expected_full_elapsed - full_duration)
 
   print(json.dumps(timing))
-    
+
 if __name__ == "__main__":
   stress(*sys.argv[1:])
