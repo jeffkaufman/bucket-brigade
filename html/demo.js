@@ -557,7 +557,7 @@ function mixerMuteButtonClick(userid) {
 
 }
 
-function mixerUpdateButtonClick(userid) {
+function mixerVolumeChange(userid) {
   if (!singer_client) {
     // XXX: UI doesn't reflect that we can't do this when we're not connected, should have that in the UI controls state machine
     return;
@@ -574,7 +574,6 @@ function mixerUpdateButtonClick(userid) {
     consoleChannels.get(userid).children[2].value = "invalid";
   }
 }
-
 function update_active_users(user_summary, server_sample_rate, imLeading) {
 
   if (imLeading && leadButtonState != "start-singing" &&
@@ -651,6 +650,15 @@ function update_active_users(user_summary, server_sample_rate, imLeading) {
       channelVolumeInput.classList.add("channelVolumeInput");
       channelVolumeInput.type = "text";
       
+      channelVolumeInput.addEventListener("change", ()=>{mixerVolumeChange(newUserId)});
+      channelVolumeInput.addEventListener("focus", ()=>{
+        channelVolumeInput.classList.add("editing");
+      });
+      channelVolumeInput.addEventListener("focusout", ()=>{
+        channelVolumeInput.classList.remove("editing");
+        channelVolumeInput.classList.add("edited");
+      });
+
       const monitorButton = document.createElement("button");
       monitorButton.appendChild(document.createTextNode("mon"));
       monitorButton.addEventListener("click", ()=>{mixerMonitorButtonClick(newUserId)});
@@ -659,16 +667,11 @@ function update_active_users(user_summary, server_sample_rate, imLeading) {
       muteButton.appendChild(document.createTextNode("mute"));
       muteButton.addEventListener("click", ()=>{mixerMuteButtonClick(newUserId)});
 
-      const updateButton = document.createElement("button");
-      updateButton.appendChild(document.createTextNode("update"));
-      updateButton.addEventListener("click", ()=>{mixerUpdateButtonClick(newUserId)});
-
       consoleChannel.appendChild(channelName);
       consoleChannel.appendChild(channelVolume);
       consoleChannel.appendChild(channelVolumeInput);
       consoleChannel.appendChild(monitorButton);
       consoleChannel.appendChild(muteButton);
-      consoleChannel.appendChild(updateButton);
       window.mixingConsole.appendChild(consoleChannel);
       consoleChannels.set(newUserId, consoleChannel);
     }
@@ -692,8 +695,21 @@ function update_active_users(user_summary, server_sample_rate, imLeading) {
       }
 
       consoleChannels.get(userid).children[0].innerText = name;
-      consoleChannels.get(userid).children[2].value = vol;
-      consoleChannels.get(userid).children[1].children[0].style.width = percentage_volume+'%'
+      consoleChannels.get(userid).children[1].children[0].style.width = percentage_volume+'%';
+      const channelVolumeInput = consoleChannels.get(userid).children[2];
+      if (channelVolumeInput.classList.contains("editing")) {
+        // don't update user volume because they are editing
+      }
+      else if (channelVolumeInput.classList.contains("edited")) {
+        if (Math.abs(channelVolumeInput.value - vol) < 0.001) {
+          channelVolumeInput.classList.remove("edited");
+        }
+      }
+      else {
+        channelVolumeInput.value = vol; 
+      }
+
+
     }
   }
   previous_mic_volume_inputs_str = JSON.stringify(mic_volume_inputs);
