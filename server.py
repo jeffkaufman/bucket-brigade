@@ -418,8 +418,10 @@ def setup_monitoring(monitoring_userid, monitored_userid) -> None:
     users[monitoring_userid].send("delay_seconds", round(
         users[monitored_userid].delay_samples / SAMPLE_RATE) + DELAY_INTERVAL)
 
-def user_summary() -> List[Any]:
+def user_summary(requested_mixer) -> List[Any]:
     summary = []
+    if len(users)>50 and not requested_mixer:
+        return summary
     for userid, user in users.items():
         summary.append((
             round(user.delay_samples / SAMPLE_RATE),
@@ -430,7 +432,7 @@ def user_summary() -> List[Any]:
             user.is_monitored,
             user.rms_volume))
     summary.sort()
-    return summary[:50]
+    return summary
 
 def write_metronome(clear_index, clear_samples):
     metronome_samples = np.zeros(clear_samples, np.float32)
@@ -580,6 +582,9 @@ def handle_post_(in_data, new_events, query_string, print_status) -> Tuple[Any, 
     rms_volume, = query_params.get("rms_volume", [None])
     if rms_volume:
         user.rms_volume = float(rms_volume)
+
+    requested_mixer, = query_params.get("mixer", [None])
+     
 
     mic_volume, = query_params.get("mic_volume", [None])
     if mic_volume:
@@ -782,7 +787,7 @@ def handle_post_(in_data, new_events, query_string, print_status) -> Tuple[Any, 
         "client_read_clock": client_read_clock,
         "client_write_clock": client_write_clock,
         "n_samples": n_samples,
-        "user_summary": user_summary(),
+        "user_summary": user_summary(requested_mixer),
         "queue_size": QUEUE_LENGTH / FRAME_SIZE, # in 128-sample frames
         "events": events_to_send,
         "leader": state.leader,
@@ -809,7 +814,7 @@ def maybe_print_status() -> None:
     print("-"*70)
 
     for delay, name, mic_volume, userid, is_monitored, \
-        is_monitoring, rms_volume in user_summary():
+        is_monitoring, rms_volume in user_summary(requested_mixer=True):
         print ("%s %s vol=%.2f %s %s rms=%.5f" % (
             str(delay).rjust(3),
             name.rjust(30),

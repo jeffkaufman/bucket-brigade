@@ -280,6 +280,7 @@ function persist_checkbox(checkboxId) {
 persist("userName");
 persist_checkbox("disableTutorial");
 persist_checkbox("disableLatencyMeasurement");
+persist_checkbox("enableMixingConsole");
 // Persisting select boxes is harder, so we do it manually for inSelect.
 
 function setMainAppVisibility() {
@@ -624,6 +625,9 @@ function update_active_users(user_summary, server_sample_rate, imLeading) {
 
     window.activeUsers.appendChild(tr);
   }
+  if (!window.enableMixingConsole.checked) {
+    return;
+  }
   for (const existingUserId of consoleChannels.keys()) {
     if (!userids.has(existingUserId)) {
       window.mixingConsole.removeChild(consoleChannels.get(existingUserId));
@@ -676,44 +680,41 @@ function update_active_users(user_summary, server_sample_rate, imLeading) {
       consoleChannels.set(newUserId, consoleChannel);
     }
   }
-
-  mic_volume_inputs.sort();
-  if (JSON.stringify(mic_volume_inputs) != previous_mic_volume_inputs_str) {
   
-    for (var i = 0; i < mic_volume_inputs.length; i++) {
+  for (var i = 0; i < mic_volume_inputs.length; i++) {
 
-      const name = mic_volume_inputs[i][0];
-      const userid = mic_volume_inputs[i][1];
-      const vol = mic_volume_inputs[i][2];
-      const rms_volume = mic_volume_inputs[i][3];
-      let percentage_volume = (((Math.log(rms_volume*1000))/6.908)+1)*50;
-      if (percentage_volume < 0) {
-        percentage_volume = 0;
-      }
-      else if (percentage_volume > 100) {
-        percentage_volume = 100;
-      }
-
-      consoleChannels.get(userid).children[0].innerText = name;
-      consoleChannels.get(userid).children[1].children[0].style.width = percentage_volume+'%';
-      const channelVolumeInput = consoleChannels.get(userid).children[2];
-      if (channelVolumeInput.classList.contains("editing")) {
-        // don't update user volume because they are editing
-      }
-      else if (channelVolumeInput.classList.contains("edited")) {
-        if (Math.abs(channelVolumeInput.value - vol) < 0.001) {
-          channelVolumeInput.classList.remove("edited");
-        }
-      }
-      else {
-        channelVolumeInput.value = vol; 
-      }
-
-
+    const name = mic_volume_inputs[i][0];
+    const userid = mic_volume_inputs[i][1];
+    const vol = mic_volume_inputs[i][2];
+    const rms_volume = mic_volume_inputs[i][3];
+    let percentage_volume = (((Math.log(rms_volume*1000))/6.908)+1)*50;
+    if (percentage_volume < 0) {
+      percentage_volume = 0;
     }
+    else if (percentage_volume > 100) {
+      percentage_volume = 100;
+    }
+
+    consoleChannels.get(userid).children[0].innerText = name;
+    consoleChannels.get(userid).children[1].children[0].style.width = percentage_volume+'%';
+    const channelVolumeInput = consoleChannels.get(userid).children[2];
+    if (channelVolumeInput.classList.contains("editing")) {
+      // don't update user volume because they are editing
+    }
+    else if (channelVolumeInput.classList.contains("edited")) {
+      if (Math.abs(channelVolumeInput.value - vol) < 0.001) {
+        channelVolumeInput.classList.remove("edited");
+      }
+    }
+    else {
+      channelVolumeInput.value = vol; 
+    }
+
+
   }
-  previous_mic_volume_inputs_str = JSON.stringify(mic_volume_inputs);
 }
+
+
 
 async function stop() {
   if (app_state != APP_RUNNING &&
@@ -868,6 +869,9 @@ async function start_singing() {
     if (server_bpr) {
       window.bpr.value = server_bpr;
     }
+    if (window.enableMixingConsole.checked) {
+      singer_client.x_send_metadata("mixer", 1,/*append=*/ false);
+    } 
 
     if (delay_seconds) {
       if (delay_seconds > 0) {
