@@ -423,7 +423,7 @@ def setup_monitoring(monitoring_userid, monitored_userid) -> None:
 
 def user_summary(requested_mixer) -> List[Any]:
     summary = []
-    if len(users)>50 and not requested_mixer:
+    if len(users)>8 and not requested_mixer:
         return summary
     for userid, user in users.items():
         summary.append((
