@@ -210,11 +210,10 @@ Automatic recordings of the most recent few songs: <a target="_blank" href="reco
 </div>
 
 <div id=notchrome>
-  It looks like you're not using Chrome.  Unfortunately, this doesn't
-  yet work in other browsers:
+  It looks like you're not using Chrome or Firefox.  Unfortunately,
+  this doesn't yet work in other browsers:
 
   <ul>
-  <li>Firefox does not yet support ES6 modules in worklets</li>
   <li>Safari doesn't yet support AudioWorklet</li>
   </ul>
 
@@ -228,7 +227,8 @@ Automatic recordings of the most recent few songs: <a target="_blank" href="reco
 <script>
   window.dismissNotChrome.addEventListener(
     "click", () => window.notchrome.style.display = "none");
-  if (navigator.userAgent.match(/Chrome/)) {
+  if (navigator.userAgent.match(/Chrome/) ||
+      navigator.userAgent.match(/Firefox/)) {
     window.notchrome.style.display = "none";
   }
 </script>
