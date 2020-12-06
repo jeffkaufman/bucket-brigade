@@ -687,6 +687,8 @@ export class SingerClient extends EventTarget {
     this.alarms_fired = {};
     this.cur_clock_cbs = [];
 
+    this.metadata_send_queue = [];
+
     this.handle_message_bound = this.handle_message.bind(this);
 
     this.ctx.set_mic_pause_mode(this.micMuted_);
@@ -741,6 +743,13 @@ export class SingerClient extends EventTarget {
       this.hasConnectivity = true;
       this.mic_buf = [];
       this.ctx.subscribe_and_start_worklet(this.handle_message_bound);
+      if (this.metadata_send_queue.length != 0) {
+        console.info("Connection established, sending queued metadata:", this.metadata_send_queue);
+        for (const [key, value, append] of this.metadata_send_queue) {
+          this.connection.x_send_metadata(key, value, append);
+        }
+        this.metadata_send_queue = [];
+      }
       this.dispatchEvent(new Event("connectivityChange"));
     }, err => {
       this.close();
@@ -784,12 +793,12 @@ export class SingerClient extends EventTarget {
     this.connect_();
   }
 
-  // XXX: not great that this will just get dropped if we're reconnecting
   x_send_metadata(key, value, append) {
     if (this.connection && this.hasConnectivity) {
       this.connection.x_send_metadata(key, value, append);
     } else {
-      console.warn("Can't send metadata when not connected");
+      this.metadata_send_queue.push([key, value, append]);
+      console.warn("Can't send metadata yet; buffering until connected, queue is:", this.metadata_send_queue);
     }
   }
 
