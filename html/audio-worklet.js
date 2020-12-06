@@ -1,8 +1,3 @@
-import * as lib from './lib.js';
-import {check} from './lib.js';
-
-import {AudioChunk, PlaceholderChunk, AudioChunkBase, ClientClockReference, ClockInterval} from './audiochunk.js'
-
 // This trick allows us to load this file as a regular module, which in turn
 //   allows us to flush it from the cache when needed, as a workaround for
 //   https://bugs.chromium.org/p/chromium/issues/detail?id=880784 .
@@ -13,6 +8,170 @@ if (typeof AudioWorkletProcessor === "undefined") {
 } else {
 
 console.info("Audio worklet module loading");
+
+// XXX start copy-pasted imports from lib.js
+
+var log_counts = {}
+function log_every(n, tag, ...args) {
+  if (tag.constructor != String) {
+    console.error("In log_every, tag must be a string! Got:", n, tag, args);
+    return;
+  }
+
+  if (log_counts[tag] === undefined) {
+    log_counts[tag] = 0;
+  }
+  if (log_counts[tag] % n == 0) {
+    console.debug("<" + tag + "/" + n + ">", ...args);
+  }
+  log_counts[tag]++;
+}
+
+function check(condition, message, ...rest) {
+  if (!condition) {
+    console.error(message, ...rest);
+    throw new Error(message);
+  }
+}
+
+// XXX start copy-pasted imports from audiochunk.js
+
+class ClockReference {
+    constructor({ sample_rate }) {
+        check(sample_rate !== undefined, "Must provide sample_rate as a named argument");
+        check(Number.isInteger(sample_rate), "sample_rate must be integer");
+
+        this.sample_rate = sample_rate;
+        this.type = this.constructor.name;
+    }
+
+    equals(other) {
+        return this.side == other.side && this.sample_rate == other.sample_rate;
+    }
+
+    static thaw(o) {
+        var rv = new ClockReference({
+                sample_rate: o.sample_rate
+            });
+        return rv;
+    }
+}
+
+class ClockInterval {
+    constructor({ reference, end, length }) {
+        check(reference !== undefined, "Must provide reference as a named argument");
+        check(Number.isInteger(end), "end must be an integer (measured in samples)", end);
+        check(Number.isInteger(length), "length must be an integer (measured in samples)", length);
+        check(reference instanceof ClockReference, "reference must be a ClockReference", reference);
+
+        this.end = end;
+        this.length = length;
+        this.reference = reference;
+    }
+
+    get sample_rate() {
+        return this.reference.sample_rate;
+    }
+
+    get length_seconds() {
+        return this.length / this.sample_rate;
+    }
+
+    get start() {
+        return this.end - this.length;
+    }
+
+    static thaw(o) {
+        if (o === undefined) {
+            return o;
+        }
+        var rv = new ClockInterval({
+            reference: ClockReference.thaw(o.reference),
+            end: o.end,
+            length: o.length
+        });
+        return rv;
+    }
+}
+
+class AudioChunk {
+      constructor({ data, interval }) {
+        check(data !== undefined && interval !== undefined, "Must provide data and interval as named arguments");
+        check(interval instanceof ClockInterval, "interval must be a ClockInterval");
+        check(interval.reference instanceof ClockReference, "reference must be a ClockReference");
+        check(data instanceof Float32Array, "uncompressed audio data must be a Float32Array");
+        check(data.length == interval.length, "interval length must match uncompressed data length");
+        this.data = data;
+        this.interval = interval;
+        this.type = this.constructor.name;
+    }
+
+    check_clock_reference(clock_reference) {
+        if (!clock_reference.equals(this.reference)) {
+            throw new Error("Clock references unequal in AudioChunk.check_clock_reference");
+        }
+    }
+
+    get start() { return this.interval.start; }
+    get end() { return this.interval.end; }
+    get length() { return this.interval.length; }
+    get length_seconds() { return this.interval.length_seconds; }
+    get reference() { return this.interval.reference; }
+    get sample_rate() { return this.interval.sample_rate; }
+
+    static thaw(o) {
+        var rv = new AudioChunk({
+            data: o.data,
+            interval: ClockInterval.thaw(o.interval),
+        });
+        return rv;
+    }
+}
+
+class PlaceholderChunk {
+    constructor({ reference, length, interval }){
+        check(reference !== undefined && length !== undefined, "Must provide reference and length as named arguments");
+        check(reference instanceof ClockReference, "reference must be a ClockReference");
+        check(Number.isInteger(length), "length must be an integer");
+        if (interval !== undefined) {
+            check(interval.length == length, "interval must match length");
+            check(interval.reference == reference, "interval must match reference");
+        }
+
+        this.reference = reference;
+        this.length = length;
+        this.interval = interval;
+        this.data = new Float32Array(length);  // This exists for convenience but is always all zeros
+        this.type = this.constructor.name;
+    }
+
+    check_clock_reference(clock_reference) {
+        if (!clock_reference.equals(this.reference)) {
+            throw new Error("Clock references unequal in PlaceholderChunk.check_clock_reference");
+        }
+    }
+
+    get start() { return this.interval.start; }
+    get end() { return this.interval.end; }
+    get length_seconds() { return this.interval.length_seconds; }
+    get sample_rate() { return this.reference.sample_rate; }
+
+    static thaw(o) {
+        var rv = new PlaceholderChunk({
+            reference: ClockReference.thaw(o.reference),
+            length: o.length,
+            interval: ClockInterval.thaw(o.interval),
+        });
+        return rv;
+    }
+}
+
+// XXX end copy-pasted imports
+
+function thaw(o) {
+  // This is the only type of object we will ever be sent.
+  return AudioChunk.thaw(o);
+}
 
 const FRAME_SIZE = 128;  // by Web Audio API spec
 
@@ -110,7 +269,7 @@ class ClockedRingBuffer {
   }
 
   read() {
-    lib.log_every(128000, "buf_read", "leadin_samples:", this.leadin_samples, "read_clock:", this.read_clock, "buffered_data:", this.buffered_data, "space_left:", this.space_left());
+    log_every(128000, "buf_read", "leadin_samples:", this.leadin_samples, "read_clock:", this.read_clock, "buffered_data:", this.buffered_data, "space_left:", this.space_left());
     if (this.read_clock === null) {
       return "no read clock" ;
     }
@@ -124,7 +283,7 @@ class ClockedRingBuffer {
       // XXX TODO: Seeing an underflow should make us allocate more client slack .... but that's tricky because it will cause a noticeable glitch on the server as our window expands (but at this point it's probably too late to prevent that)
       // * It would also make sense to instead just try to drop some audio and recover. (Although audio trapped in the audiocontext pipeline buffers cannot be dropped without restarting the whole thing.)
       // XXX this used to be an error log
-      lib.log_every(12800, "buf_read underflow", "Buffer underflow :-( leadin_samples:", this.leadin_samples, "read_clock:", this.read_clock, "buffered_data:", this.buffered_data, "space_left:", this.space_left(), "last_write_clock:", this.last_write_clock);
+      log_every(12800, "buf_read underflow", "Buffer underflow :-( leadin_samples:", this.leadin_samples, "read_clock:", this.read_clock, "buffered_data:", this.buffered_data, "space_left:", this.space_left(), "last_write_clock:", this.last_write_clock);
       this.read_clock++;
       this.buffered_data--;
       return null;
@@ -172,37 +331,16 @@ class ClockedRingBuffer {
     if (!isNaN(this.buf[this.real_offset(write_clock)])) {
       // This is a "false" buffer overflow -- we are overwriting some past data that the reader skipped over (presumably due to an underflow.) Just write it anyway. (XXX: this should never happen I think, and I never observe it.)
       // XXX this used to be a warning log
-      lib.log_every(12800, "sorta_overflow", "Writing over existing buffered data; write_clock:", write_clock, "read_clock:", this.read_clock, "buffered_data:", this.buffered_data, "space_left:", this.space_left());
+      log_every(12800, "sorta_overflow", "Writing over existing buffered data; write_clock:", write_clock, "read_clock:", this.read_clock, "buffered_data:", this.buffered_data, "space_left:", this.space_left());
     }
     if (this.buffered_data >= 0) {
       this.buf[this.real_offset(write_clock)] = value;
     } else {
       // Don't write into the buffer if we're behind the read pointer, it will just fuck us up later when we wrap around to it
-      lib.log_every(12800, "compensated_underflow", "Compensating for underflow by discarding data until we reach the read pointer");
+      log_every(12800, "compensated_underflow", "Compensating for underflow by discarding data until we reach the read pointer");
     }
     this.buffered_data++;
   }
-}
-
-/*
-function rebless(o) {
-  if (o.type !== undefined) {
-    Object.setPrototypeOf(o, eval(o.type).prototype);
-  }
-  if (o.rebless) {
-    o.rebless();
-  }
-  return o;
-}
-*/
-
-function thaw(o) {
-  if (o.type == "PlaceholderChunk") {
-    o = PlaceholderChunk.thaw(o);
-  } else if (o.type == "AudioChunk" || o.type == "CompressedAudioChunk") {
-    o = AudioChunkBase.thaw(o);
-  }
-  return o;
 }
 
 class LatencyCalibrator {
@@ -395,7 +533,7 @@ class Player extends AudioWorkletProcessor {
           this.handle_message(event);
         });
       };
-      this.clock_reference = new ClientClockReference({ sample_rate: sampleRate });
+      this.clock_reference = new ClockReference({ sample_rate: sampleRate });
       this.local_latency = 150 * sampleRate / 1000;  // rough initial guess;
       this.click_volume = 0;
     })
@@ -597,7 +735,7 @@ class Player extends AudioWorkletProcessor {
       var err = interval - target_interval;
       var eff_rate = process_history_len * 128 * 1000 / interval;
       this.acc_err += err / process_history_len;
-      lib.log_every(500, "profile_web_audio", sampleRate, eff_rate, this.process_history_ms[0], now_ms, interval, target_interval, err, this.acc_err, this.acc_err / (128 * 1000 / 22050 /* XXX... */));
+      log_every(500, "profile_web_audio", sampleRate, eff_rate, this.process_history_ms[0], now_ms, interval, target_interval, err, this.acc_err, this.acc_err / (128 * 1000 / 22050 /* XXX... */));
 
       // other parameters of interesst
       // XXX // console.debug("VERYSPAM", currentTime, currentFrame, /* getOutputTimestamp(), performanceTime, contextTime*/);
@@ -636,6 +774,11 @@ class Player extends AudioWorkletProcessor {
         return;
       }
 
+      if (!inputs || !inputs[0] || !inputs[0][0] || !outputs || !outputs[0] || !outputs[0][0]) {
+        console.warn("XXX: Weird firefox thing: missing all input or output channels in process()?", inputs, outputs);
+        keep_alive = true;
+        return;
+      }
       var input = inputs[0][0];
       var output = outputs[0][0];
 
