@@ -619,10 +619,13 @@ class Player extends AudioWorkletProcessor {
       });
       return;
     } else if (msg.type == "set_alarm") {
+      console.info("audio worklet setting alarm", msg);
       let cb = ()=>{ this.port.postMessage({type:"alarm",time:msg.time }) };
       if (msg.time > this.play_buffer.read_clock) {
+        console.info("alarm is in future");
         this.play_buffer.read_callbacks[msg.time] = cb;
       } else {
+        console.info("alarm is in past");
         cb();
       }
       return;

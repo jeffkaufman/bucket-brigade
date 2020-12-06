@@ -253,7 +253,7 @@ function enableSpectatorMode() {
   start_singing();
 };
 
-window.latencyCalibrationGiveUp.addEventListener("click", enableSpectatorMode); 
+window.latencyCalibrationGiveUp.addEventListener("click", enableSpectatorMode);
 
 function persist(textFieldId) {
   const textField = document.getElementById(textFieldId);
@@ -650,7 +650,7 @@ function update_active_users(user_summary, server_sample_rate, imLeading, n_user
 
       const channelName = document.createElement("span");
       channelName.classList.add("channelName");
-      // set channelName 
+      // set channelName
 
       const channelVolume = document.createElement("span");
       channelVolume.classList.add("channelVolume");
@@ -662,7 +662,7 @@ function update_active_users(user_summary, server_sample_rate, imLeading, n_user
       const channelVolumeInput = document.createElement("input");
       channelVolumeInput.classList.add("channelVolumeInput");
       channelVolumeInput.type = "text";
-      
+
       channelVolumeInput.addEventListener("change", ()=>{mixerVolumeChange(newUserId)});
       channelVolumeInput.addEventListener("focus", ()=>{
         channelVolumeInput.classList.add("editing");
@@ -689,7 +689,7 @@ function update_active_users(user_summary, server_sample_rate, imLeading, n_user
       consoleChannels.set(newUserId, consoleChannel);
     }
   }
-  
+
   for (var i = 0; i < mic_volume_inputs.length; i++) {
 
     const name = mic_volume_inputs[i][0];
@@ -716,7 +716,7 @@ function update_active_users(user_summary, server_sample_rate, imLeading, n_user
       }
     }
     else {
-      channelVolumeInput.value = vol; 
+      channelVolumeInput.value = vol;
     }
 
 
@@ -818,7 +818,7 @@ async function start_singing() {
 
   // XXX: these event listeners will keep the object alive, plausibly, which could be bad if we do multiple songs?
   singer_client.addEventListener("diagnosticChange", () => {
-    console.info("DIAG:", singer_client.diagnostics);
+    console.debug("DIAG:", singer_client.diagnostics);
 
     window.clientTotalTime.value = singer_client.diagnostics.client_total_time;
     window.clientReadSlippage.value = singer_client.diagnostics.client_read_slippage;
@@ -852,8 +852,8 @@ async function start_singing() {
     var server_bpr = metadata["bpr"];
     var n_connected_users = metadata["n_connected_users"] || 0;
 
-    var imLeading = metadata["x_imLeading"];  // Hacky backwards-compat fix
-
+    var imLeading = metadata.leader && myUserid == metadata.leader;
+    console.debug("leader", metadata.leader, "me", myUserid, "iml", imLeading);
     update_active_users(user_summary, server_sample_rate, imLeading, n_connected_users);
 
     // XXX: needs to be reimplemented in terms of alarms / marks
@@ -880,8 +880,8 @@ async function start_singing() {
       window.bpr.value = server_bpr;
     }
     if (window.enableMixingConsole.checked) {
-      singer_client.x_send_metadata("mixer", 1,/*append=*/ false);
-    } 
+      singer_client.x_send_metadata("mixer", 1);
+    }
 
     if (delay_seconds) {
       if (delay_seconds > 0) {
@@ -983,7 +983,7 @@ async function start(spectatorMode=false) {
   await bucket_ctx.start_bucket();
 
   if (spectatorMode) {
-    enableSpectatorMode(); 
+    enableSpectatorMode();
   } else if (!disableLatencyMeasurement.checked) {
     do_latency_calibration();
     switch_app_state(APP_CALIBRATING_LATENCY);
