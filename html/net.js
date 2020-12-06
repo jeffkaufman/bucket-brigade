@@ -282,7 +282,7 @@ export async function query_server_clock(target_url) {
 
 var xhrs_inflight = 0;
 export async function samples_to_server(outdata, target_url, send_metadata) {
-  console.log(send_metadata);
+  console.debug("samples_to_server send_metadata:", send_metadata);
   if (outdata === null) {
     outdata = new Uint8Array();
   }

@@ -688,6 +688,7 @@ export class SingerClient extends EventTarget {
     this.cur_clock_cbs = [];
 
     this.metadata_send_queue = [];
+    this.events_seen_already = {};
 
     this.handle_message_bound = this.handle_message.bind(this);
 
@@ -696,6 +697,7 @@ export class SingerClient extends EventTarget {
 
     // Hack on the new CustomEvent-based mark stuff into the old event_hooks system
     this.event_hooks.push((data) => {
+      console.info("Mark fired:", data);
       this.dispatchEvent(new CustomEvent("markReached", {
         detail: {
           data
@@ -707,10 +709,17 @@ export class SingerClient extends EventTarget {
   }
 
   declare_event(evid, offset) {
+    console.info("Going to send new mark: declare_event", evid, offset);
     this.cur_clock_cbs.push( (clock)=>{
+      console.info("new mark at our clock", clock);
+      // XXX: this is _very_ invasive, need sample rate conversion.... somewhere more sensible
+      const server_sample_rate = this.connection.server_connection.clock_reference.sample_rate;
+      const server_clock = clock / this.ctx.audioCtx.sampleRate * server_sample_rate;
+      console.info("corresponding server clock is", server_clock);
+      console.info("Sending new mark:", evid, offset, server_clock-(offset||0)*server_sample_rate);
       this.x_send_metadata("event_data", {
         evid,
-        clock:clock-(offset||0)*this.ctx.audioCtx.sampleRate}, true);  // XXX invasive coupling
+        clock:server_clock-(offset||0)*server_sample_rate}, true);  // XXX invasive coupling
     });
     this.ctx.playerNode.port.postMessage({  // XXX invasive coupling
       type: "request_cur_clock"
@@ -857,10 +866,28 @@ export class SingerClient extends EventTarget {
   }
 
   server_metadata_received(metadata) {
-    console.info("Received metadata:", metadata);
+    console.debug("Received metadata:", metadata);
 
     var events = metadata["events"] || [];
 
+    console.debug("got marks from server:", events, "already seen:", this.events_seen_already);
+    var new_events = [];
+    for (const ev of events) {
+      if (!this.events_seen_already[ev["evid"]]) {
+        console.info("unseen event:", ev);
+        new_events.push(ev);
+        // Making this a map in this way is kind of gross if our "event data"
+        //   becomes something complex rather than a scalar... but it's how we
+        //   do it on the server... XXX
+        this.events_seen_already[ev["evid"]] = ev["clock"];
+      }
+    }
+
+    if (new_events.length > 0) {
+      console.info("Received new marks from server:", events);
+    }
+
+    /* XXX: made these real events
     if (metadata["backing_track_start_clock"]) {
       // Fake an event
       events.push({
@@ -876,26 +903,31 @@ export class SingerClient extends EventTarget {
         clock: metadata["backing_track_end_clock"],
       });
     }
+    */
 
-    for (let ev of events) {
+    for (let ev of new_events) {
+      console.info("newMark:", ev);
+      const client_clock = Math.floor(ev["clock"] / metadata["server_sample_rate"] * this.ctx.audioCtx.sampleRate)
+      const delay_s = (ev["clock"] - metadata["client_read_clock"]) / metadata["server_sample_rate"]
+      console.info("translated into local clock:", client_clock);
+      console.info("from now:", delay_s)
+
+      // XXX: client_read_clock here is actually the _end_ of the audio we're receiving, so it's one packet worth of audio in the future yet?? This only affects the delay calculation, which is wrong, not the actual time the event fires.
+
       this.dispatchEvent(new CustomEvent("newMark", {
         detail: {
           data: ev["evid"],
-          delay: (ev["clock"] - metadata["client_read_clock"]) / this.ctx.sampleRate
+          delay: delay_s  // XXX: this is wrong I think, see above
         }
       }));
 
-      this.alarms[ev["clock"]] = () => this.event_hooks.map(f=>f(ev["evid"]));
-      this.ctx.playerNode.port.postMessage({  // XXX invasive coupling
-        type: "set_alarm",
-        time: ev["clock"]
-      });
-    }
+      this.alarms[client_clock] = () => this.event_hooks.map(f=>f(ev["evid"]));
 
-    // XXX: Hack that is no longer necessary and can be undone
-    if (metadata.leader && this.secretId == metadata.leader) {
-      console.info("I am leader");
-      metadata.x_imLeading = true;
+      console.info("setting alarm to fire at server clock", ev["clock"], "our clock", client_clock, ", from now (s):", delay_s)
+      this.ctx.playerNode.port.postMessage({  // XXX invasive coupling, do this through ctx and have it translate the sample rates nicely!!
+        type: "set_alarm",
+        time: client_clock
+      });
     }
 
     // XXX: This is a backdoor hack for bucket brigade that should mostly get refactored away
@@ -916,7 +948,6 @@ export class SingerClient extends EventTarget {
     if (this.connection?.server_connection?.clientReadSlippage) {
       this.diagnostics.client_read_slippage = this.connection.server_connection.clientReadSlippage;
     }
-    console.info("CWT:", client_window_time, "CTT:", this.diagnostics.client_total_time, "CRS:", this.diagnostics.client_read_slippage);
     this.dispatchEvent(new Event("diagnosticChange"));
   }
 }

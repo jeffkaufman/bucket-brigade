@@ -239,6 +239,9 @@ def populate_tracks() -> None:
 
 populate_tracks()
 
+def insert_event(evid, clock) -> None:
+    events[evid] = clock
+
 def calculate_server_clock():
     # Note: This will eventually create a precision problem for the JS
     #   clients, which are using floats. Specifically, at 44100 Hz, it will
@@ -629,8 +632,8 @@ def handle_post_(in_data, new_events, query_string, print_status) -> Tuple[Any, 
             # We use "last_request_clock" because that's the moment the track
             #   actually starts due to the way our clearing algorithm currently
             #   works. (... I think.)
-            sendall("backing_track_start_clock", state.last_request_clock)
-            sendall("backing_track_end_clock", state.last_request_clock + len(state.backing_track))
+            insert_event("backingTrackStart", state.last_request_clock)
+            insert_event("backingTrackEnd", state.last_request_clock + len(state.backing_track))
 
 
     if query_params.get("mark_stop_singing", None):
@@ -713,7 +716,7 @@ def handle_post_(in_data, new_events, query_string, print_status) -> Tuple[Any, 
             user.last_write_clock = client_write_clock
 
         for ev in new_events:
-            events[ev["evid"]] = ev["clock"]
+            insert_event(ev["evid"], ev["clock"])
 
         in_data *= user.scaled_mic_volume
 
