@@ -523,6 +523,7 @@ window.backingTrack.addEventListener("change", (e) => {
 });
 
 let previous_user_summary_str = "";
+let previous_n_users = 0;
 let previous_mic_volume_inputs_str = "";
 
 // userid > consoleChannel div
@@ -575,7 +576,7 @@ function mixerVolumeChange(userid) {
     consoleChannels.get(userid).children[2].value = "invalid";
   }
 }
-function update_active_users(user_summary, server_sample_rate, imLeading) {
+function update_active_users(user_summary, server_sample_rate, imLeading, n_users) {
 
   if (imLeading && leadButtonState != "start-singing" &&
       leadButtonState != "stop-singing") {
@@ -591,15 +592,23 @@ function update_active_users(user_summary, server_sample_rate, imLeading) {
     window.backingTrack.style.display = "none";
   }
 
-  if (JSON.stringify(user_summary) == previous_user_summary_str) {
+  if (JSON.stringify(user_summary) == previous_user_summary_str && n_users == previous_n_users) {
     return;
   }
   previous_user_summary_str = JSON.stringify(user_summary);
+  previous_n_users = n_users;
 
   // Delete previous users.
   while (window.activeUsers.firstChild) {
     window.activeUsers.removeChild(window.activeUsers.lastChild);
   }
+
+  const tr = document.createElement('tr');
+  const td1 = document.createElement('td');
+  td1.colSpan = 2;
+  td1.textContent = "Total users connected: " + n_users;
+  tr.appendChild(td1);
+  window.activeUsers.appendChild(tr);
 
   const mic_volume_inputs = [];
   const userids = new Set();
@@ -841,10 +850,11 @@ async function start_singing() {
     var server_bpm = metadata["bpm"];
     var server_repeats = metadata["repeats"];
     var server_bpr = metadata["bpr"];
+    var n_connected_users = metadata["n_connected_users"] || 0;
 
     var imLeading = metadata["x_imLeading"];  // Hacky backwards-compat fix
 
-    update_active_users(user_summary, server_sample_rate, imLeading);
+    update_active_users(user_summary, server_sample_rate, imLeading, n_connected_users);
 
     // XXX: needs to be reimplemented in terms of alarms / marks
     if (song_start_clock && song_start_clock > client_read_clock) {

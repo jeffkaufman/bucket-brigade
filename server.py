@@ -791,10 +791,11 @@ def handle_post_(in_data, new_events, query_string, print_status) -> Tuple[Any, 
         "client_write_clock": client_write_clock,
         "n_samples": n_samples,
         "user_summary": user_summary(requested_mixer),
+        "n_connected_users": len(users),
         "queue_size": QUEUE_LENGTH / FRAME_SIZE, # in 128-sample frames
         "events": events_to_send,
         "leader": state.leader,
-        "n_people": int(n_people[0]),
+        "n_people_heard": int(n_people[0]),
     }
 
 
