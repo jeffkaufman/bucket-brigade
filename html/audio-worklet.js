@@ -775,7 +775,10 @@ class Player extends AudioWorkletProcessor {
       }
 
       if (!inputs || !inputs[0] || !inputs[0][0] || !outputs || !outputs[0] || !outputs[0][0]) {
-        console.warn("XXX: Weird firefox thing: missing all input or output channels in process()?", inputs, outputs);
+        // Firefox has `inputs[0] == []` sometimes when first starting up; it
+        //   may or may not arguably be permitted by the standard; in any case
+        //   we ignore it and continue.
+        //   * https://bugzilla.mozilla.org/show_bug.cgi?id=1629478
         keep_alive = true;
         return;
       }
