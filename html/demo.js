@@ -1012,6 +1012,9 @@ function tutorial_answer(button) {
     if (answer == "Singing and Listening") {
       window.q_headphones_present.style.display = 'block';
     } else {
+      if (!window.userName.value) {
+        window.userName.value = "listener";
+      }
       start(/*spectatorMode=*/true);
     }
   } else if (question === "q_headphones_present") {
