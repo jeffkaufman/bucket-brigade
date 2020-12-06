@@ -606,7 +606,7 @@ def handle_post_(in_data, new_events, query_string, print_status) -> Tuple[Any, 
                     6.908 * new_mic_volume * .5) / math.exp(6.908 * 0.5)
 
     requested_track, = query_params.get("track", [None])
-    if requested_track and not state.song_start_clock:
+    if requested_track:
         state.requested_track = requested_track
 
     if query_params.get("request_lead", None):
