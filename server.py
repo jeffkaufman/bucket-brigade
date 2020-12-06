@@ -584,7 +584,7 @@ def handle_post_(in_data, new_events, query_string, print_status) -> Tuple[Any, 
         user.rms_volume = float(rms_volume)
 
     requested_mixer, = query_params.get("mixer", [None])
-     
+
 
     mic_volume, = query_params.get("mic_volume", [None])
     if mic_volume:
@@ -626,8 +626,11 @@ def handle_post_(in_data, new_events, query_string, print_status) -> Tuple[Any, 
             # These must be separate from song_start/end_clock, because they
             #   are used for video sync and must be EXACTLY at the moment the
             #   backing track starts/ends, not merely close.
-            sendall("backing_track_start_clock", server_clock)
-            sendall("backing_track_end_clock", server_clock + len(state.backing_track))
+            # We use "last_request_clock" because that's the moment the track
+            #   actually starts due to the way our clearing algorithm currently
+            #   works. (... I think.)
+            sendall("backing_track_start_clock", state.last_request_clock)
+            sendall("backing_track_end_clock", state.last_request_clock + len(state.backing_track))
 
 
     if query_params.get("mark_stop_singing", None):
