@@ -120,7 +120,7 @@ class Recorder:
         # While we want to read from the specified clock position in
         # the buffer, we don't want to do that until enough time has
         # passed that whoever was going to sing has had a chance to.
-        return (state.max_position + 2)*SAMPLE_RATE
+        return (state.max_position + DELAY_INTERVAL*2)*SAMPLE_RATE
 
     def start_(self):
         self.cleanup_()
