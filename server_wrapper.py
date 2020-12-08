@@ -119,7 +119,8 @@ def handle_post(userid, n_samples, in_data_raw, new_events,
     in_data = np.frombuffer(in_data_raw, dtype=np.uint8)
 
     # If the user does not send us any data, we will treat it as silence of length n_samples. This is useful if they are just starting up.
-    if len(in_data) == 0:
+    client_no_data = len(in_data)==0
+    if client_no_data:
         if n_samples == 0:
             raise ValueError("Must provide either n_samples or data")
         in_data = np.zeros(n_samples, np.float32)
@@ -155,7 +156,9 @@ def handle_post(userid, n_samples, in_data_raw, new_events,
     data = pack_multi(encoded).tobytes()
 
     with open(os.path.join(LOG_DIR, userid), "a") as log_file: 
-        log_file.write("%d %.8f\n"%(time.time(), rms_volume))
+        log_file.write("%d %.8f\n"%(
+            time.time(), 
+            -1 if client_no_data else rms_volume))
 
     return data, x_audio_metadata
 
