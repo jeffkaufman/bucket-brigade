@@ -7,6 +7,7 @@ import urllib.parse
 import numpy as np  # type:ignore
 import opuslib  # type:ignore
 import traceback
+import time
 
 try:
     import uwsgi
@@ -25,6 +26,10 @@ from typing import Any, Dict, List, Tuple
 import cProfile
 import pstats
 import io
+
+LOG_DIR = os.path.join(os.path.dirname(__file__), "logs")
+if not os.path.exists(LOG_DIR):
+    os.mkdir(LOG_DIR)
 
 pr = cProfile.Profile()
 # enable for just a moment so the profile object isn't empty
@@ -101,6 +106,8 @@ def calculate_volume(in_data):
 
 def handle_post(userid, n_samples, in_data_raw, new_events,
                 query_string, print_status=True) -> Tuple[Any, str]:
+    if not userid.isdigit():
+        raise ValueError("UserID must be numeric; got: %r"%userid)
     try:
         enc, dec = users[userid]
     except KeyError:
@@ -130,7 +137,8 @@ def handle_post(userid, n_samples, in_data_raw, new_events,
     if n_samples != len(in_data):
         raise ValueError("Client is confused about how many samples it sent (got %s expected %s" % (n_samples, len(in_data)))
 
-    query_string += '&rms_volume=%s'%calculate_volume(in_data)
+    rms_volume = calculate_volume(in_data)
+    query_string += '&rms_volume=%s'%rms_volume
 
     if shared_memory is not None:
         data, x_audio_metadata = handle_json_post(
@@ -145,6 +153,9 @@ def handle_post(userid, n_samples, in_data_raw, new_events,
         e = np.frombuffer(enc.encode_float(p.tobytes(), OPUS_FRAME_SAMPLES), np.uint8)
         encoded.append(e)
     data = pack_multi(encoded).tobytes()
+
+    with open(os.path.join(LOG_DIR, userid), "a") as log_file: 
+        log_file.write("%d %.8f\n"%(time.time(), rms_volume))
 
     return data, x_audio_metadata
 
