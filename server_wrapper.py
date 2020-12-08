@@ -28,8 +28,10 @@ import pstats
 import io
 
 LOG_DIR = os.path.join(os.path.dirname(__file__), "logs")
-if not os.path.exists(LOG_DIR):
+try:
     os.mkdir(LOG_DIR)
+except FileExistsError:
+    pass
 
 pr = cProfile.Profile()
 # enable for just a moment so the profile object isn't empty
