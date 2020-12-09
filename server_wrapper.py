@@ -99,7 +99,7 @@ def handle_json_post(in_data, query_string, print_status):
     return out_data, out_json["x-audio-metadata"]
 
 def handle_json_clear_events():
-    backend.handle_post(json.dumps({'clear_events': True}), [])
+    backend.handle_post(json.dumps({'clear_events': True}), np.zeros(0))
 
 def calculate_volume(in_data):
     return np.sqrt(np.mean(in_data**2))
