@@ -18,8 +18,6 @@ import datetime
 
 from typing import Any, Dict, List, Tuple, Iterable
 
-lock = threading.Lock()
-
 logging.basicConfig(filename='server.log',level=logging.DEBUG)
 
 FRAME_SIZE = 128
@@ -223,10 +221,6 @@ state = State()
 events: Dict[str, str] = {}
 
 def clear_events():
-    with lock:
-        clear_events_()
-
-def clear_events_():
     events.clear()
 
 METRONOME = "metronome -- set BPM below"
@@ -498,12 +492,12 @@ def handle_json_post(in_json_raw, in_data):
     in_json = json.loads(in_json_raw)
 
     if "clear_events" in in_json:
-        clear_events_()
+        clear_events()
         return "", []
 
     query_string = in_json["query_string"]
 
-    out_data, x_audio_metadata = handle_post_(
+    out_data, x_audio_metadata = handle_post(
         in_data, query_string, print_status=True)
 
     return json.dumps({
@@ -511,10 +505,6 @@ def handle_json_post(in_json_raw, in_data):
     }), out_data
 
 def handle_post(in_data, query_string, print_status) -> Tuple[Any, str]:
-    with lock:
-        return handle_post_(in_data, query_string, print_status)
-
-def handle_post_(in_data, query_string, print_status) -> Tuple[Any, str]:
     query_params = urllib.parse.parse_qs(query_string, strict_parsing=True)
 
     # NOTE NOTE NOTE:
