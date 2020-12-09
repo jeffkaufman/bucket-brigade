@@ -212,7 +212,8 @@ class Recorder:
             return
 
         for fname in sorted(recordings)[:-RECORDING_N_TO_KEEP]:
-            os.remove(os.path.join(RECORDINGS_DIR, fname))
+            if fname != ".keep":
+                os.remove(os.path.join(RECORDINGS_DIR, fname))
         self.update_directory_listing_()
 
 recorder = Recorder() if RECORDING_ENABLED else None
@@ -500,21 +501,20 @@ def handle_json_post(in_json_raw, in_data):
         clear_events_()
         return "", []
 
-    new_events = in_json.get("new_events", [])
     query_string = in_json["query_string"]
 
     out_data, x_audio_metadata = handle_post_(
-        in_data, new_events, query_string, print_status=True)
+        in_data, query_string, print_status=True)
 
     return json.dumps({
         "x-audio-metadata": x_audio_metadata,
     }), out_data
 
-def handle_post(in_data, new_events, query_string, print_status) -> Tuple[Any, str]:
+def handle_post(in_data, query_string, print_status) -> Tuple[Any, str]:
     with lock:
-        return handle_post_(in_data, new_events, query_string, print_status)
+        return handle_post_(in_data, query_string, print_status)
 
-def handle_post_(in_data, new_events, query_string, print_status) -> Tuple[Any, str]:
+def handle_post_(in_data, query_string, print_status) -> Tuple[Any, str]:
     query_params = urllib.parse.parse_qs(query_string, strict_parsing=True)
 
     # NOTE NOTE NOTE:
@@ -714,6 +714,13 @@ def handle_post_(in_data, new_events, query_string, print_status) -> Tuple[Any, 
         user.last_seen_write_clock = client_write_clock
         if client_write_clock is not None:
             user.last_write_clock = client_write_clock
+
+        try:
+            new_events = json.loads(query_params.get("event_data", ""))
+        except (KeyError, json.decoder.JSONDecodeError) as e:
+            new_events = []
+        if type(new_events) != list:
+            new_events = []
 
         for ev in new_events:
             insert_event(ev["evid"], ev["clock"])

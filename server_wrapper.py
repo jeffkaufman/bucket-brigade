@@ -49,8 +49,9 @@ OPUS_FRAME_BYTES = OPUS_FRAME_SAMPLES * CHANNELS * OPUS_BYTES_PER_SAMPLE
 # a long time, so we don't just accumulate encoders indefinitely.
 users = {}  # userid -> (enc, dec)
 
-# Will be non-null when using shared memory.
-shared_memory = None
+# This will become either a shm.ShmClient or a shm.FakeClient, depending on
+#   whether we're in sharded mode or not.
+backend = None
 
 def pack_multi(packets) -> Any:
     encoded_length = 1
@@ -83,14 +84,12 @@ def unpack_multi(data) -> List[Any]:
         result.append(packet)
     return result
 
-def handle_json_post(in_data, new_events, query_string, print_status):
+def handle_json_post(in_data, query_string, print_status):
     in_json = {
-        "new_events": new_events,
         "query_string": query_string,
         "print_status": print_status,
     }
-    out_json_raw, out_data = shm.ShmClient.handle_post(
-        shared_memory, json.dumps(in_json), in_data)
+    out_json_raw, out_data = backend.handle_post(json.dumps(in_json), in_data)
 
     out_json = json.loads(out_json_raw)
 
@@ -100,13 +99,12 @@ def handle_json_post(in_data, new_events, query_string, print_status):
     return out_data, out_json["x-audio-metadata"]
 
 def handle_json_clear_events():
-    shm.ShmClient.handle_post(
-        shared_memory, json.dumps({'clear_events': True}), [])
+    backend.handle_post(json.dumps({'clear_events': True}), [])
 
 def calculate_volume(in_data):
     return np.sqrt(np.mean(in_data**2))
 
-def handle_post(userid, n_samples, in_data_raw, new_events,
+def handle_post(userid, n_samples, in_data_raw,
                 query_string, print_status=True) -> Tuple[Any, str]:
     if not userid.isdigit():
         raise ValueError("UserID must be numeric; got: %r"%userid)
@@ -143,12 +141,8 @@ def handle_post(userid, n_samples, in_data_raw, new_events,
     rms_volume = calculate_volume(in_data)
     query_string += '&rms_volume=%s'%rms_volume
 
-    if shared_memory is not None:
-        data, x_audio_metadata = handle_json_post(
-            in_data, new_events, query_string, print_status)
-    else:
-        data, x_audio_metadata = server.handle_post(
-            in_data, new_events, query_string, print_status)
+    data, x_audio_metadata = handle_json_post(
+        in_data, query_string, print_status)
 
     packets = data.reshape([-1, OPUS_FRAME_SAMPLES])
     encoded = []
@@ -168,7 +162,7 @@ def do_OPTIONS(environ, start_response) -> None:
     start_response(
         '200 OK',
         [("Access-Control-Allow-Origin", "*"),
-         ("Access-Control-Allow-Headers", "Content-Type, X-Event-Data")])
+         ("Access-Control-Max-Age", "86400")])
     return b'',
 
 def do_GET(environ, start_response) -> None:
@@ -196,7 +190,7 @@ def do_GET(environ, start_response) -> None:
     start_response(
         '200 OK',
         [("Access-Control-Allow-Origin", "*"),
-         ("Access-Control-Allow-Headers", "Content-Type, X-Event-Data"),
+         ("Access-Control-Max-Age", "86400"),
          ("Access-Control-Expose-Headers", "X-Audio-Metadata"),
          ("X-Audio-Metadata", json.dumps({
              "server_clock": server_clock,
@@ -212,7 +206,7 @@ def die500(start_response, e):
     start_response('500 Internal Server Error', [
         ('Content-Type', 'text/plain'),
         ("Access-Control-Allow-Origin", "*"),
-        ("Access-Control-Allow-Headers", "Content-Type, X-Event-Data"),
+        ("Access-Control-Max-Age", "86400"),
         ("Access-Control-Expose-Headers", "X-Audio-Metadata"),
         ("X-Audio-Metadata", json.dumps({
             "kill_client": True,
@@ -233,32 +227,12 @@ def do_POST(environ, start_response) -> None:
         query_params = {}
 
     if environ.get('PATH_INFO', '') == "/reset_events":
-        if shared_memory is not None:
-            handle_json_clear_events()
-        else:
-            server.clear_events()
+        handle_json_clear_events()
+
         start_response('200 OK', [
             ("Access-Control-Allow-Origin", "*"),
-            ("Access-Control-Allow-Headers", "Content-Type, X-Event-Data")])
+            ("Access-Control-Max-Age", "86400")])
         return b'events cleared',
-
-    if environ.get('PATH_INFO', '') == "/action":
-        if shared_memory is not None:
-            handle_json_clear_events()
-        else:
-            server.clear_events()
-        start_response('200 OK', [
-            ("Access-Control-Allow-Origin", "*"),
-            ("Access-Control-Allow-Headers", "Content-Type, X-Event-Data")])
-        return b'done',
-
-    try:
-        evh = environ["HTTP_X_EVENT_DATA"]
-        new_events = json.loads(evh)
-    except (KeyError, json.decoder.JSONDecodeError) as e:
-        new_events = []
-    if type(new_events) != list:
-        new_events = []
 
     userid = None
     try:
@@ -270,28 +244,35 @@ def do_POST(environ, start_response) -> None:
         if reset_user_state and userid and (userid in users):
             del users[userid]
 
-        data, x_audio_metadata = handle_post(userid, n_samples, in_data_raw, new_events, query_string)
+        data, x_audio_metadata = handle_post(userid, n_samples, in_data_raw, query_string)
     except Exception as e:
         # Clear out stale session
         if userid and (userid in users):
             del users[userid]
+        print(e)
         return die500(start_response, e)
 
     start_response(
         '200 OK',
         [("Access-Control-Allow-Origin", "*"),
-         ("Access-Control-Allow-Headers", "Content-Type, X-Event-Data"),
+         ("Access-Control-Max-Age", "86400"),
          ("Access-Control-Expose-Headers", "X-Audio-Metadata"),
          ("X-Audio-Metadata", x_audio_metadata),
          ("Content-Type", "application/octet-stream")])
     return data,
 
 def application(environ, start_response):
-    global shared_memory
-    if shared_memory is None and (uwsgi is not None  and 'segment' in uwsgi.opt):
-        shm_name = uwsgi.opt['segment']
-        if shm_name:
-            shared_memory = shm.attach_or_create(shm_name.decode("utf8"))
+    global backend
+
+    if backend is None:
+        if uwsgi is not None  and 'segment' in uwsgi.opt:
+            shm_name = uwsgi.opt['segment']
+            if shm_name:
+                backend = shm.ShmClient(shm_name.decode("utf-8"))
+
+    # If that didn't work, we're not sharded.
+    if backend is None:
+        backend = shm.FakeClient()
 
     return {"GET": do_GET,
             "POST": do_POST,

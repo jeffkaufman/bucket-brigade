@@ -115,20 +115,24 @@ class ShmServer:
                 time.sleep(SERVER_SLEEP_S)
 
 class ShmClient:
-    @staticmethod
-    def handle_post(buf, in_json_raw, in_data):
-        encode_json_and_data(buf, in_json_raw, in_data, throw_exceptions=True)
-        buf[0] = MESSAGE_TYPE_POST
+    def __init__(self, shm_name):
+        self.buf = attach_or_create(shm_name)
 
-        ShmClient.wait_resp_(buf)
+    def handle_post(self, in_json_raw, in_data):
+        encode_json_and_data(self.buf, in_json_raw, in_data, throw_exceptions=True)
+        self.buf[0] = MESSAGE_TYPE_POST
 
-        return decode_json_and_data(buf)
+        self.wait_resp_()
 
-    @staticmethod
-    def wait_resp_(buf):
-        while server_turn(buf):
+        return decode_json_and_data(self.buf)
+
+    def wait_resp_(self):
+        while server_turn(self.buf):
             time.sleep(CLIENT_SLEEP_S)
 
+class FakeClient:
+    def handle_post(self, in_json_raw, in_data):
+        return server.handle_json_post(in_json_raw, in_data)
 
 if __name__ == "__main__":
     ShmServer.run(sys.argv[1:])

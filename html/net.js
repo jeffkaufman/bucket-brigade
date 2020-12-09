@@ -319,10 +319,10 @@ export async function samples_to_server(outdata, target_url, send_metadata) {
       loopback_mode: 'loopback',
     }
 
-    const skip_params = ['event_data'];
+    const skip_params = []
     const truthy_params = ['track', 'monitor'];
     const nonnull_params = ['write_clock', 'volume', 'backing_volume', 'bpm', 'repeats', 'bpr'];
-    const stringify_params = ['chat', 'mic_volume'];
+    const stringify_params = ['chat', 'mic_volume', 'event_data'];
     const flag_params = ['request_lead', 'mark_start_singing', 'mark_stop_singing'];
 
     for (var k in send_metadata) {
@@ -368,8 +368,6 @@ export async function samples_to_server(outdata, target_url, send_metadata) {
 
     console.debug("SPAM", "Sending XHR w/ ID:", xhr.debug_id, "already in flight:", xhrs_inflight++, "; data size:", outdata.length);
     xhr.open("POST", target_url, true);
-    xhr.setRequestHeader("Content-Type", "application/octet-stream");
-    xhr.setRequestHeader("X-Event-Data", JSON.stringify(send_metadata.event_data));
     xhr.responseType = "arraybuffer";
     xhr.send(outdata);
     console.debug("SPAM", "... XHR sent.");
