@@ -157,9 +157,9 @@ def handle_post(userid, n_samples, in_data_raw, new_events,
         encoded.append(e)
     data = pack_multi(encoded).tobytes()
 
-    with open(os.path.join(LOG_DIR, userid), "a") as log_file: 
+    with open(os.path.join(LOG_DIR, userid), "a") as log_file:
         log_file.write("%d %.8f\n"%(
-            time.time(), 
+            time.time(),
             -1 if client_no_data else rms_volume))
 
     return data, x_audio_metadata
@@ -225,15 +225,32 @@ def do_POST(environ, start_response) -> None:
     in_data_raw = environ['wsgi.input'].read(content_length)
 
     query_string = environ['QUERY_STRING']
-    query_params = urllib.parse.parse_qs(query_string, strict_parsing=True)
+
+    # For some reason parse_qs can't handle an empty query string
+    if len(query_string) > 0:
+        query_params = urllib.parse.parse_qs(query_string, strict_parsing=True)
+    else:
+        query_params = {}
 
     if environ.get('PATH_INFO', '') == "/reset_events":
         if shared_memory is not None:
             handle_json_clear_events()
         else:
             server.clear_events()
-        start_response('204 No Content', [])
-        return b'',
+        start_response('200 OK', [
+            ("Access-Control-Allow-Origin", "*"),
+            ("Access-Control-Allow-Headers", "Content-Type, X-Event-Data")])
+        return b'events cleared',
+
+    if environ.get('PATH_INFO', '') == "/action":
+        if shared_memory is not None:
+            handle_json_clear_events()
+        else:
+            server.clear_events()
+        start_response('200 OK', [
+            ("Access-Control-Allow-Origin", "*"),
+            ("Access-Control-Allow-Headers", "Content-Type, X-Event-Data")])
+        return b'done',
 
     try:
         evh = environ["HTTP_X_EVENT_DATA"]
