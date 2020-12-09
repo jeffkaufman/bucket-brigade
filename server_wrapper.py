@@ -168,17 +168,17 @@ def do_OPTIONS(environ, start_response) -> None:
 def do_GET(environ, start_response) -> None:
     global pr
 
-    if environ.get('PATH_INFO', '') == "/start_profile":
+    if environ.get('PATH_INFO', '') == "/api/start_profile":
         pr.enable()
         start_response('200 OK', [])
         return b'profiling enabled',
 
-    if environ.get('PATH_INFO', '') == "/stop_profile":
+    if environ.get('PATH_INFO', '') == "/api/stop_profile":
         pr.disable()
         start_response('200 OK', [])
         return b'profiling disabled',
 
-    if environ.get('PATH_INFO', '') == "/get_profile":
+    if environ.get('PATH_INFO', '') == "/api/get_profile":
         s = io.StringIO()
         ps = pstats.Stats(pr, stream=s).sort_stats('tottime')
         ps.print_stats()
@@ -226,7 +226,7 @@ def do_POST(environ, start_response) -> None:
     else:
         query_params = {}
 
-    if environ.get('PATH_INFO', '') == "/reset_events":
+    if environ.get('PATH_INFO', '') == "/api/reset_events":
         handle_json_clear_events()
 
         start_response('200 OK', [
