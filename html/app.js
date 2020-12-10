@@ -18,7 +18,7 @@ const MAX_MS_PER_BATCH = 900;
 const OPUS_FRAME_MS = 60;
 
 // don't let people be louder than this
-const TARGET_MAX_RMS_VOL = .7;
+const TARGET_MAX_RMS_VOL = 10;
 
 function close_stream(stream) {
   stream.getTracks().forEach((track) => track.stop());
