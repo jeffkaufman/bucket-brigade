@@ -572,7 +572,23 @@ export class BucketBrigadeContext extends EventTarget {
 
     //XXX: the AudioWorkletProcessor just seems to get leaked here, every time we stop and restart. I'm not sure if there's a way to prevent that without reloading the page... (or avoiding reallocating it when we stop and start.)
     await this.audioCtx.audioWorklet.addModule('audio-worklet.js');
-    this.playerNode = new AudioWorkletNode(this.audioCtx, 'player');
+    try {
+      this.playerNode = new AudioWorkletNode(this.audioCtx, 'player');
+    } catch (e) {
+      // This is insane and cannot possibly happen, however we observe it in
+      //   production: "InvalidStateError: Failed to construct 'AudioWorkletNode':
+      //   AudioWorkletNode cannot be created: The node name 'player' is not
+      //   defined in AudioWorkletGlobalScope."
+      //
+      // As a hack, just wait a moment and try again:
+      await new Promise(function(resolve){
+        setTimeout(async function() {
+          await this.audioCtx.audioWorklet.addModule('audio-worklet.js');
+          this.playerNode = new AudioWorkletNode(this.audioCtx, 'player');
+          resolve();
+        }, 500);
+      });
+    }
 
     // XXX: this encoder decoder crap should probably all live in the SingerClient?
     // Avoid starting more than one copy of the encoder/decoder workers.
