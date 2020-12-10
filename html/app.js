@@ -17,6 +17,9 @@ const MAX_MS_PER_BATCH = 900;
 // this must be 2.5, 5, 10, 20, 40, or 60.
 const OPUS_FRAME_MS = 60;
 
+// don't let people be louder than this
+const TARGET_MAX_RMS_VOL = 20;
+
 function close_stream(stream) {
   stream.getTracks().forEach((track) => track.stop());
 }
@@ -664,7 +667,8 @@ export class SingerClient extends EventTarget {
     super();
 
     var {speakerMuted, micMuted, context, secretId, apiUrl, offset, username} = options;
-
+    
+    this.audio_vol_adjustment_ = 1;
     this.speakerMuted_ = speakerMuted;
     this.micMuted_ = micMuted;
 
@@ -845,11 +849,32 @@ export class SingerClient extends EventTarget {
     if (this.mic_buf.length >= this.ctx.sample_batch_size) { //XXX sbs should be on clients not context right?
       console.debug("Got enough chunks:", this.mic_buf);
       var chunk = concat_chunks(this.mic_buf);
+      this.normalize_volume(chunk);
       console.debug("SPAM", "Encoding chunk to send:", chunk);
       this.mic_buf = [];
       this.connection.send_chunk(chunk);
     }
   }
+  
+  normalize_volume(chunk) {
+    const chunk_data = chunk.data;
+    let squared_sum = 0;
+    for (let i = 0; i < chunk_data.length; i++) {
+      squared_sum += chunk_data[i] * chunk_data[i];
+    }
+    const rms_volume = Math.sqrt(squared_sum);
+    if (rms_volume > 0) {
+      const candidate_vol_adjustment = TARGET_MAX_RMS_VOL/rms_volume;
+      if (candidate_vol_adjustment < this.audio_vol_adjustment_) {
+        this.audio_vol_adjustment_ = candidate_vol_adjustment;
+        console.log("hit max volume, turned user down to:", this.audio_vol_adjustment_);
+      }
+    }
+    for (let i = 0; i < chunk_data.length; i++) {
+      chunk_data[i] *= this.audio_vol_adjustment_;
+    }
+  }
+
 
   server_response(chunk) {
     this.ctx.samples_to_worklet(chunk);
