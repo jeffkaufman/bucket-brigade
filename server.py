@@ -220,9 +220,6 @@ state = State()
 
 events: Dict[str, str] = {}
 
-def clear_events():
-    events.clear()
-
 METRONOME = "metronome -- set BPM below"
 
 tracks = []
@@ -491,10 +488,6 @@ def fix_volume(data, backing_data, n_people):
 def handle_json_post(in_json_raw, in_data):
     in_json = json.loads(in_json_raw)
 
-    if "clear_events" in in_json:
-        clear_events()
-        return "", []
-
     query_string = in_json["query_string"]
 
     out_data, x_audio_metadata = handle_post(
@@ -504,85 +497,38 @@ def handle_json_post(in_json_raw, in_data):
         "x-audio-metadata": x_audio_metadata,
     }), out_data
 
-def handle_special(query_params):
-    pass
-
-def handle_post(in_data, query_string, print_status) -> Tuple[Any, str]:
-    query_params = urllib.parse.parse_qs(query_string, strict_parsing=True)
-
-    # NOTE NOTE NOTE:
-    # * All `clock` variables are measured in samples.
-    # * All `clock` variables represent the END of an interval, NOT the
-    #   beginning. It's arbitrary which one to use, but you have to be
-    #   consistent, and trust me that it's slightly nicer this way.
-
-    server_clock = calculate_server_clock()
-    if recorder:
-        recorder.maybe_write(server_clock)
-
-    client_write_clock = query_params.get("write_clock", None)
-    if client_write_clock is not None:
-        client_write_clock = int(client_write_clock[0])
-    client_read_clock = query_params.get("read_clock", None)
-    if client_read_clock is not None:
-        client_read_clock = int(client_read_clock[0])
-    else:
-        raise ValueError("no client read clock")
-
-    userid, = query_params.get("userid", [None])
-    username, = query_params.get("username", [None])
-    if not userid or not username:
-        raise ValueError("missing username/id")
-
-    reset_user_state, = query_params.get("reset_user_state", (None,))
-    # We used to do this by looking for missing client_write_clock, but that may be true on multiple requests, whereas this is only the first one.
-    if reset_user_state:
-        # New session, write some debug info to disk
-        logging.debug("*** New client:" + str(query_params) + "\n\n")
-
-        if userid in users:
-            # Delete any state that shouldn't be persisted.
-            users[userid].flush()
-
-    update_users(userid, username, server_clock, client_read_clock)
-    user = users[userid]
-
-    volume, = query_params.get("volume", [None])
+# Handle special operations that do not require a user (although they may
+#   optionally support one), but can be done server-to-server as well.
+def handle_special(query_params, server_clock, user=None, client_read_clock=None):
+    volume = query_params.get("volume", None)
     if volume:
         state.global_volume = math.exp(6.908 * float(volume)) / 1000
 
-    backing_volume, = query_params.get("backing_volume", [None])
+    backing_volume = query_params.get("backing_volume", None)
     if backing_volume:
         state.backing_volume = math.exp(6.908 * float(backing_volume)) / 1000
 
-    msg_chats, = query_params.get("chat", [None])
+    msg_chats = query_params.get("chat", None)
     if msg_chats:
         for msg_chat in json.loads(msg_chats):
             sendall("chats", (username, msg_chat), exclude=[userid])
 
-    bpm, = query_params.get("bpm", [None])
+    bpm = query_params.get("bpm", None)
     if bpm:
-        state.bpm = int(bpm)
+        state.bpm = bpm
         sendall("bpm", state.bpm)
 
-    repeats, = query_params.get("repeats", [None])
+    repeats = query_params.get("repeats", None)
     if repeats:
-        state.repeats = int(repeats)
+        state.repeats = repeats
         sendall("repeats", state.repeats)
 
-    bpr, = query_params.get("bpr", [None])
+    bpr = query_params.get("bpr", None)
     if bpr:
-        state.bpr = int(bpr)
+        state.bpr = bpr
         sendall("bpr", state.bpr)
 
-    rms_volume, = query_params.get("rms_volume", [None])
-    if rms_volume:
-        user.rms_volume = float(rms_volume)
-
-    requested_mixer, = query_params.get("mixer", [None])
-
-
-    mic_volume, = query_params.get("mic_volume", [None])
+    mic_volume = query_params.get("mic_volume", None)
     if mic_volume:
         for other_userid, new_mic_volume in json.loads(mic_volume):
             if other_userid in users:
@@ -598,21 +544,19 @@ def handle_post(in_data, query_string, print_status) -> Tuple[Any, str]:
                 users[other_userid].scaled_mic_volume = math.exp(
                     6.908 * new_mic_volume * .5) / math.exp(6.908 * 0.5)
 
-    requested_track, = query_params.get("track", [None])
+    requested_track = query_params.get("track", None)
     if requested_track:
         state.requested_track = requested_track
 
-    if query_params.get("request_lead", None):
-        assign_delays(userid)
-        state.song_start_clock = None
-        state.song_end_clock = 0
-        state.metronome_on = False
-        state.leader = userid
-        clear_whole_buffer()
-
     if query_params.get("mark_start_singing", None):
+        # Always clear events at the start of a new song.
+        events.clear()
+
         # XXX: There is some confusion over exactly where the start marker should go, but it should be a value that we are guaranteed to have, so the song doesn't fail to start. (So not the write clock.)
-        state.song_start_clock = client_read_clock
+        if client_read_clock is not None:
+            state.song_start_clock = client_read_clock
+        else:
+            state.song_start_clock = server_clock
         state.song_end_clock = 0
         state.metronome_on = False
         if state.bpm and state.bpr and state.repeats:
@@ -634,12 +578,123 @@ def handle_post(in_data, query_string, print_status) -> Tuple[Any, str]:
         state.backing_track_index = len(state.backing_track)
         state.metronome_on = False
         state.leader = None
-        state.song_end_clock = user.last_write_clock
 
-        # They're done singing, send them to the end.
-        user.send("delay_seconds", state.max_position)
+        if user is not None:
+            state.song_end_clock = user.last_write_clock
+            # They're done singing, send them to the end.
+            user.send("delay_seconds", state.max_position)
+        else:
+            state.song_end_clock = server_clock
 
-    monitor_userid, = query_params.get("monitor", [None])
+    if query_params.get("clear_events", None):
+        events.clear()
+
+    try:
+        new_events = json.loads(query_params.get("event_data", ""))
+    except (KeyError, json.decoder.JSONDecodeError) as e:
+        new_events = []
+    if type(new_events) != list:
+        new_events = []
+
+    for ev in new_events:
+        insert_event(ev["evid"], ev["clock"])
+
+# Do some format conversions and strip the unnecessary nesting layer that urllib
+#   query parsing applies
+INT_PARAMS = ["write_clock", "read_clock", "bpm", "repeats", "bpr"]
+def clean_query_params(params):
+    clean_params = {}
+    for (k, v) in params.items():
+        if (not isinstance(v, list)) or (not len(v) == 1):
+            raise ValueError("Duplicate query parameters are not allowed.")
+        if k in INT_PARAMS:
+            clean_params[k] = int(v[0])
+        else:
+            clean_params[k] = v[0]
+    return clean_params
+
+def extract_params(params, keys):
+    result = [None] * len(params)
+    for k in keys:
+        result
+
+def get_events_to_send() -> Any:
+    return [{"evid": i[0], "clock": i[1]} for i in events.items()]
+
+def handle_post(in_data, query_string, print_status) -> Tuple[Any, str]:
+    query_params = clean_query_params(urllib.parse.parse_qs(query_string, strict_parsing=True))
+
+    userid = query_params.get("userid", None)
+    server_clock = calculate_server_clock()
+    requested_mixer = query_params.get("mixer", None)
+
+    # Handle server-to-server requests:
+    if userid is None:
+        # If we start a song triggered from here, mark its start at the current
+        #   server clock, since we don't have a user clock to start at. (I'm
+        #   not sure this clock is used for anything other than the bucket
+        #   brigade app countdown.)
+        handle_special(query_params, server_clock)
+
+        # abbreviated non-user metadata
+        x_audio_metadata = {
+            "server_clock": server_clock,
+            "server_sample_rate": SAMPLE_RATE,
+            "last_request_clock": state.last_request_clock,
+            "user_summary": user_summary(requested_mixer),
+            "n_connected_users": len(users),
+            "queue_size": QUEUE_LENGTH / FRAME_SIZE, # in 128-sample frames
+            "events": get_events_to_send(),
+            "leader": state.leader,
+        }
+        return np.zeros(0), json.dumps(x_audio_metadata)
+
+    # NOTE NOTE NOTE:
+    # * All `clock` variables are measured in samples.
+    # * All `clock` variables represent the END of an interval, NOT the
+    #   beginning. It's arbitrary which one to use, but you have to be
+    #   consistent, and trust me that it's slightly nicer this way.
+
+    if recorder:
+        recorder.maybe_write(server_clock)
+
+    client_write_clock = query_params.get("write_clock", None)
+    client_read_clock = query_params.get("read_clock", None)
+    if client_read_clock is None:
+        raise ValueError("no client read clock")
+
+    username = query_params.get("username", None)
+    if not username:
+        username = "<anonymous>"
+
+    # We used to do this by looking for missing client_write_clock, but that may be true on multiple requests, whereas this is only the first one.
+    if query_params.get("reset_user_state", None):
+        # New session, write some debug info to disk
+        logging.debug("*** New client:" + str(query_params) + "\n\n")
+
+        if userid in users:
+            # Delete any state that shouldn't be persisted.
+            users[userid].flush()
+
+    update_users(userid, username, server_clock, client_read_clock)
+    user = users[userid]
+
+    rms_volume = query_params.get("rms_volume", None)
+    if rms_volume:
+        user.rms_volume = float(rms_volume)
+
+    if query_params.get("request_lead", None):
+        assign_delays(userid)
+        state.song_start_clock = None
+        state.song_end_clock = 0
+        state.metronome_on = False
+        state.leader = userid
+        clear_whole_buffer()
+
+    # Handle all operations that do not require a userid
+    handle_special(query_params, server_clock, user, client_read_clock)
+
+    monitor_userid = query_params.get("monitor", None)
     if monitor_userid:
         setup_monitoring(userid, monitor_userid)
 
@@ -693,7 +748,8 @@ def handle_post(in_data, query_string, print_status) -> Tuple[Any, str]:
         raise ValueError("Client's write clock is too far in the past")
     else:
         if user.last_seen_write_clock is not None:
-            # For debugging purposes only
+            # Since Opus is stateful, we cannot receive or send audio out-of-order; if
+            #   a client tries to do that, we force them to reconnect.
             if client_write_clock - n_samples != user.last_seen_write_clock:
                 raise ValueError(
                     f'Client write clock desync ('
@@ -707,16 +763,6 @@ def handle_post(in_data, query_string, print_status) -> Tuple[Any, str]:
         user.last_seen_write_clock = client_write_clock
         if client_write_clock is not None:
             user.last_write_clock = client_write_clock
-
-        try:
-            new_events = json.loads(query_params.get("event_data", ""))
-        except (KeyError, json.decoder.JSONDecodeError) as e:
-            new_events = []
-        if type(new_events) != list:
-            new_events = []
-
-        for ev in new_events:
-            insert_event(ev["evid"], ev["clock"])
 
         in_data *= user.scaled_mic_volume
 
@@ -745,7 +791,8 @@ def handle_post(in_data, query_string, print_status) -> Tuple[Any, str]:
     #   n_samples, but it matters if n_samples changes, and it matters for
     #   the server's zeroing.
 
-    # For debugging purposes only
+    # Since Opus is stateful, we cannot receive or send audio out-of-order; if
+    #   a client tries to do that, we force them to reconnect.
     if user.last_seen_read_clock is not None:
         if client_read_clock - n_samples != user.last_seen_read_clock:
             raise ValueError(
@@ -756,7 +803,7 @@ def handle_post(in_data, query_string, print_status) -> Tuple[Any, str]:
     user.last_seen_read_clock = client_read_clock
 
     n_people = [-1]
-    if query_params.get("loopback", [None])[0] == "true":
+    if query_params.get("loopback", None) == "true":
         data = in_data
     elif user.is_monitoring:
         data = wrap_get(monitor_queue, client_read_clock - n_samples, n_samples)
@@ -781,11 +828,6 @@ def handle_post(in_data, query_string, print_status) -> Tuple[Any, str]:
 
         data = fix_volume(data, backing_data, n_people)
 
-    events_to_send_list = list(events.items())
-    events_to_send = [ {"evid":i[0], "clock":i[1]} for i in events_to_send_list ]
-    #print(events_to_send)
-    # TODO: chop events that are too old to be relevant?
-
     x_audio_metadata = {
         "server_clock": server_clock,
         "server_sample_rate": SAMPLE_RATE,
@@ -796,7 +838,7 @@ def handle_post(in_data, query_string, print_status) -> Tuple[Any, str]:
         "user_summary": user_summary(requested_mixer),
         "n_connected_users": len(users),
         "queue_size": QUEUE_LENGTH / FRAME_SIZE, # in 128-sample frames
-        "events": events_to_send,
+        "events": get_events_to_send(),
         "leader": state.leader,
         "n_people_heard": int(n_people[0]),
     }

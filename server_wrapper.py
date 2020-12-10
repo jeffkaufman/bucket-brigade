@@ -98,11 +98,12 @@ def handle_json_post(in_data, query_string, print_status):
 
     return out_data, out_json["x-audio-metadata"]
 
-def handle_json_clear_events():
-    backend.handle_post(json.dumps({'clear_events': True}), np.zeros(0))
-
 def calculate_volume(in_data):
     return np.sqrt(np.mean(in_data**2))
+
+def handle_post_special(query_string, print_status=True):
+    data, x_audio_metadata = handle_json_post(np.zeros(0), query_string, print_status)
+    return data.tobytes(), x_audio_metadata
 
 def handle_post(userid, n_samples, in_data_raw,
                 query_string, print_status=True) -> Tuple[Any, str]:
@@ -240,28 +241,24 @@ def do_POST(environ, start_response) -> None:
     else:
         query_params = {}
 
-    if environ.get('PATH_INFO', '') == "/api/reset_events":
-        handle_json_clear_events()
-
-        start_response('200 OK', [
-            ("Access-Control-Allow-Origin", "*"),
-            ("Access-Control-Max-Age", "86400")])
-        return b'events cleared',
-
     userid = None
     try:
         userid, = query_params.get("userid", (None,))
-        if userid is None:
-            return die500(start_response, "Missing required userid parameter.")
 
         n_samples, = query_params.get("n_samples", ("0",))
         n_samples = int(n_samples)
+
+        if (userid is None) and (len(in_data_raw) > 0 or n_samples != 0):
+            return die500("Can't send non-user request with audio data.")
 
         reset_user_state, = query_params.get("reset_user_state", (None,))
         if reset_user_state and userid and (userid in users):
             del users[userid]
 
-        data, x_audio_metadata = handle_post(userid, n_samples, in_data_raw, query_string)
+        if userid is not None:
+            data, x_audio_metadata = handle_post(userid, n_samples, in_data_raw, query_string)
+        else:
+            data, x_audio_metadata = handle_post_special(query_string)
     except Exception as e:
         # Clear out stale session
         if userid and (userid in users):
