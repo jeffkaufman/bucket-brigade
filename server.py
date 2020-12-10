@@ -504,6 +504,9 @@ def handle_json_post(in_json_raw, in_data):
         "x-audio-metadata": x_audio_metadata,
     }), out_data
 
+def handle_special(query_params):
+    pass
+
 def handle_post(in_data, query_string, print_status) -> Tuple[Any, str]:
     query_params = urllib.parse.parse_qs(query_string, strict_parsing=True)
 

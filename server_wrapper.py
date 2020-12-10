@@ -139,6 +139,8 @@ def handle_post(userid, n_samples, in_data_raw,
         raise ValueError("Client is confused about how many samples it sent (got %s expected %s" % (n_samples, len(in_data)))
 
     rms_volume = calculate_volume(in_data)
+    # This is only safe because query_string is guaranteed to already contain
+    #   at least the userid parameter.
     query_string += '&rms_volume=%s'%rms_volume
 
     data, x_audio_metadata = handle_json_post(
@@ -165,6 +167,10 @@ def do_OPTIONS(environ, start_response) -> None:
          ("Access-Control-Max-Age", "86400")])
     return b'',
 
+# GET requests do not require any specific parameters. Primarily they are used
+#   when a client is starting up, to retrieve the server's current time. The
+#   use of them to start and stop profiling is kind of gross and should really
+#   be a POST, but it's purely for debugging so it's not a big issue.
 def do_GET(environ, start_response) -> None:
     global pr
 
@@ -201,7 +207,10 @@ def do_GET(environ, start_response) -> None:
     return b'ok',
 
 def die500(start_response, e):
-    trb = ("%s: %s\n\n%s" % (e.__class__.__name__, e, traceback.format_exc())).encode("utf-8")
+    if isinstance(e, Exception):
+        trb = ("%s: %s\n\n%s" % (e.__class__.__name__, e, traceback.format_exc())).encode("utf-8")
+    else:
+        trb = str(e).encode("utf-8")
 
     start_response('500 Internal Server Error', [
         ('Content-Type', 'text/plain'),
@@ -214,6 +223,11 @@ def die500(start_response, e):
         }))])
     return trb,
 
+# POST requests absolutely must have a numeric user_id for all requests which
+#   make it as far as handle_post; such requests must be associated with a user
+#   or there's nothing we can do with them, and they will fail.
+# There are a few exceptions for "special" requests not associated with a
+#   specific user, which are handled right here.
 def do_POST(environ, start_response) -> None:
     content_length = int(environ.get('CONTENT_LENGTH', 0))
     in_data_raw = environ['wsgi.input'].read(content_length)
@@ -237,6 +251,9 @@ def do_POST(environ, start_response) -> None:
     userid = None
     try:
         userid, = query_params.get("userid", (None,))
+        if userid is None:
+            return die500(start_response, "Missing required userid parameter.")
+
         n_samples, = query_params.get("n_samples", ("0",))
         n_samples = int(n_samples)
 
