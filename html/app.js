@@ -863,7 +863,6 @@ export class SingerClient extends EventTarget {
       squared_sum += chunk_data[i] * chunk_data[i];
     }
     const rms_volume = Math.sqrt(squared_sum);
-    console.log("rms_volume:", rms_volume);
     if (rms_volume > 0) {
       const candidate_vol_adjustment = TARGET_MAX_RMS_VOL/rms_volume;
       if (candidate_vol_adjustment < this.audio_vol_adjustment_) {
