@@ -18,7 +18,7 @@ const MAX_MS_PER_BATCH = 900;
 const OPUS_FRAME_MS = 60;
 
 // don't let people be louder than this
-const TARGET_MAX_RMS_VOL = 10;
+const TARGET_MAX_RMS_VOL = 20;
 
 function close_stream(stream) {
   stream.getTracks().forEach((track) => track.stop());
@@ -865,10 +865,11 @@ export class SingerClient extends EventTarget {
     const rms_volume = Math.sqrt(squared_sum);
     console.log("rms_volume:", rms_volume);
     if (rms_volume > 0) {
-      this.audio_vol_adjustment_ = Math.min(
-        TARGET_MAX_RMS_VOL/rms_volume, 
-        this.audio_vol_adjustment_);
-      console.log("this.audio_vol_adjustment:", this.audio_vol_adjustment_);
+      const candidate_vol_adjustment = TARGET_MAX_RMS_VOL/rms_volume;
+      if (candidate_vol_adjustment < this.audio_vol_adjustment_) {
+        this.audio_vol_adjustment_ = candidate_vol_adjustment;
+        console.log("hit max volume, turned user down to:", this.audio_vol_adjustment_);
+      }
     }
     for (let i = 0; i < chunk_data.length; i++) {
       chunk_data[i] *= this.audio_vol_adjustment_;
