@@ -255,6 +255,20 @@ function enableSpectatorMode() {
 
 window.latencyCalibrationGiveUp.addEventListener("click", enableSpectatorMode);
 
+window.sortConsole.addEventListener("click", ()=> {
+  const allChannels = [];
+  for (const userid of consoleChannels.keys()) {
+    allChannels.push(consoleChannels.get(userid));
+    window.mixingConsole.removeChild(consoleChannels.get(userid));
+  }
+  allChannels.sort((a, b)=> {
+    return (b.rms_volume || 0) - (a.rms_volume || 0);
+  });
+  allChannels.forEach((channel)=> {
+    window.mixingConsole.appendChild(channel);
+  });
+});
+
 function persist(textFieldId) {
   const textField = document.getElementById(textFieldId);
   const prevVal = localStorage.getItem(textFieldId);
@@ -696,6 +710,9 @@ function update_active_users(user_summary, server_sample_rate, imLeading, n_user
     const userid = mic_volume_inputs[i][1];
     const vol = mic_volume_inputs[i][2];
     const rms_volume = mic_volume_inputs[i][3];
+    const channel = consoleChannels.get(userid);
+    channel.rms_volume = rms_volume;
+
     let percentage_volume = (((Math.log(rms_volume*1000))/6.908)+1)*50;
     if (percentage_volume < 0) {
       percentage_volume = 0;
@@ -704,9 +721,9 @@ function update_active_users(user_summary, server_sample_rate, imLeading, n_user
       percentage_volume = 100;
     }
 
-    consoleChannels.get(userid).children[0].innerText = name;
-    consoleChannels.get(userid).children[1].children[0].style.width = percentage_volume+'%';
-    const channelVolumeInput = consoleChannels.get(userid).children[2];
+    channel.children[0].innerText = name;
+    channel.children[1].children[0].style.width = percentage_volume+'%';
+    const channelVolumeInput = channel.children[2];
     if (channelVolumeInput.classList.contains("editing")) {
       // don't update user volume because they are editing
     }
