@@ -5,6 +5,7 @@ import time
 import struct
 import server
 import json
+import traceback
 
 CLIENT_SLEEP_S = 1/10000  #0.1ms
 SERVER_SLEEP_S = 1/10000  #0.1ms
@@ -97,7 +98,7 @@ class ShmServer:
                                  throw_exceptions=False)
         except Exception as e:
             encode_json_and_data(buf, json.dumps(
-                {"error": str(e)}
+                {"error": str(e), "inner_bt": traceback.format_exc()}
             ), np.zeros(0, dtype=np.float32), throw_exceptions=False)
 
     @staticmethod

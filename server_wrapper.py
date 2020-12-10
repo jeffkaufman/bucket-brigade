@@ -94,7 +94,10 @@ def handle_json_post(in_data, query_string, print_status):
     out_json = json.loads(out_json_raw)
 
     if "error" in out_json:
-        raise Exception(out_json["error"])
+        inner_bt = ""
+        if "inner_bt" in out_json:
+            inner_bt = "\nBackend error details: " + out_json["inner_bt"]
+        raise Exception(out_json["error"] + inner_bt)
 
     return out_data, out_json["x-audio-metadata"]
 
@@ -209,7 +212,10 @@ def do_GET(environ, start_response) -> None:
 
 def die500(start_response, e):
     if isinstance(e, Exception):
-        trb = ("%s: %s\n\n%s" % (e.__class__.__name__, e, traceback.format_exc())).encode("utf-8")
+        # This is slightly sketchy: this assumes we are currently in the middle
+        #   of an exception handler for the exception e (which happens to be
+        #   true.)
+        trb = traceback.format_exc().encode("utf-8")
     else:
         trb = str(e).encode("utf-8")
 
@@ -263,7 +269,8 @@ def do_POST(environ, start_response) -> None:
         # Clear out stale session
         if userid and (userid in users):
             del users[userid]
-        print(e)
+        # Log it
+        print("Request raised exception!\nParams:", query_string, "\n", traceback.format_exc(), file=sys.stderr)
         return die500(start_response, e)
 
     start_response(
