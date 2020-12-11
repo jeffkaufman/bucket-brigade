@@ -631,7 +631,7 @@ function update_active_users(user_summary, server_sample_rate, imLeading, n_user
     const name = user_summary[i][1];
     const mic_volume = user_summary[i][2];
     const userid = user_summary[i][3];
-    const rms_volume = user_summary[i][6];
+    const rms_volume = user_summary[i][4];
 
     mic_volume_inputs.push([name, userid, mic_volume, rms_volume]);
     userids.add(userid);

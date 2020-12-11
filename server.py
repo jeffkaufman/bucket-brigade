@@ -423,8 +423,6 @@ def user_summary(requested_mixer) -> List[Any]:
             user.name,
             user.mic_volume,
             userid,
-            user.is_monitoring,
-            user.is_monitored,
             user.rms_volume))
     summary.sort()
     return summary
@@ -866,14 +864,12 @@ def maybe_print_status() -> None:
 
     print("-"*70)
 
-    for delay, name, mic_volume, userid, is_monitored, \
-        is_monitoring, rms_volume in user_summary(requested_mixer=True):
-        print ("%s %s vol=%.2f %s %s rms=%.5f" % (
+    for delay, name, mic_volume, userid, \
+         rms_volume in user_summary(requested_mixer=True):
+        print ("%s %s vol=%.2f rms=%.5f" % (
             str(delay).rjust(3),
             name.rjust(30),
             mic_volume,
-            "m" if is_monitored else " ",
-            "M" if is_monitoring else " ",
             rms_volume))
 
     state.last_status_ts = now
