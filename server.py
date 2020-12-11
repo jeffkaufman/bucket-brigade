@@ -245,6 +245,8 @@ class User:
         self.list_keys = ["chats"]
 
         self.userid = userid
+        if len(name) > 32:
+            name = name[:29] + "..."
         self.name = name
         self.last_heard_server_clock = last_heard_server_clock
         self.delay_samples = delay_samples
