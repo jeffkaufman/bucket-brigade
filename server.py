@@ -15,6 +15,7 @@ import wave
 import threading
 import datetime
 import struct
+import subprocess
 
 from typing import Any, Dict, List, Tuple, Iterable
 
@@ -29,6 +30,11 @@ logging.basicConfig(filename='server.log',level=logging.DEBUG)
 BINARY_USER_CONFIG_FORMAT = struct.Struct(">16s32sffH")
 
 FRAME_SIZE = 128
+
+# Grab these on startup, when they are very very likely to be the actual
+#   running version.
+SERVER_VERSION = subprocess.check_output(["git", "rev-parse", "--short", "HEAD"]).strip().decode("utf-8")
+SERVER_BRANCH = subprocess.check_output(["git", "rev-parse", "--abbrev-ref", "HEAD"]).strip().decode("utf-8")
 
 class State():
     def __init__(self):
