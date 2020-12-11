@@ -569,10 +569,6 @@ function mixerMonitorButtonClick(userid) {
   }
 }
 
-function mixerMuteButtonClick(userid) {
-
-}
-
 function mixerVolumeChange(userid) {
   if (!singer_client) {
     // XXX: UI doesn't reflect that we can't do this when we're not connected, should have that in the UI controls state machine
@@ -690,15 +686,10 @@ function update_active_users(user_summary, server_sample_rate, imLeading, n_user
       monitorButton.appendChild(document.createTextNode("mon"));
       monitorButton.addEventListener("click", ()=>{mixerMonitorButtonClick(newUserId)});
 
-      const muteButton = document.createElement("button");
-      muteButton.appendChild(document.createTextNode("mute"));
-      muteButton.addEventListener("click", ()=>{mixerMuteButtonClick(newUserId)});
-
       consoleChannel.appendChild(channelName);
       consoleChannel.appendChild(channelVolume);
       consoleChannel.appendChild(channelVolumeInput);
       consoleChannel.appendChild(monitorButton);
-      consoleChannel.appendChild(muteButton);
       window.mixingConsole.appendChild(consoleChannel);
       consoleChannels.set(newUserId, consoleChannel);
     }
