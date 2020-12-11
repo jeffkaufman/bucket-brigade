@@ -848,7 +848,7 @@ async function start_singing() {
     var {metadata} = e.detail;
 
     var queue_size = metadata["queue_size"];
-    var user_summary = metadata["user_summary"] || [];
+    var user_summary = metadata["user_summary"];
     var tracks = metadata["tracks"];
     var chats = metadata["chats"] || [];
     var delay_seconds = metadata["delay_seconds"];
