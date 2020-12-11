@@ -205,6 +205,8 @@ def do_GET(environ, start_response) -> None:
          ("X-Audio-Metadata", json.dumps({
              "server_clock": server_clock,
              "server_sample_rate": server.SAMPLE_RATE,
+             "server_version": server.SERVER_VERSION,
+             "server_branch": server.SERVER_BRANCH,
          })),
          ("Content-Type", "application/octet-stream")])
     # If we give a 0-byte response, Chrome Dev Tools gives a misleading error (see https://stackoverflow.com/questions/57477805/why-do-i-get-fetch-failed-loading-when-it-actually-worked)
