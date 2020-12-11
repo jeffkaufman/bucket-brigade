@@ -622,7 +622,11 @@ def get_events_to_send() -> Any:
     return [{"evid": i[0], "clock": i[1]} for i in events.items()]
 
 def handle_post(in_data, query_string, print_status) -> Tuple[Any, str]:
-    query_params = clean_query_params(urllib.parse.parse_qs(query_string, strict_parsing=True))
+    raw_params = {}
+    # For some reason urllib can't handle the query_string being empty
+    if query_string:
+        raw_params = urllib.parse.parse_qs(query_string, strict_parsing=True)
+    query_params = clean_query_params(raw_params)
 
     userid = query_params.get("userid", None)
     server_clock = calculate_server_clock()
