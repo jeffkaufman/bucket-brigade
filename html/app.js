@@ -1069,7 +1069,6 @@ export class SingerClientConnection {
 
   // Backdoor for bucket brigade to send things that shouldn't really be required in the proper API
   x_send_metadata(key, value, append) {
-    console.info("Setting metadata for next request:", key, value);
     if (append) {
       if (!(key in this.metadata_to_send)) {
         this.metadata_to_send[key] = [];

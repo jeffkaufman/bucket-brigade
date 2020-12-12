@@ -179,15 +179,12 @@ export class ServerConnection extends ServerConnectionBase {
                 0, /*littleEndian=*/false);
         pos += 2;
 
-        console.log(userid, name, mic_volume, rms_volume, delay);
         metadata.user_summary.push([delay, name, mic_volume, userid, rms_volume]);
       }
       data = data.slice(pos);
     }
 
     data = new Uint8Array(data)
-    console.log(data);
-
     this.receive_cb({
       epoch: this.app_epoch,
       metadata,
