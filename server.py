@@ -550,16 +550,22 @@ def handle_json_post(in_json_raw, in_data):
         "x-audio-metadata": x_audio_metadata,
     }), out_data
 
+def friendly_volume_to_scalar(volume):
+    if volume < 0.0000001:
+        return 0
+    # https://www.dr-lex.be/info-stuff/volumecontrols.html
+    return math.exp(6.908 * volume) / 1000
+
 # Handle special operations that do not require a user (although they may
 #   optionally support one), but can be done server-to-server as well.
 def handle_special(query_params, server_clock, user=None, client_read_clock=None):
     volume = query_params.get("volume", None)
     if volume:
-        state.global_volume = math.exp(6.908 * float(volume)) / 1000
+        state.global_volume = friendly_volume_to_scalar(float(volume))
 
     backing_volume = query_params.get("backing_volume", None)
     if backing_volume:
-        state.backing_volume = math.exp(6.908 * float(backing_volume)) / 1000
+        state.backing_volume = friendly_volume_to_scalar(float(backing_volume))
 
     msg_chats = query_params.get("chat", None)
     if msg_chats:
@@ -592,10 +598,9 @@ def handle_special(query_params, server_clock, user=None, client_read_clock=None
 
                 users[other_userid].mic_volume = new_mic_volume
 
-                # https://www.dr-lex.be/info-stuff/volumecontrols.html
                 # Make 1 be unity
-                users[other_userid].scaled_mic_volume = math.exp(
-                    6.908 * new_mic_volume * .5) / math.exp(6.908 * 0.5)
+                users[other_userid].scaled_mic_volume = friendly_volume_to_scalar(
+                    new_mic_volume * 0.5) / friendly_volume_to_scalar(0.5)
 
     requested_track = query_params.get("track", None)
     if requested_track:
