@@ -887,9 +887,7 @@ async function start_singing() {
     if (server_bpr) {
       window.bpr.value = server_bpr;
     }
-    if (window.enableMixingConsole.checked) {
-      singer_client.x_send_metadata("mixer", 1);
-    }
+    singer_client.x_send_metadata("user_summary", 1);
 
     if (delay_seconds) {
       if (delay_seconds > 0) {

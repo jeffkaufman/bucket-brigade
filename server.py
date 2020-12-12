@@ -429,9 +429,9 @@ def setup_monitoring(monitoring_userid, monitored_userid) -> None:
     users[monitoring_userid].send("delay_seconds", round(
         users[monitored_userid].delay_samples / SAMPLE_RATE) + DELAY_INTERVAL)
 
-def user_summary(requested_mixer) -> List[Any]:
+def user_summary(requested_user_summary) -> List[Any]:
     summary = []
-    if len(users) > 30 and not requested_mixer:
+    if not requested_user_summary:
         return summary
     for userid, user in users.items():
         summary.append((
@@ -679,7 +679,7 @@ def handle_post(in_data, query_string, print_status) -> Tuple[Any, str]:
 
     userid = query_params.get("userid", None)
     server_clock = calculate_server_clock()
-    requested_mixer = query_params.get("mixer", None)
+    requested_user_summary = query_params.get("user_summary", None)
 
     # Handle server-to-server requests:
     if userid is None:
@@ -699,9 +699,7 @@ def handle_post(in_data, query_string, print_status) -> Tuple[Any, str]:
             "events": get_events_to_send(),
             "leader": state.leader,
         }
-        return (
-            binary_user_summary(user_summary(requested_mixer)),
-            json.dumps(x_audio_metadata))
+        return np.zeros(0, np.uint8), json.dumps(x_audio_metadata)
 
     # NOTE NOTE NOTE:
     # * All `clock` variables are measured in samples.
@@ -906,7 +904,7 @@ def handle_post(in_data, query_string, print_status) -> Tuple[Any, str]:
     if print_status:
         maybe_print_status()
 
-    bin_summary = binary_user_summary(user_summary(requested_mixer))
+    bin_summary = binary_user_summary(user_summary(requested_user_summary))
     if len(bin_summary) > 0:
         data = np.append(bin_summary, data.view(dtype=np.uint8))
     return data, json.dumps(x_audio_metadata)
@@ -919,7 +917,7 @@ def maybe_print_status() -> None:
     print("-"*70)
 
     for delay, name, mic_volume, userid, \
-         rms_volume in user_summary(requested_mixer=True):
+         rms_volume in user_summary(requested_user_summary=True):
         print ("%s %s vol=%.2f rms=%.5f" % (
             str(delay).rjust(3),
             name.rjust(30),
