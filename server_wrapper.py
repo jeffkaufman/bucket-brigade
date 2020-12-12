@@ -8,6 +8,7 @@ import numpy as np  # type:ignore
 import opuslib  # type:ignore
 import traceback
 import time
+import struct
 
 try:
     import uwsgi
@@ -94,15 +95,19 @@ def handle_json_post(in_data, query_string, print_status):
     out_json = json.loads(out_json_raw)
 
     if "error" in out_json:
-        raise Exception(out_json["error"])
+        inner_bt = ""
+        if "inner_bt" in out_json:
+            inner_bt = "\nBackend error details: " + out_json["inner_bt"]
+        raise Exception(out_json["error"] + inner_bt)
 
     return out_data, out_json["x-audio-metadata"]
 
-def handle_json_clear_events():
-    backend.handle_post(json.dumps({'clear_events': True}), np.zeros(0))
-
 def calculate_volume(in_data):
     return np.sqrt(np.mean(in_data**2))
+
+def handle_post_special(query_string, print_status=True):
+    data, x_audio_metadata = handle_json_post(np.zeros(0), query_string, print_status)
+    return data.tobytes(), x_audio_metadata
 
 def handle_post(userid, n_samples, in_data_raw,
                 query_string, print_status=True) -> Tuple[Any, str]:
@@ -146,19 +151,30 @@ def handle_post(userid, n_samples, in_data_raw,
     data, x_audio_metadata = handle_json_post(
         in_data, query_string, print_status)
 
-    packets = data.reshape([-1, OPUS_FRAME_SAMPLES])
+    # Divide data into user_summary and raw audio data
+    n_users_in_summary, = struct.unpack(">H", data[:2])
+    user_summary_n_bytes = server.summary_length(n_users_in_summary)
+    
+    user_summary = data[:user_summary_n_bytes]
+    raw_audio = data[user_summary_n_bytes:].view(np.float32)
+
+    # Encode raw audio
+    packets = raw_audio.reshape([-1, OPUS_FRAME_SAMPLES])
     encoded = []
     for p in packets:
         e = np.frombuffer(enc.encode_float(p.tobytes(), OPUS_FRAME_SAMPLES), np.uint8)
         encoded.append(e)
-    data = pack_multi(encoded).tobytes()
+    compressed_audio = pack_multi(encoded)
+
+    # Combine user_summary and compressed audio data
+    data = np.append(user_summary, compressed_audio)
 
     with open(os.path.join(LOG_DIR, userid), "a") as log_file:
         log_file.write("%d %.8f\n"%(
             time.time(),
             -1 if client_no_data else rms_volume))
 
-    return data, x_audio_metadata
+    return data.tobytes(), x_audio_metadata
 
 def do_OPTIONS(environ, start_response) -> None:
     start_response(
@@ -201,6 +217,8 @@ def do_GET(environ, start_response) -> None:
          ("X-Audio-Metadata", json.dumps({
              "server_clock": server_clock,
              "server_sample_rate": server.SAMPLE_RATE,
+             "server_version": server.SERVER_VERSION,
+             "server_branch": server.SERVER_BRANCH,
          })),
          ("Content-Type", "application/octet-stream")])
     # If we give a 0-byte response, Chrome Dev Tools gives a misleading error (see https://stackoverflow.com/questions/57477805/why-do-i-get-fetch-failed-loading-when-it-actually-worked)
@@ -208,7 +226,10 @@ def do_GET(environ, start_response) -> None:
 
 def die500(start_response, e):
     if isinstance(e, Exception):
-        trb = ("%s: %s\n\n%s" % (e.__class__.__name__, e, traceback.format_exc())).encode("utf-8")
+        # This is slightly sketchy: this assumes we are currently in the middle
+        #   of an exception handler for the exception e (which happens to be
+        #   true.)
+        trb = traceback.format_exc().encode("utf-8")
     else:
         trb = str(e).encode("utf-8")
 
@@ -240,33 +261,30 @@ def do_POST(environ, start_response) -> None:
     else:
         query_params = {}
 
-    if environ.get('PATH_INFO', '') == "/api/reset_events":
-        handle_json_clear_events()
-
-        start_response('200 OK', [
-            ("Access-Control-Allow-Origin", "*"),
-            ("Access-Control-Max-Age", "86400")])
-        return b'events cleared',
-
     userid = None
     try:
         userid, = query_params.get("userid", (None,))
-        if userid is None:
-            return die500(start_response, "Missing required userid parameter.")
 
         n_samples, = query_params.get("n_samples", ("0",))
         n_samples = int(n_samples)
+
+        if (userid is None) and (len(in_data_raw) > 0 or n_samples != 0):
+            return die500("Can't send non-user request with audio data.")
 
         reset_user_state, = query_params.get("reset_user_state", (None,))
         if reset_user_state and userid and (userid in users):
             del users[userid]
 
-        data, x_audio_metadata = handle_post(userid, n_samples, in_data_raw, query_string)
+        if userid is not None:
+            data, x_audio_metadata = handle_post(userid, n_samples, in_data_raw, query_string)
+        else:
+            data, x_audio_metadata = handle_post_special(query_string)
     except Exception as e:
         # Clear out stale session
         if userid and (userid in users):
             del users[userid]
-        print(e)
+        # Log it
+        print("Request raised exception!\nParams:", query_string, "\n", traceback.format_exc(), file=sys.stderr)
         return die500(start_response, e)
 
     start_response(

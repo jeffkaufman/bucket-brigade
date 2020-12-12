@@ -5,6 +5,7 @@ import time
 import struct
 import server
 import json
+import traceback
 
 CLIENT_SLEEP_S = 1/10000  #0.1ms
 SERVER_SLEEP_S = 1/10000  #0.1ms
@@ -36,23 +37,24 @@ def server_turn(buf):
     return buf[0] == MESSAGE_TYPE_POST
 
 def encode_json_and_data(buf, json_raw, data, throw_exceptions):
+    data = data.view(dtype=np.uint8)
+    
     index = 1
 
     json_raw_bytes = json_raw.encode("utf-8")
-    data_uint8 = data.view(dtype=np.uint8)
 
     errormsg = None
     if len(json_raw_bytes) > MAX_JSON_LENGTH:
         errormsg = "json too long: %s" % len(json_raw_bytes)
-    elif len(data_uint8) > MAX_DATA_LENGTH:
-        errormsg = "data too long: %s" % len(data_uint8)
+    elif len(data) > MAX_DATA_LENGTH:
+        errormsg = "data too long: %s" % len(data)
 
     if errormsg:
         if throw_exceptions:
             raise Exception(errormsg)
         else:
             json_raw_bytes = json.dumps({"error": errormsg}).encode("utf-8")
-            data_uint8 = np.zeros(0, dtype=np.uint8)
+            data = np.zeros(0, dtype=np.uint8)
 
     buf[index : index + 2] = memoryview(struct.pack("H", len(json_raw_bytes)))
     index += 2
@@ -60,10 +62,10 @@ def encode_json_and_data(buf, json_raw, data, throw_exceptions):
     buf[index : index + len(json_raw_bytes)] = memoryview(json_raw_bytes)
     index += len(json_raw_bytes)
 
-    buf[index : index + 4] = memoryview(struct.pack("I", len(data_uint8)))
+    buf[index : index + 4] = memoryview(struct.pack("I", len(data)))
     index += 4
 
-    buf[index : index + len(data_uint8)] = data_uint8
+    buf[index : index + len(data)] = data
 
 def decode_json_and_data(buf):
     index = 1
@@ -83,7 +85,7 @@ def decode_json_and_data(buf):
     if data_length > MAX_DATA_LENGTH:
         raise Exception("bad data length %s" % data_length)
 
-    data = buf[index : index + data_length].view(np.float32)
+    data = buf[index : index + data_length].view(np.uint8)
 
     return json_raw, data
 
@@ -97,8 +99,8 @@ class ShmServer:
                                  throw_exceptions=False)
         except Exception as e:
             encode_json_and_data(buf, json.dumps(
-                {"error": str(e)}
-            ), np.zeros(0, dtype=np.float32), throw_exceptions=False)
+                {"error": str(e), "inner_bt": traceback.format_exc()}
+            ), np.zeros(0, dtype=np.uint8), throw_exceptions=False)
 
     @staticmethod
     def run(buffer_names):

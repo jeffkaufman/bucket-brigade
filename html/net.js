@@ -145,12 +145,52 @@ export class ServerConnection extends ServerConnectionBase {
       end: metadata.client_read_clock,
       length: metadata.n_samples,
     });
+
+    metadata.user_summary = [];
+
+    let data = response.data;
+    if (data.byteLength > 0) {
+      const users_in_summary =
+            new DataView(data).getUint16(0, /*littleEndian=*/false);
+      const utf8decoder = new TextDecoder();
+
+      let pos = 2;
+      for (var user_index = 0; user_index < users_in_summary;
+           user_index++) {
+        const userid = utf8decoder.decode(data.slice(pos, pos + 16));
+        pos += 16
+
+        let name = "<undecodable>";
+        try {
+          name = utf8decoder.decode(data.slice(pos, pos + 32));
+        } catch {}
+        pos += 32;
+
+        const mic_volume =
+              new DataView(data.slice(pos, pos + 4)).getFloat32(0);
+        pos += 4;
+
+        const rms_volume =
+              new DataView(data.slice(pos, pos + 4)).getFloat32(0);
+        pos += 4;
+
+        const delay =
+              new DataView(data.slice(pos, pos + 2)).getUint16(
+                0, /*littleEndian=*/false);
+        pos += 2;
+
+        metadata.user_summary.push([delay, name, mic_volume, userid, rms_volume]);
+      }
+      data = data.slice(pos);
+    }
+
+    data = new Uint8Array(data)
     this.receive_cb({
       epoch: this.app_epoch,
       metadata,
       chunk: new CompressedAudioChunk({
         interval: result_interval,
-        data: new Uint8Array(response.data)
+        data
       })
     });
   }

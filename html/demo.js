@@ -569,10 +569,6 @@ function mixerMonitorButtonClick(userid) {
   }
 }
 
-function mixerMuteButtonClick(userid) {
-
-}
-
 function mixerVolumeChange(userid) {
   if (!singer_client) {
     // XXX: UI doesn't reflect that we can't do this when we're not connected, should have that in the UI controls state machine
@@ -631,7 +627,7 @@ function update_active_users(user_summary, server_sample_rate, imLeading, n_user
     const name = user_summary[i][1];
     const mic_volume = user_summary[i][2];
     const userid = user_summary[i][3];
-    const rms_volume = user_summary[i][6];
+    const rms_volume = user_summary[i][4];
 
     mic_volume_inputs.push([name, userid, mic_volume, rms_volume]);
     userids.add(userid);
@@ -690,15 +686,10 @@ function update_active_users(user_summary, server_sample_rate, imLeading, n_user
       monitorButton.appendChild(document.createTextNode("mon"));
       monitorButton.addEventListener("click", ()=>{mixerMonitorButtonClick(newUserId)});
 
-      const muteButton = document.createElement("button");
-      muteButton.appendChild(document.createTextNode("mute"));
-      muteButton.addEventListener("click", ()=>{mixerMuteButtonClick(newUserId)});
-
       consoleChannel.appendChild(channelName);
       consoleChannel.appendChild(channelVolume);
       consoleChannel.appendChild(channelVolumeInput);
       consoleChannel.appendChild(monitorButton);
-      consoleChannel.appendChild(muteButton);
       window.mixingConsole.appendChild(consoleChannel);
       consoleChannels.set(newUserId, consoleChannel);
     }
@@ -857,7 +848,7 @@ async function start_singing() {
     var {metadata} = e.detail;
 
     var queue_size = metadata["queue_size"];
-    var user_summary = metadata["user_summary"] || [];
+    var user_summary = metadata["user_summary"];
     var tracks = metadata["tracks"];
     var chats = metadata["chats"] || [];
     var delay_seconds = metadata["delay_seconds"];
@@ -896,9 +887,7 @@ async function start_singing() {
     if (server_bpr) {
       window.bpr.value = server_bpr;
     }
-    if (window.enableMixingConsole.checked) {
-      singer_client.x_send_metadata("mixer", 1);
-    }
+    singer_client.x_send_metadata("user_summary", 1);
 
     if (delay_seconds) {
       if (delay_seconds > 0) {

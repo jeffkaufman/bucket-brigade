@@ -458,6 +458,11 @@ export class BucketBrigadeContext extends EventTarget {
   }
 
   unsubscribe_and_stop_worklet() {
+    if (!this.active_handler) {
+      console.warn("Tried to unsubscribe worklet, but nothing was subscribed!");
+      // Continue anyway so that we stop the worklet, just in case; remove will
+      //   fail silently
+    }
     this.removeEventListener("workletMessage_", this.active_handler);
     this.active_handler = null;
     this.playerNode.port.postMessage({
@@ -572,7 +577,23 @@ export class BucketBrigadeContext extends EventTarget {
 
     //XXX: the AudioWorkletProcessor just seems to get leaked here, every time we stop and restart. I'm not sure if there's a way to prevent that without reloading the page... (or avoiding reallocating it when we stop and start.)
     await this.audioCtx.audioWorklet.addModule('audio-worklet.js');
-    this.playerNode = new AudioWorkletNode(this.audioCtx, 'player');
+    try {
+      this.playerNode = new AudioWorkletNode(this.audioCtx, 'player');
+    } catch (e) {
+      // This is insane and cannot possibly happen, however we observe it in
+      //   production: "InvalidStateError: Failed to construct 'AudioWorkletNode':
+      //   AudioWorkletNode cannot be created: The node name 'player' is not
+      //   defined in AudioWorkletGlobalScope."
+      //
+      // As a hack, just wait a moment and try again:
+      await new Promise(function(resolve){
+        setTimeout(async function() {
+          await this.audioCtx.audioWorklet.addModule('audio-worklet.js');
+          this.playerNode = new AudioWorkletNode(this.audioCtx, 'player');
+          resolve();
+        }, 500);
+      });
+    }
 
     // XXX: this encoder decoder crap should probably all live in the SingerClient?
     // Avoid starting more than one copy of the encoder/decoder workers.
@@ -667,7 +688,7 @@ export class SingerClient extends EventTarget {
     super();
 
     var {speakerMuted, micMuted, context, secretId, apiUrl, offset, username} = options;
-    
+
     this.audio_vol_adjustment_ = 1;
     this.speakerMuted_ = speakerMuted;
     this.micMuted_ = micMuted;
@@ -738,9 +759,14 @@ export class SingerClient extends EventTarget {
 
     this.connection.close();
     this.connection = null;
+    this.mic_buf = [];  // Extra just-in-case flush of stale audio data
   }
 
   connect_() {
+    if (this.connection || this.hasConnectivity) {
+      console.error("Tried to connect_ an already-connected (or already-connecting) SingerClient, doing nothing... (This should never happen.)");
+      return;
+    }
     this.connection = new SingerClientConnection({
       receive_cb: this.server_response.bind(this),
       failure_cb: this.server_failure.bind(this),
@@ -751,6 +777,7 @@ export class SingerClient extends EventTarget {
       username: this.username,
       apiUrl: this.apiUrl,
     });
+    this.mic_buf = [];  // Extra just-in-case flush of stale audio data
 
     this.connection.start_singing().then(result => {
       this.hasConnectivity = true;
@@ -840,6 +867,10 @@ export class SingerClient extends EventTarget {
     // Tricky metaprogramming bullshit to recover the object-nature of an object sent via postMessage
     var chunk = thaw(msg.chunk);
     //console.debug("Got chunk, mic_buf len was:", this.mic_buf.length, "chunk is", chunk);
+    if (chunk instanceof PlaceholderChunk && this.mic_buf.length > 0) {
+      check(this.mic_buf[this.mic_buf.length - 1] instanceof PlaceholderChunk,
+        "Tried to switch back from audio chunks to placeholder chunks in handle_message! This should never happen. Stale chunks in mic_buf?")
+    }
     this.mic_buf.push(chunk);
 
     this.diagnostics.webAudioJankCurrent = msg.jank;
@@ -855,7 +886,7 @@ export class SingerClient extends EventTarget {
       this.connection.send_chunk(chunk);
     }
   }
-  
+
   normalize_volume(chunk) {
     const chunk_data = chunk.data;
     let squared_sum = 0;
@@ -1038,7 +1069,6 @@ export class SingerClientConnection {
 
   // Backdoor for bucket brigade to send things that shouldn't really be required in the proper API
   x_send_metadata(key, value, append) {
-    console.info("Setting metadata for next request:", key, value);
     if (append) {
       if (!(key in this.metadata_to_send)) {
         this.metadata_to_send[key] = [];
