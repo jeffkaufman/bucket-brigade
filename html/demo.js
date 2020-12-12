@@ -614,7 +614,9 @@ function update_active_users(user_summary, server_sample_rate, imLeading, n_user
     window.backingTrack.style.display = "none";
   }
 
-  if (JSON.stringify(user_summary) == previous_user_summary_str && n_users == previous_n_users) {
+  if (user_summary.length == 0 || (
+        JSON.stringify(user_summary) == previous_user_summary_str &&
+      n_users == previous_n_users)) {
     return;
   }
   previous_user_summary_str = JSON.stringify(user_summary);
