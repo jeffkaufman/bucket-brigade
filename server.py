@@ -533,7 +533,7 @@ def fix_volume(data, backing_data, n_people):
     # Compare:
     #   https://www.wolframalpha.com/input/?i=graph+%281%29+%2F+%28x%29+from+1+to+10
     #   https://www.wolframalpha.com/input/?i=graph+%281%2B3%29+%2F+%28x%2B3%29+from+1+to+10
-    data *= (1 + N_PHANTOM_PEOPLE) / (n_people + N_PHANTOM_PEOPLE)
+    data *= ((1 + N_PHANTOM_PEOPLE) / (n_people + N_PHANTOM_PEOPLE)) ** 0.5
     data += (backing_data * (state.backing_volume * (1 if state.metronome_on else 0.2)))
     data *= state.global_volume
     return data
