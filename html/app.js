@@ -458,6 +458,11 @@ export class BucketBrigadeContext extends EventTarget {
   }
 
   unsubscribe_and_stop_worklet() {
+    if (!this.active_handler) {
+      console.warn("Tried to unsubscribe worklet, but nothing was subscribed!");
+      // Continue anyway so that we stop the worklet, just in case; remove will
+      //   fail silently
+    }
     this.removeEventListener("workletMessage_", this.active_handler);
     this.active_handler = null;
     this.playerNode.port.postMessage({
@@ -683,7 +688,7 @@ export class SingerClient extends EventTarget {
     super();
 
     var {speakerMuted, micMuted, context, secretId, apiUrl, offset, username} = options;
-    
+
     this.audio_vol_adjustment_ = 1;
     this.speakerMuted_ = speakerMuted;
     this.micMuted_ = micMuted;
@@ -754,9 +759,14 @@ export class SingerClient extends EventTarget {
 
     this.connection.close();
     this.connection = null;
+    this.mic_buf = [];  // Extra just-in-case flush of stale audio data
   }
 
   connect_() {
+    if (this.connection || this.hasConnectivity) {
+      console.error("Tried to connect_ an already-connected (or already-connecting) SingerClient, doing nothing... (This should never happen.)");
+      return;
+    }
     this.connection = new SingerClientConnection({
       receive_cb: this.server_response.bind(this),
       failure_cb: this.server_failure.bind(this),
@@ -767,6 +777,7 @@ export class SingerClient extends EventTarget {
       username: this.username,
       apiUrl: this.apiUrl,
     });
+    this.mic_buf = [];  // Extra just-in-case flush of stale audio data
 
     this.connection.start_singing().then(result => {
       this.hasConnectivity = true;
@@ -856,6 +867,10 @@ export class SingerClient extends EventTarget {
     // Tricky metaprogramming bullshit to recover the object-nature of an object sent via postMessage
     var chunk = thaw(msg.chunk);
     //console.debug("Got chunk, mic_buf len was:", this.mic_buf.length, "chunk is", chunk);
+    if (chunk instanceof PlaceholderChunk && this.mic_buf.length > 0) {
+      check(this.mic_buf[this.mic_buf.length - 1] instanceof PlaceholderChunk,
+        "Tried to switch back from audio chunks to placeholder chunks in handle_message! This should never happen. Stale chunks in mic_buf?")
+    }
     this.mic_buf.push(chunk);
 
     this.diagnostics.webAudioJankCurrent = msg.jank;
@@ -871,7 +886,7 @@ export class SingerClient extends EventTarget {
       this.connection.send_chunk(chunk);
     }
   }
-  
+
   normalize_volume(chunk) {
     const chunk_data = chunk.data;
     let squared_sum = 0;
