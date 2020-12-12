@@ -157,12 +157,12 @@ export class ServerConnection extends ServerConnectionBase {
       let pos = 2;
       for (var user_index = 0; user_index < users_in_summary;
            user_index++) {
-        const userid = utf8decoder.decode(data.slice(pos, pos + 16));
+        const userid = utf8decoder.decode(data.slice(pos, pos + 16)).replace(/\0/g, "");
         pos += 16
 
         let name = "<undecodable>";
         try {
-          name = utf8decoder.decode(data.slice(pos, pos + 32));
+          name = utf8decoder.decode(data.slice(pos, pos + 32)).replace(/\0/g, "");
         } catch {}
         pos += 32;
 
