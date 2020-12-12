@@ -848,7 +848,7 @@ async function start_singing() {
     var {metadata} = e.detail;
 
     var queue_size = metadata["queue_size"];
-    var user_summary = metadata["user_summary"] || [];
+    var user_summary = metadata["user_summary"];
     var tracks = metadata["tracks"];
     var chats = metadata["chats"] || [];
     var delay_seconds = metadata["delay_seconds"];
@@ -887,9 +887,7 @@ async function start_singing() {
     if (server_bpr) {
       window.bpr.value = server_bpr;
     }
-    if (window.enableMixingConsole.checked) {
-      singer_client.x_send_metadata("mixer", 1);
-    }
+    singer_client.x_send_metadata("user_summary", 1);
 
     if (delay_seconds) {
       if (delay_seconds > 0) {

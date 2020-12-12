@@ -8,6 +8,7 @@ import numpy as np  # type:ignore
 import opuslib  # type:ignore
 import traceback
 import time
+import struct
 
 try:
     import uwsgi
@@ -150,19 +151,30 @@ def handle_post(userid, n_samples, in_data_raw,
     data, x_audio_metadata = handle_json_post(
         in_data, query_string, print_status)
 
-    packets = data.reshape([-1, OPUS_FRAME_SAMPLES])
+    # Divide data into user_summary and raw audio data
+    n_users_in_summary, = struct.unpack(">H", data[:2])
+    user_summary_n_bytes = server.summary_length(n_users_in_summary)
+    
+    user_summary = data[:user_summary_n_bytes]
+    raw_audio = data[user_summary_n_bytes:].view(np.float32)
+
+    # Encode raw audio
+    packets = raw_audio.reshape([-1, OPUS_FRAME_SAMPLES])
     encoded = []
     for p in packets:
         e = np.frombuffer(enc.encode_float(p.tobytes(), OPUS_FRAME_SAMPLES), np.uint8)
         encoded.append(e)
-    data = pack_multi(encoded).tobytes()
+    compressed_audio = pack_multi(encoded)
+
+    # Combine user_summary and compressed audio data
+    data = np.append(user_summary, compressed_audio)
 
     with open(os.path.join(LOG_DIR, userid), "a") as log_file:
         log_file.write("%d %.8f\n"%(
             time.time(),
             -1 if client_no_data else rms_volume))
 
-    return data, x_audio_metadata
+    return data.tobytes(), x_audio_metadata
 
 def do_OPTIONS(environ, start_response) -> None:
     start_response(

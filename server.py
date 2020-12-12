@@ -14,12 +14,20 @@ import logging
 import wave
 import threading
 import datetime
+import struct
 import subprocess
-
 
 from typing import Any, Dict, List, Tuple, Iterable
 
 logging.basicConfig(filename='server.log',level=logging.DEBUG)
+
+# big-endian
+# 16   userid: 16 bytes of utf8, '\0' padded
+# 32   name: 32 bytes of utf8, '\0' padded
+#  4   mic_volume: float32,
+#  4   rms_volume: float32
+#  2   delay: uint16
+BINARY_USER_CONFIG_FORMAT = struct.Struct(">16s32sffH")
 
 FRAME_SIZE = 128
 
@@ -421,9 +429,9 @@ def setup_monitoring(monitoring_userid, monitored_userid) -> None:
     users[monitoring_userid].send("delay_seconds", round(
         users[monitored_userid].delay_samples / SAMPLE_RATE) + DELAY_INTERVAL)
 
-def user_summary(requested_mixer) -> List[Any]:
+def user_summary(requested_user_summary) -> List[Any]:
     summary = []
-    if len(users)>8 and not requested_mixer:
+    if not requested_user_summary:
         return summary
     for userid, user in users.items():
         summary.append((
@@ -434,6 +442,39 @@ def user_summary(requested_mixer) -> List[Any]:
             user.rms_volume))
     summary.sort()
     return summary
+
+def summary_length(n_users_in_summary):
+    return 2 + BINARY_USER_CONFIG_FORMAT.size*n_users_in_summary
+
+def binary_user_summary(summary):
+    """
+    Encode the user summary compactly.
+
+    number of users: uint16
+    repeat:
+       BINARY_USER_CONFIG_FORMAT
+
+    Each user is 60 bytes, so 1000 users is ~50k.  We could be more
+    compact by requiring the user ID to be numeric and then coding it
+    as, say, uint32 (4 bytes).  We could also only send names if they
+    have changed.
+    """
+    binary_summaries = [struct.pack(">H", len(summary))]
+    for delay, name, mic_volume, userid, rms_volume in summary:
+        binary_summaries.append(
+            BINARY_USER_CONFIG_FORMAT.pack(
+                userid.encode('utf8'),
+                name.encode('utf8'),
+                mic_volume,
+                rms_volume,
+                delay))
+    resp = np.frombuffer(b"".join(binary_summaries), dtype=np.uint8)
+
+    if len(resp) != summary_length(len(summary)):
+        raise Exception("Data for %s users encoded to %s bytes, expected %s",
+                        len(summary), len(resp), summary_length(len(summary)))
+
+    return resp
 
 def write_metronome(clear_index, clear_samples):
     metronome_samples = np.zeros(clear_samples, np.float32)
@@ -628,6 +669,8 @@ def get_events_to_send() -> Any:
     return [{"evid": i[0], "clock": i[1]} for i in events.items()]
 
 def handle_post(in_data, query_string, print_status) -> Tuple[Any, str]:
+    in_data = in_data.view(dtype=np.float32)
+
     raw_params = {}
     # For some reason urllib can't handle the query_string being empty
     if query_string:
@@ -636,7 +679,7 @@ def handle_post(in_data, query_string, print_status) -> Tuple[Any, str]:
 
     userid = query_params.get("userid", None)
     server_clock = calculate_server_clock()
-    requested_mixer = query_params.get("mixer", None)
+    requested_user_summary = query_params.get("user_summary", None)
 
     # Handle server-to-server requests:
     if userid is None:
@@ -651,13 +694,12 @@ def handle_post(in_data, query_string, print_status) -> Tuple[Any, str]:
             "server_clock": server_clock,
             "server_sample_rate": SAMPLE_RATE,
             "last_request_clock": state.last_request_clock,
-            "user_summary": user_summary(requested_mixer),
             "n_connected_users": len(users),
             "queue_size": QUEUE_LENGTH / FRAME_SIZE, # in 128-sample frames
             "events": get_events_to_send(),
             "leader": state.leader,
         }
-        return np.zeros(0), json.dumps(x_audio_metadata)
+        return np.zeros(0, np.uint8), json.dumps(x_audio_metadata)
 
     # NOTE NOTE NOTE:
     # * All `clock` variables are measured in samples.
@@ -845,7 +887,6 @@ def handle_post(in_data, query_string, print_status) -> Tuple[Any, str]:
         "client_read_clock": client_read_clock,
         "client_write_clock": client_write_clock,
         "n_samples": n_samples,
-        "user_summary": user_summary(requested_mixer),
         "n_connected_users": len(users),
         "queue_size": QUEUE_LENGTH / FRAME_SIZE, # in 128-sample frames
         "events": get_events_to_send(),
@@ -863,6 +904,9 @@ def handle_post(in_data, query_string, print_status) -> Tuple[Any, str]:
     if print_status:
         maybe_print_status()
 
+    bin_summary = binary_user_summary(user_summary(requested_user_summary))
+    if len(bin_summary) > 0:
+        data = np.append(bin_summary, data.view(dtype=np.uint8))
     return data, json.dumps(x_audio_metadata)
 
 def maybe_print_status() -> None:
@@ -873,7 +917,7 @@ def maybe_print_status() -> None:
     print("-"*70)
 
     for delay, name, mic_volume, userid, \
-         rms_volume in user_summary(requested_mixer=True):
+         rms_volume in user_summary(requested_user_summary=True):
         print ("%s %s vol=%.2f rms=%.5f" % (
             str(delay).rjust(3),
             name.rjust(30),
