@@ -316,7 +316,7 @@ def wrap_get(queue, start, len_vals) -> Any:
     start_in_queue = start % len(queue)
 
     if start_in_queue + len_vals <= len(queue):
-        return queue[start_in_queue:(start_in_queue+len_vals)]
+        return np.copy(queue[start_in_queue:(start_in_queue+len_vals)])
     else:
         second_section_size = (start_in_queue + len_vals) % len(queue)
         first_section_size = len_vals - second_section_size
