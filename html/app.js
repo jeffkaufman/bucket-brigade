@@ -20,6 +20,12 @@ const OPUS_FRAME_MS = 60;
 // don't let people be louder than this
 const TARGET_MAX_RMS_VOL = 20;
 
+// This gates all the logs that put references to REALLY HUGE objects into the console
+//   very frequently. When this is on, having the console open eventually causes the
+//   browser to lag severely and dev tools to lag/hang/crash. Don't use this unless
+//   you actually need it.
+const LOG_ULTRA_VERBOSE = false;
+
 function close_stream(stream) {
   stream.getTracks().forEach((track) => track.stop());
 }
@@ -367,7 +373,9 @@ class AudioDecoder {
     // XXX: This is janky, in reality our chunk length divides evenly so it should be 0, if it doesn't I'm not sure what we should expect here?
     check(Math.abs(decoded_length_expected - play_samples.length) < 5, "Chunk decoded to wrong length!", chunk, play_samples);
     this.client_clock += play_samples.length;
-    console.debug("SPAM", "Decoded all samples from server:", decoded_packets);
+    if (LOG_ULTRA_VERBOSE) {
+      console.debug("SPAM", "Decoded all samples from server:", decoded_packets);
+    }
 
     var result_interval = new ClockInterval({
       reference: this.client_clock_reference,
@@ -515,7 +523,9 @@ export class BucketBrigadeContext extends EventTarget {
       chunk,
     };
 
-    console.debug("SPAM", "Posting to worklet:", message);
+    if (LOG_ULTRA_VERBOSE) {
+      console.debug("SPAM", "Posting to worklet:", message);
+    }
     this.playerNode.port.postMessage(message);  // XXX huh, we aren't using transfer, and plausibly should be
   }
 
@@ -882,10 +892,14 @@ export class SingerClient extends EventTarget {
     // XXX: window.msWebAudioJankCurrent.value = Math.round(msg.jank) + "ms";
 
     if (this.mic_buf.length >= this.ctx.sample_batch_size) { //XXX sbs should be on clients not context right?
-      console.debug("Got enough chunks:", this.mic_buf);
+      if (LOG_ULTRA_VERBOSE) {
+        console.debug("Got enough chunks:", this.mic_buf);
+      }
       var chunk = concat_chunks(this.mic_buf);
       this.normalize_volume(chunk);
-      console.debug("SPAM", "Encoding chunk to send:", chunk);
+      if (LOG_ULTRA_VERBOSE) {
+        console.debug("SPAM", "Encoding chunk to send:", chunk);
+      }
       this.mic_buf = [];
       this.connection.send_chunk(chunk);
     }
@@ -944,16 +958,14 @@ export class SingerClient extends EventTarget {
 
     this.cur_clock_cbs.push( (clock)=>{
       if (this.backing_track_start_clock && (clock > this.backing_track_start_clock)) {
-        console.info("Firing backing track update:", (clock - this.backing_track_start_clock) / this.ctx.audioCtx.sampleRate, clock, this.backing_track_start_clock, this.ctx.audioCtx.sampleRate);
+        console.debug("Firing backing track update:", (clock - this.backing_track_start_clock) / this.ctx.audioCtx.sampleRate, clock, this.backing_track_start_clock, this.ctx.audioCtx.sampleRate);
         this.dispatchEvent(new CustomEvent("backingTrackUpdate", {
           detail: {
             progress: (clock - this.backing_track_start_clock) / this.ctx.audioCtx.sampleRate
           }
         }));
-      } else if (!this.backing_track_start_clock) {
-        console.info("NOT firing backing track update, as backing track start time is not yet available");
-      } else {
-        console.info("NOT firing backing track update, as backing track starts in future:", (clock - this.backing_track_start_clock) / this.ctx.audioCtx.sampleRate, clock, this.backing_track_start_clock, this.ctx.audioCtx.sampleRate);
+      } else if (this.backing_track_start_clock) {
+        console.debug("NOT firing backing track update, as backing track starts in future:", (clock - this.backing_track_start_clock) / this.ctx.audioCtx.sampleRate, clock, this.backing_track_start_clock, this.ctx.audioCtx.sampleRate);
       }
     });
     this.ctx.playerNode.port.postMessage({  // XXX invasive coupling
@@ -969,7 +981,7 @@ export class SingerClient extends EventTarget {
       // Note that this will give unpredictable (i.e. wrong) results if one song is started while the tail end of another is still going. Don't do that.
       if (ev["evid"] == "backingTrackStart") {
         this.backing_track_start_clock = this.server_to_client_clock(ev.clock);
-        console.info("Backing track start event received:", this.backing_track_start_clock, ev.clock)
+        console.debug("Backing track start event received:", this.backing_track_start_clock, ev.clock)
       }
       if (!this.events_seen_already[ev["evid"]]) {
         console.info("unseen event:", ev);
@@ -1120,7 +1132,9 @@ export class SingerClientConnection {
       if (!this.running) {
         return;
       }
-      console.debug("SPAM", "Decoded chunk from server:", play_chunk.interval, play_chunk);
+      if (LOG_ULTRA_VERBOSE) {
+        console.debug("SPAM", "Decoded chunk from server:", play_chunk.interval, play_chunk);
+      }
       this.receive_cb(play_chunk);
       this.metadata_cb(metadata);
       return;
@@ -1143,7 +1157,9 @@ export class SingerClientConnection {
       if (!this.running) {
         return;
       }
-      console.debug("SPAM", "Got encoded chunk to send:", encoded_chunk);
+      if (LOG_ULTRA_VERBOSE) {
+        console.debug("SPAM", "Got encoded chunk to send:", encoded_chunk);
+      }
 
       this.metadata_to_send.username = this.username;
       // XXX this.metadata_to_send.loopback_mode = loopback_mode;
@@ -1297,7 +1313,9 @@ export function init_events() {
 //   - Packet length (bytes): 2 bytes, big endian
 //   - Packet data
 function pack_multi(packets) {
-  console.debug("SPAM", "Encoding packet for transmission to server! input:", packets);
+  if (LOG_ULTRA_VERBOSE) {
+    console.debug("SPAM", "Encoding packet for transmission to server! input:", packets);
+  }
   var encoded_length = 1; // space for packet count
   packets.forEach((p) => {
     encoded_length += 2; // space for packet length
@@ -1318,12 +1336,16 @@ function pack_multi(packets) {
     outdata.set(p, outdata_idx + 2);
     outdata_idx += len + 2;
   });
-  console.debug("SPAM", "Encoded packet for transmission to server! Final outdata_idx:", outdata_idx, ", encoded_length:", encoded_length, ", num. subpackets:", packets.length, ", output:", outdata);
+  if (LOG_ULTRA_VERBOSE) {
+    console.debug("SPAM", "Encoded packet for transmission to server! Final outdata_idx:", outdata_idx, ", encoded_length:", encoded_length, ", num. subpackets:", packets.length, ", output:", outdata);
+  }
   return outdata;
 }
 
 function unpack_multi(data) {
-  console.debug("SPAM", "Unpacking multi-packet from server, data:", data);
+  if (LOG_ULTRA_VERBOSE) {
+    console.debug("SPAM", "Unpacking multi-packet from server, data:", data);
+  }
   if (data.constructor !== Uint8Array) {
     throw new Error("must be Uint8Array");
   }
@@ -1339,7 +1361,9 @@ function unpack_multi(data) {
     data_idx += len;
     result.push(packet);
   }
-  console.debug("SPAM", "Unpacked multi-packet from server! Final data_idx:", data_idx, ", total length:", data.length, ", num. subpackets:", packet_count, "final output:", result);
+  if (LOG_ULTRA_VERBOSE) {
+    console.debug("SPAM", "Unpacked multi-packet from server! Final data_idx:", data_idx, ", total length:", data.length, ", num. subpackets:", packet_count, "final output:", result);
+  }
   return result;
 }
 

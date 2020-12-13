@@ -1,6 +1,12 @@
 import {check} from './lib.js';
 import {AudioChunk, PlaceholderChunk, CompressedAudioChunk, ServerClockReference, ClockInterval} from './audiochunk.js'
 
+// This gates all the logs that put references to REALLY HUGE objects into the console
+//   very frequently. When this is on, having the console open eventually causes the
+//   browser to lag severely and dev tools to lag/hang/crash. Don't use this unless
+//   you actually need it.
+const LOG_ULTRA_VERBOSE = false;
+
 class ServerConnectionBase {
   constructor() {}
 
@@ -421,7 +427,9 @@ function handle_xhr_result(xhr, resolve, reject) {
   if (xhr.status == 200) {
     var metadata = JSON.parse(xhr.getResponseHeader("X-Audio-Metadata"));
     console.debug("SPAM", "metadata:", metadata);
-    console.debug("SPAM", "Got XHR response w/ ID:", xhr.debug_id, "result:", xhr.response, " -- still in flight:", xhrs_inflight);
+    if (LOG_ULTRA_VERBOSE) {
+      console.debug("SPAM", "Got XHR response w/ ID:", xhr.debug_id, "result:", xhr.response, " -- still in flight:", xhrs_inflight);
+    }
 
     return resolve({
       metadata: metadata,

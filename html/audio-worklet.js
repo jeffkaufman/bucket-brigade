@@ -300,7 +300,7 @@ class ClockedRingBuffer {
   }
 
   write_chunk(chunk) {
-    console.debug("SPAM", "Writing chunk of size", chunk.length);
+    // console.debug("SPAM", "Writing chunk of size", chunk.length);
     chunk.check_clock_reference(this.clock_reference);
     for (var i = 0; i < chunk.data.length; i++) {
       this.write(chunk.data[i], chunk.start + i);
