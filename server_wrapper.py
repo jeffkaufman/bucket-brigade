@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
 
+import sentry_sdk
+sentry_sdk.init("https://d88678349f5d4e20b707882f78f2f78e@o490365.ingest.sentry.io/5554165")
+
 import os
 import sys
 import json
@@ -225,14 +228,11 @@ def do_GET(environ, start_response) -> None:
     return b'ok',
 
 def die500(start_response, e):
-    if isinstance(e, Exception):
-        # This is slightly sketchy: this assumes we are currently in the middle
-        #   of an exception handler for the exception e (which happens to be
-        #   true.)
-        trb = traceback.format_exc().encode("utf-8")
-    else:
-        trb = str(e).encode("utf-8")
-
+    sentry_sdk.capture_exception(e)
+    # This is slightly sketchy: this assumes we are currently in the middle
+    #   of an exception handler for the exception e (which happens to be
+    #   true.)
+    trb = traceback.format_exc().encode("utf-8")
     start_response('500 Internal Server Error', [
         ('Content-Type', 'text/plain'),
         ("Access-Control-Allow-Origin", "*"),
@@ -269,7 +269,7 @@ def do_POST(environ, start_response) -> None:
         n_samples = int(n_samples)
 
         if (userid is None) and (len(in_data_raw) > 0 or n_samples != 0):
-            return die500("Can't send non-user request with audio data.")
+            raise Exception("Can't send non-user request with audio data.")
 
         reset_user_state, = query_params.get("reset_user_state", (None,))
         if reset_user_state and userid and (userid in users):

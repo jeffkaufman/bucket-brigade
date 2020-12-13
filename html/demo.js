@@ -19,31 +19,6 @@ window.latency_calibrator = null;
 window.volume_calibrator = null;
 window.singer_client = null;
 
-addEventListener('error', (event) => {
-  event.preventDefault();
-  console.warn("TOP LEVEL ERROR HANLDER FIRED:", event);
-  if (document.getElementById('crash').style.display) {
-    return;
-  }
-  document.getElementById('crash').style.display = 'block';
-  const {name, message, stack, unpreventable} = event.error ?? {};
-  if (unpreventable) {
-    document.getElementById('crashMessage').textContent = message;
-  } else {
-    document.getElementById('crashBug').style.display = 'block';
-    document.getElementById('crashTrace').textContent = `${name}: ${message}\n${stack}`;
-  }
-
-  // Avoid spamming the logs with further errors, if at all possible.
-  stop();
-});
-
-addEventListener('unhandledrejection', (event) => {
-  event.preventDefault();
-  console.warn("UNHANDLED PROMISE REJECTION:", event);
-  throw event.reason;
-});
-
 console.info("Starting up");
 
 const myUserid = Math.round(Math.random()*100000000000)

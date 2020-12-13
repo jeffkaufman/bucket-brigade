@@ -1,3 +1,6 @@
+import sentry_sdk
+sentry_sdk.init("https://d88678349f5d4e20b707882f78f2f78e@o490365.ingest.sentry.io/5554165")
+
 import numpy as np
 import SharedArray  # pip install SharedArray
 import sys
