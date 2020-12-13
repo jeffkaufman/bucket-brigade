@@ -239,7 +239,15 @@ window.sortConsole.addEventListener("click", ()=> {
     window.mixingConsole.removeChild(consoleChannels.get(userid));
   }
   allChannels.sort((a, b)=> {
-    return (b.post_volume || 0) - (a.post_volume || 0);
+    // put one first if either:
+    // * it is more than 1.5s earlier
+    // * or it is louder
+    const delta_s = a.offset_s - b.offset_s;
+    if (Math.abs(delta_s) > 1.5) {
+      return delta_s;
+    } else {
+      return (b.post_volume || 0) - (a.post_volume || 0);
+    }
   });
   allChannels.forEach((channel)=> {
     window.mixingConsole.appendChild(channel);
@@ -526,7 +534,7 @@ let monitoredUserId = null;
 function mixerMonitorButtonClick(userid) {
   if (singer_client) {
     if (monitoredUserId) {
-      consoleChannels.get(monitoredUserId).children[4].classList.remove('activeButton');
+      consoleChannels.get(monitoredUserId).children[5].classList.remove('activeButton');
     }
     if (monitoredUserId === userid) {
       singer_client.x_send_metadata("monitoredUserId", "end");
@@ -538,7 +546,7 @@ function mixerMonitorButtonClick(userid) {
     else {
       singer_client.x_send_metadata("monitoredUserId", userid);
       monitoredUserId = userid;
-      consoleChannels.get(userid).children[4].classList.add('activeButton');
+      consoleChannels.get(userid).children[5].classList.add('activeButton');
       if (!micPaused) {
         toggle_mic();
       }
@@ -552,7 +560,7 @@ function mixerVolumeChange(userid) {
     return;
   }
 
-  var newvolume = parseFloat(consoleChannels.get(userid).children[2].value);
+  var newvolume = parseFloat(consoleChannels.get(userid).children[3].value);
   if (newvolume >= 0 && newvolume <= 2) {
     singer_client.x_send_metadata(
       "micVolumes",
@@ -560,7 +568,7 @@ function mixerVolumeChange(userid) {
        true);
   }
   else {
-    consoleChannels.get(userid).children[2].value = "invalid";
+    consoleChannels.get(userid).children[3].value = "invalid";
   }
 }
 
@@ -620,7 +628,7 @@ function update_active_users(user_summary, server_sample_rate, imLeading, n_user
     const userid = user_summary[i][3];
     const rms_volume = user_summary[i][4];
 
-    mic_volume_inputs.push([name, userid, mic_volume, rms_volume]);
+    mic_volume_inputs.push([name, userid, mic_volume, rms_volume, offset_s]);
     userids.add(userid);
 
     const tr = document.createElement('tr');
@@ -651,7 +659,9 @@ function update_active_users(user_summary, server_sample_rate, imLeading, n_user
 
       const channelName = document.createElement("span");
       channelName.classList.add("channelName");
-      // set channelName
+
+      const channelOffset = document.createElement("span");
+      channelOffset.classList.add("channelOffset");
 
       const channelVolume = document.createElement("span");
       channelVolume.classList.add("mixerVolume");
@@ -685,6 +695,7 @@ function update_active_users(user_summary, server_sample_rate, imLeading, n_user
       monitorButton.addEventListener("click", ()=>{mixerMonitorButtonClick(newUserId)});
 
       consoleChannel.appendChild(channelName);
+      consoleChannel.appendChild(channelOffset);
       consoleChannel.appendChild(channelVolume);
       consoleChannel.appendChild(channelVolumeInput);
       consoleChannel.appendChild(channelPostVolume);
@@ -700,18 +711,22 @@ function update_active_users(user_summary, server_sample_rate, imLeading, n_user
     const userid = mic_volume_inputs[i][1];
     const vol = mic_volume_inputs[i][2];
     const rms_volume = mic_volume_inputs[i][3];
+    const offset_s = mic_volume_inputs[i][4];
+
     const channel = consoleChannels.get(userid);
     const post_volume = vol < 0.0000001?
       0:
       rms_volume * Math.exp(6.908 * vol) / 1000;
     channel.rms_volume = rms_volume;
     channel.post_volume = post_volume;
+    channel.offset_s = offset_s;
 
     channel.children[0].innerText = name;
-    channel.children[1].children[0].style.width =
+    channel.children[1].innerText = offset_s;
+    channel.children[2].children[0].style.width =
       scalar_volume_to_percentage(rms_volume)+'%';
-    const channelVolumeInput = channel.children[2];
-    channel.children[3].children[0].style.width =
+    const channelVolumeInput = channel.children[3];
+    channel.children[4].children[0].style.width =
       scalar_volume_to_percentage(post_volume)+'%';
     if (channelVolumeInput.classList.contains("editing")) {
       // don't update user volume because they are editing
