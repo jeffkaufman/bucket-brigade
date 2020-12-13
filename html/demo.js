@@ -726,17 +726,17 @@ function update_active_users(user_summary, server_sample_rate, imLeading, n_user
     const vol = mic_volume_inputs[i][2];
     const rms_volume = mic_volume_inputs[i][3];
     const channel = consoleChannels.get(userid);
-    const post_volume = vol < 0.0000001? 
+    const post_volume = vol < 0.0000001?
       0:
       rms_volume * Math.exp(6.908 * vol) / 1000;
     channel.rms_volume = rms_volume;
     channel.post_volume = post_volume;
 
     channel.children[0].innerText = name;
-    channel.children[1].children[0].style.width = 
+    channel.children[1].children[0].style.width =
       scalar_volume_to_percentage(rms_volume)+'%';
     const channelVolumeInput = channel.children[2];
-    channel.children[3].children[0].style.width = 
+    channel.children[3].children[0].style.width =
       scalar_volume_to_percentage(post_volume)+'%';
     if (channelVolumeInput.classList.contains("editing")) {
       // don't update user volume because they are editing

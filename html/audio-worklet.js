@@ -689,7 +689,7 @@ class Player extends AudioWorkletProcessor {
       }
 
       var mic_chunk = null;
-      if (!(play_chunk instanceof PlaceholderChunk) && !this.ignore_input) { 
+      if (!(play_chunk instanceof PlaceholderChunk) && !this.ignore_input) {
         var interval = new ClockInterval({
           reference: play_chunk.reference,
           length: input.length,
