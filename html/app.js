@@ -1042,6 +1042,11 @@ export class SingerClient extends EventTarget {
     if (this.connection?.server_connection?.clientReadSlippage) {
       this.diagnostics.client_read_slippage = this.connection.server_connection.clientReadSlippage;
     }
+
+    if (this.diagnostics.client_total_time && this.diagnostics.client_read_slippage) {
+      // There are easier ways to compute this, but this works.
+      this.diagnostics.client_time_to_next_client = this.diagnostics.client_total_time + this.diagnostics.client_read_slippage;
+    }
     this.dispatchEvent(new Event("diagnosticChange"));
   }
 }

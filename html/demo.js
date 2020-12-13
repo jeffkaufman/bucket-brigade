@@ -242,6 +242,8 @@ window.latencyCalibrationRetry.addEventListener("click", () => {
 
 function enableSpectatorMode() {
   // This forcibly mutes us, ignoring the mute button.
+  // This is ONLY safe to do at the VERY beginning of things, before we send
+  //   any real audio anywhere.
   bucket_ctx.send_ignore_input(true);  // XXX: private
 
   // Make something up.
@@ -851,6 +853,19 @@ async function start_singing() {
 
     window.clientTotalTime.value = singer_client.diagnostics.client_total_time;
     window.clientReadSlippage.value = singer_client.diagnostics.client_read_slippage;
+    window.clientTimeToNextClient.value = singer_client.diagnostics.client_time_to_next_client;
+
+    // XXX: this doesn't belong in diagnosticChange, this should be more official elsewhere
+    // XXX: also 2.9 is very arbitrary (100ms before we will cause problems for the next person)
+    if (singer_client.diagnostics.client_time_to_next_client > 2.9) {
+      // We have fallen too far behind, we have various options here but we're just going to mute
+      //   ourselves for the moment.
+      if (!micPaused) {
+        // This is maybe not exactly what we want; this will show the person they are muted, and
+        //   allow them to unmute themselves if they so desire.
+        toggle_mic();
+      }
+    }
   })
 
   singer_client.addEventListener("connectivityChange", () => {
