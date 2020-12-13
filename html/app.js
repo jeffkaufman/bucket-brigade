@@ -681,6 +681,7 @@ export class SingerClient extends EventTarget {
   // * connectivityChange (see hasConnectivity)
   // * diagnosticChange (see diagnostics)
   // * newMark { "delay": [seconds until it happens], "data": [arbitrary] }
+  // * backingTrackUpdate { "progress": [seconds since start of backing track, float] }
   // * markReached { "data" }
   // * x_metadataRecieved { metdata: { ... } }
 
@@ -688,6 +689,8 @@ export class SingerClient extends EventTarget {
     super();
 
     var {speakerMuted, micMuted, context, secretId, apiUrl, offset, username} = options;
+
+    check(context, "Cannot construct SingerClient without a valid context! Context is:", context);
 
     this.audio_vol_adjustment_ = 1;
     this.speakerMuted_ = speakerMuted;
@@ -715,6 +718,9 @@ export class SingerClient extends EventTarget {
     this.metadata_send_queue = [];
     this.events_seen_already = {};
 
+    // This is a bit of a hack, but whatever.
+    this.backing_track_start_clock = null;
+
     this.handle_message_bound = this.handle_message.bind(this);
 
     this.ctx.set_mic_pause_mode(this.micMuted_);
@@ -737,9 +743,7 @@ export class SingerClient extends EventTarget {
     console.info("Going to send new mark: declare_event", evid, offset);
     this.cur_clock_cbs.push( (clock)=>{
       console.info("new mark at our clock", clock);
-      // XXX: this is _very_ invasive, need sample rate conversion.... somewhere more sensible
-      const server_sample_rate = this.connection.server_connection.clock_reference.sample_rate;
-      const server_clock = clock / this.ctx.audioCtx.sampleRate * server_sample_rate;
+      const server_clock = this.client_to_server_clock(clock);
       console.info("corresponding server clock is", server_clock);
       console.info("Sending new mark:", evid, offset, server_clock-(offset||0)*server_sample_rate);
       this.x_send_metadata("event_data", {
@@ -921,14 +925,52 @@ export class SingerClient extends EventTarget {
     this.connect_();
   }
 
+  server_to_client_clock(clock) {
+    return Math.floor(
+      clock
+      / this.connection.server_connection.clock_reference.sample_rate
+      * this.ctx.audioCtx.sampleRate);
+  }
+
+  client_to_server_clock(clock) {
+    return Math.floor(
+      clock
+      * this.connection.server_connection.clock_reference.sample_rate
+      / this.ctx.audioCtx.sampleRate);
+  }
+
   server_metadata_received(metadata) {
     console.debug("Received metadata:", metadata);
+
+    this.cur_clock_cbs.push( (clock)=>{
+      if (this.backing_track_start_clock && (clock > this.backing_track_start_clock)) {
+        console.info("Firing backing track update:", (clock - this.backing_track_start_clock) / this.ctx.audioCtx.sampleRate, clock, this.backing_track_start_clock, this.ctx.audioCtx.sampleRate);
+        this.dispatchEvent(new CustomEvent("backingTrackUpdate", {
+          detail: {
+            progress: (clock - this.backing_track_start_clock) / this.ctx.audioCtx.sampleRate
+          }
+        }));
+      } else if (!this.backing_track_start_clock) {
+        console.info("NOT firing backing track update, as backing track start time is not yet available");
+      } else {
+        console.info("NOT firing backing track update, as backing track starts in future:", (clock - this.backing_track_start_clock) / this.ctx.audioCtx.sampleRate, clock, this.backing_track_start_clock, this.ctx.audioCtx.sampleRate);
+      }
+    });
+    this.ctx.playerNode.port.postMessage({  // XXX invasive coupling
+      type: "request_cur_clock"
+    });
 
     var events = metadata["events"] || [];
 
     console.debug("got marks from server:", events, "already seen:", this.events_seen_already);
     var new_events = [];
     for (const ev of events) {
+      // This is  bit of a hack to get things working for solstice.
+      // Note that this will give unpredictable (i.e. wrong) results if one song is started while the tail end of another is still going. Don't do that.
+      if (ev["evid"] == "backingTrackStart") {
+        this.backing_track_start_clock = this.server_to_client_clock(ev.clock);
+        console.info("Backing track start event received:", this.backing_track_start_clock, ev.clock)
+      }
       if (!this.events_seen_already[ev["evid"]]) {
         console.info("unseen event:", ev);
         new_events.push(ev);
@@ -943,43 +985,27 @@ export class SingerClient extends EventTarget {
       console.info("Received new marks from server:", events);
     }
 
-    /* XXX: made these real events
-    if (metadata["backing_track_start_clock"]) {
-      // Fake an event
-      events.push({
-        evid: "backingTrackStart",
-        clock: metadata["backing_track_start_clock"],
-      });
-    }
-
-    if (metadata["backing_track_end_clock"]) {
-      // Fake an event
-      events.push({
-        evid: "backingTrackEnd",
-        clock: metadata["backing_track_end_clock"],
-      });
-    }
-    */
-
     for (let ev of new_events) {
       console.info("newMark:", ev);
-      const client_clock = Math.floor(ev["clock"] / metadata["server_sample_rate"] * this.ctx.audioCtx.sampleRate)
-      const delay_s = (ev["clock"] - metadata["client_read_clock"]) / metadata["server_sample_rate"]
-      console.info("translated into local clock:", client_clock);
-      console.info("from now:", delay_s)
+      const client_clock = this.server_to_client_clock(ev.clock);
+      this.cur_clock_cbs.push( (clock)=>{
+        const delay_s = (client_clock - clock) / this.ctx.audioCtx.sampleRate;
+        console.info("translated into local clock:", client_clock, "; from now:", delay_s)
 
-      // XXX: client_read_clock here is actually the _end_ of the audio we're receiving, so it's one packet worth of audio in the future yet?? This only affects the delay calculation, which is wrong, not the actual time the event fires.
-
-      this.dispatchEvent(new CustomEvent("newMark", {
-        detail: {
-          data: ev["evid"],
-          delay: delay_s  // XXX: this is wrong I think, see above
-        }
-      }));
+        this.dispatchEvent(new CustomEvent("newMark", {
+          detail: {
+            data: ev["evid"],
+            delay: delay_s
+          }
+        }));
+      });
+      this.ctx.playerNode.port.postMessage({  // XXX invasive coupling
+        type: "request_cur_clock"
+      });
 
       this.alarms[client_clock] = () => this.event_hooks.map(f=>f(ev["evid"]));
 
-      console.info("setting alarm to fire at server clock", ev["clock"], "our clock", client_clock, ", from now (s):", delay_s)
+      console.info("setting alarm to fire at server clock", ev["clock"], "our clock", client_clock)
       this.ctx.playerNode.port.postMessage({  // XXX invasive coupling, do this through ctx and have it translate the sample rates nicely!!
         type: "set_alarm",
         time: client_clock
