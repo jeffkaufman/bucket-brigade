@@ -41,7 +41,7 @@ def server_turn(buf):
 
 def encode_json_and_data(buf, json_raw, data, throw_exceptions):
     data = data.view(dtype=np.uint8)
-    
+
     index = 1
 
     json_raw_bytes = json_raw.encode("utf-8")

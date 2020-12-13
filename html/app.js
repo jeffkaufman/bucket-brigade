@@ -702,11 +702,12 @@ export class SingerClient extends EventTarget {
 
     check(context, "Cannot construct SingerClient without a valid context! Context is:", context);
 
-    this.audio_vol_adjustment_ = 1;
-    this.speakerMuted_ = speakerMuted;
-    this.micMuted_ = micMuted;
-
     this.ctx = context;
+    this.metadata_send_queue = [];
+    this.telemetry_send_queue = [];
+
+    this.audio_vol_adjustment_ = 1;
+
     this.offset = offset;
     this.secretId = secretId;
     this.username = username;
@@ -725,16 +726,12 @@ export class SingerClient extends EventTarget {
     this.alarms_fired = {};
     this.cur_clock_cbs = [];
 
-    this.metadata_send_queue = [];
     this.events_seen_already = {};
 
     // This is a bit of a hack, but whatever.
     this.backing_track_start_clock = null;
 
     this.handle_message_bound = this.handle_message.bind(this);
-
-    this.ctx.set_mic_pause_mode(this.micMuted_);
-    this.ctx.set_speaker_pause_mode(this.speakerMuted_);
 
     // Hack on the new CustomEvent-based mark stuff into the old event_hooks system
     this.event_hooks.push((data) => {
@@ -747,6 +744,10 @@ export class SingerClient extends EventTarget {
     })
 
     this.connect_();
+
+    this.speakerMuted = speakerMuted;
+    this.micMuted = micMuted;
+    this.send_telemetry("user_agent", navigator.userAgent);  // XXX: this is stupid, do this on the server
   }
 
   declare_event(evid, offset) {
@@ -804,6 +805,12 @@ export class SingerClient extends EventTarget {
         }
         this.metadata_send_queue = [];
       }
+      if (this.telemetry_send_queue.length != 0) {
+        for (const [key, value, append] of this.telemetry_send_queue) {
+          this.connection.send_telemetry(key, value, append);
+        }
+        this.telemetry_send_queue = [];
+      }
       this.dispatchEvent(new Event("connectivityChange"));
     }, err => {
       this.close();
@@ -821,11 +828,13 @@ export class SingerClient extends EventTarget {
   set speakerMuted(mode) {
     this.speakerMuted_ = mode;
     this.ctx.set_speaker_pause_mode(mode);
+    this.send_telemetry("speaker_muted", mode);
   }
 
   set micMuted(mode) {
     this.micMuted_ = mode;
     this.ctx.set_mic_pause_mode(mode);
+    this.send_telemetry("mic_muted", mode);
   }
 
   close() {
@@ -853,6 +862,14 @@ export class SingerClient extends EventTarget {
     } else {
       this.metadata_send_queue.push([key, value, append]);
       console.warn("Can't send metadata yet; buffering until connected, queue is:", this.metadata_send_queue);
+    }
+  }
+
+  send_telemetry(key, value, append) {
+    if (this.connection && this.hasConnectivity) {
+      this.connection.send_telemetry(key, value, append);
+    } else {
+      this.telemetry_send_queue.push([key, value, append]);
     }
   }
 
@@ -887,7 +904,9 @@ export class SingerClient extends EventTarget {
     }
     this.mic_buf.push(chunk);
 
-    this.diagnostics.webAudioJankCurrent = msg.jank;
+    this.diagnostics.web_audio_jank = msg.jank / 1000.0;  // convert from ms to s
+    this.diagnostics.web_audio_jank_frac = msg.jank / msg.jank_over;  // fraction of dropped callbacks
+    this.diagnostics.dropped_calls = msg.dropped_calls;
     // XXX: just for debugging
     // XXX: window.msWebAudioJankCurrent.value = Math.round(msg.jank) + "ms";
 
@@ -1047,6 +1066,10 @@ export class SingerClient extends EventTarget {
       // There are easier ways to compute this, but this works.
       this.diagnostics.client_time_to_next_client = this.diagnostics.client_total_time + this.diagnostics.client_read_slippage;
     }
+    this.send_telemetry("diagnostics", this.diagnostics);  // A bit redundant since we're telling the server things it should already know...
+    if (this.connection?.server_connection?.audio_offset) {
+      this.send_telemetry("audio_offset", this.connection?.server_connection?.audio_offset);  // This is a very weird place to send this
+    }
     this.dispatchEvent(new Event("diagnosticChange"));
   }
 }
@@ -1120,6 +1143,25 @@ export class SingerClientConnection {
     } else {
       this.metadata_to_send[key] = value;
     }
+  }
+
+  send_telemetry(key, value, append) {
+    var telemetry;
+    if ("client_telemetry" in this.metadata_to_send) {
+      telemetry = this.metadata_to_send.client_telemetry;
+    } else {
+      telemetry = {};
+    }
+
+    if (append) {
+      if (!(key in telemetry)) {
+        telemetry[key] = []
+      }
+      telemetry[key].push(value);
+    } else {
+      telemetry[key] = value;
+    }
+    this.metadata_to_send.client_telemetry = telemetry;
   }
 
   server_response(response) {

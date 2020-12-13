@@ -113,7 +113,7 @@ def handle_post_special(query_string, print_status=True):
     return data.tobytes(), x_audio_metadata
 
 def handle_post(userid, n_samples, in_data_raw,
-                query_string, print_status=True) -> Tuple[Any, str]:
+                query_string, print_status=True, client_address=None) -> Tuple[Any, str]:
     if not userid.isdigit():
         raise ValueError("UserID must be numeric; got: %r"%userid)
     try:
@@ -152,12 +152,12 @@ def handle_post(userid, n_samples, in_data_raw,
     query_string += '&rms_volume=%s'%rms_volume
 
     data, x_audio_metadata = handle_json_post(
-        in_data, query_string, print_status)
+        in_data, query_string, print_status, client_address=client_address)
 
     # Divide data into user_summary and raw audio data
     n_users_in_summary, = struct.unpack(">H", data[:2])
     user_summary_n_bytes = server.summary_length(n_users_in_summary)
-    
+
     user_summary = data[:user_summary_n_bytes]
     raw_audio = data[user_summary_n_bytes:].view(np.float32)
 
@@ -178,6 +178,38 @@ def handle_post(userid, n_samples, in_data_raw,
             -1 if client_no_data else rms_volume))
 
     return data.tobytes(), x_audio_metadata
+
+def handle_json_post(in_data, query_string, print_status, client_address=None):
+    in_json = {
+        "query_string": query_string,
+        "print_status": print_status,
+        "client_address": client_address,
+    }
+    out_json_raw, out_data = backend.handle_post(json.dumps(in_json), in_data)
+
+    out_json = json.loads(out_json_raw)
+
+    if "error" in out_json:
+        inner_bt = ""
+        if "inner_bt" in out_json:
+            inner_bt = "\nBackend error details: " + out_json["inner_bt"]
+        raise Exception(out_json["error"] + inner_bt)
+
+    return out_data, out_json["x-audio-metadata"]
+
+def get_telemetry(start_response) -> None:
+    in_json = {
+        "request": "get_telemetry"
+    }
+    out_json_raw, _ = backend.handle_post(json.dumps(in_json), np.zeros(0))
+    start_response(
+        '200 OK',
+        [("Access-Control-Allow-Origin", "*"),
+         ("Access-Control-Max-Age", "86400"),
+         ("Access-Control-Expose-Headers", "X-Audio-Metadata"),
+         ("Content-Type", "application/json")])
+    return out_json_raw.encode("utf-8"),
+
 
 def do_OPTIONS(environ, start_response) -> None:
     start_response(
@@ -209,6 +241,9 @@ def do_GET(environ, start_response) -> None:
         ps.print_stats()
         start_response('200 OK', [])
         return s.getvalue().encode("utf-8"),
+
+    if environ.get('PATH_INFO', '') == "/api/telemetry":
+        return get_telemetry(start_response)
 
     server_clock = server.calculate_server_clock()
 
@@ -255,6 +290,12 @@ def do_POST(environ, start_response) -> None:
 
     query_string = environ['QUERY_STRING']
 
+    try:
+        client_address = environ['HTTP_X_FORWARDED_FOR']
+    except KeyError:
+        client_address = environ.get('REMOTE_ADDR', "")
+    # XXX: do something with it
+
     # For some reason parse_qs can't handle an empty query string
     if len(query_string) > 0:
         query_params = urllib.parse.parse_qs(query_string, strict_parsing=True)
@@ -276,7 +317,7 @@ def do_POST(environ, start_response) -> None:
             del users[userid]
 
         if userid is not None:
-            data, x_audio_metadata = handle_post(userid, n_samples, in_data_raw, query_string)
+            data, x_audio_metadata = handle_post(userid, n_samples, in_data_raw, query_string, client_address=client_address)
         else:
             data, x_audio_metadata = handle_post_special(query_string)
     except Exception as e:

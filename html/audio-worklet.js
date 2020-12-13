@@ -718,6 +718,8 @@ class Player extends AudioWorkletProcessor {
       this.port.postMessage({
         epoch: this.epoch,
         jank: this.acc_err,
+        jank_over: Date.now() - this.acc_err_since,
+        dropped_calls: this.dropped_calls,
         type: "samples_out",
         chunk: mic_chunk,
       }); // XXX don't transfer , [mic_chunk.data.buffer]);
@@ -727,18 +729,24 @@ class Player extends AudioWorkletProcessor {
 
   profile_web_audio() {
     var now_ms = Date.now();
+    this.calls += 1;
     const process_history_len = 100;
     if (this.process_history_ms === undefined) {
       this.bad_sample_rate = 0;
       this.acc_err = 0;
+      this.acc_err_since = now_ms;
+      this.calls = 0;
       this.process_history_ms = new Array(process_history_len).fill(NaN);
     } else if (!isNaN(this.process_history_ms[0])) {
       var interval = now_ms - this.process_history_ms[0];
+      var total_interval = now_ms - this.acc_err_since;
       var target_interval = process_history_len * 128 * 1000 / sampleRate;
       var err = interval - target_interval;
       var eff_rate = process_history_len * 128 * 1000 / interval;
       this.acc_err += err / process_history_len;
-      log_every(500, "profile_web_audio", sampleRate, eff_rate, this.process_history_ms[0], now_ms, interval, target_interval, err, this.acc_err, this.acc_err / (128 * 1000 / 22050 /* XXX... */));
+      var target_calls = total_interval * sampleRate / 1000 / 128;
+      this.dropped_calls = target_calls - this.calls
+      log_every(500, "profile_web_audio", total_interval, target_calls, this.calls, this.dropped_calls, sampleRate, eff_rate, this.process_history_ms[0], now_ms, interval, target_interval, err, this.acc_err, this.acc_err / (128 * 1000 / 22050 /* XXX... */));
 
       // other parameters of interesst
       // XXX // console.debug("VERYSPAM", currentTime, currentFrame, /* getOutputTimestamp(), performanceTime, contextTime*/);
@@ -751,11 +759,11 @@ class Player extends AudioWorkletProcessor {
         if (this.bad_sample_rate > 2000) {
           console.warn("SAMPLE RATE STILL BAD. Should be", sampleRate, "but seeing", eff_rate, ". Restarting app.");
           // Ask the main app to reload the audio input device
-          this.killed = true;
+          /* XXX this.killed = true;
           throw {
             message: "Your computer's audio system is lagging a lot, which is breaking the app. Please disconnect any bluetooth headphones or speakers, close unnecessary apps / reduce load on your computer, then refresh the page and try again.",
             unpreventable: true,
-          };
+          }; */
         }
       }
     }
@@ -811,6 +819,14 @@ class Player extends AudioWorkletProcessor {
           output = new Float32Array(output.length);
         }
         this.process_normal(input, output);
+        // Hack: If we've fallen behind, pretend we were called some extra times to skip a bit of audio until we catch up. This will audibly glitch (but there is an extremely high likelihood that we actually just did anyway, to get here.)
+        while (this.dropped_calls > 15 /* arbitrary */) {
+          //XXX : we got to -348 dropped calls, whoops, which gets us negative 1s read slippage oops
+          console.warn("Making up for lost time by throwing away some audio...");
+          this.calls += 1;
+          this.dropped_calls -= 1;
+          this.process_normal(input, output);
+        }
       }
       // Handle stereo output by cloning mono output.
       for (var chan = 1; chan < outputs[0].length; chan++) {

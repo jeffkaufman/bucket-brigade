@@ -368,7 +368,7 @@ export async function samples_to_server(outdata, target_url, send_metadata) {
     const skip_params = []
     const truthy_params = ['track', 'monitor'];
     const nonnull_params = ['write_clock', 'volume', 'backing_volume', 'bpm', 'repeats', 'bpr'];
-    const stringify_params = ['chat', 'mic_volume', 'event_data'];
+    const stringify_params = ['chat', 'mic_volume', 'event_data', 'client_telemetry'];
     const flag_params = ['request_lead', 'mark_start_singing', 'mark_stop_singing'];
 
     for (var k in send_metadata) {

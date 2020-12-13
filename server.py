@@ -16,6 +16,7 @@ import threading
 import datetime
 import struct
 import subprocess
+import copy
 
 from typing import Any, Dict, List, Tuple, Iterable
 
@@ -41,6 +42,8 @@ try:
 except Exception:
     SERVER_VERSION="unknown"
     SERVER_BRANCH="unknown"
+
+SERVER_STARTUP_TIME = int(time.time())
 
 class State():
     def __init__(self):
@@ -281,6 +284,10 @@ class User:
         # For debugging purposes only
         self.last_seen_read_clock = None
         self.last_seen_write_clock = None
+        self.last_n_samples = None
+
+        self.client_address = None  # Last IP we saw them from
+        self.client_telemetry = {}  # unstructured info from client
 
         self.mark_sent()
 
@@ -306,8 +313,24 @@ class User:
         for key in self.list_keys:
             self.to_send[key] = []
 
+    def update_client_telemetry(self, nct):
+        if not isinstance(nct, dict):
+            raise Exception("New client telemetry not a dict:", nct)
+        merge_into_dict(self.client_telemetry, nct)
+
+def merge_into_dict(a, b):
+    for k in b:
+        if k not in a:
+            a[k] = b[k]
+        elif isinstance(a[k], list) and isinstance(b[k], list):
+            a[k] += b[k]
+        elif isinstance(a[k], dict) and isinstance(b[k], dict):
+            merge_into_dict(a[k], b[k])
+        else:
+            a[k] = b[k]
+
 users: Dict[str, Any] = {} # userid -> User
-def sendall(key, value, exclude=[]):
+def sendall(key, value, exclude=None):
     for userid, user in users.items():
         if userid not in exclude:
             user.send(key, value)
@@ -538,13 +561,58 @@ def fix_volume(data, backing_data, n_people):
     data *= state.global_volume
     return data
 
+def get_telemetry():
+    clients = {}
+    for userid, user in users.items():
+        c = {}
+        raw = copy.deepcopy(user.__dict__)
+        del raw["list_keys"]  # redundant
+
+        try:
+            c["client_time_to_next_client_samples"] = raw["last_heard_server_clock"] - raw["last_seen_write_clock"] - raw["client_telemetry"]["audio_offset"] + raw["last_n_samples"]
+            c["client_time_to_next_client_seconds"] = c["client_time_to_next_client_samples"] / SAMPLE_RATE
+        except:
+            pass
+
+        c["raw"] = raw
+        clients[userid] = c
+
+    now = time.time()
+    result = {
+        "request_time": now,
+        "server": {
+            "server_startup_time": SERVER_STARTUP_TIME,
+            "server_uptime": int(now) - SERVER_STARTUP_TIME,
+            "server_version": SERVER_VERSION,
+            "server_branch": SERVER_BRANCH,
+            "server_clock": calculate_server_clock(),
+            "server_sample_rate": SAMPLE_RATE,
+            "n_connected_users": len(users),
+            "queue_size": QUEUE_LENGTH / FRAME_SIZE, # in 128-sample frames
+            "events": get_events_to_send(),
+            "state": copy.deepcopy(state.__dict__),  # XXX: refine this / dedupe
+        },
+        "clients": clients
+        # XXX: missing client IPs, what else
+    }
+    del result["server"]["state"]["backing_track"]  # XXX: ok but we really shouldn't have copied it in the first place
+    return result
+
 def handle_json_post(in_json_raw, in_data):
     in_json = json.loads(in_json_raw)
 
+    if in_json.get("request", None):
+        if in_json["request"] == "get_telemetry":
+            result = get_telemetry()
+            return json.dumps(result), np.zeros(0)
+        else:
+            return json.dumps({"error": "unknown request " + in_json["request"]}), np.zeros(0)
+
     query_string = in_json["query_string"]
+    client_address = in_json.get("client_address", None)
 
     out_data, x_audio_metadata = handle_post(
-        in_data, query_string, print_status=True)
+        in_data, query_string, print_status=True, client_address=client_address)
 
     return json.dumps({
         "x-audio-metadata": x_audio_metadata,
@@ -570,7 +638,10 @@ def handle_special(query_params, server_clock, user=None, client_read_clock=None
     msg_chats = query_params.get("chat", None)
     if msg_chats:
         for msg_chat in json.loads(msg_chats):
-            sendall("chats", (username, msg_chat), exclude=[userid])
+            if user is not None:
+                sendall("chats", (user.name, msg_chat), exclude=[user.userid])
+            else:
+                sendall("chats", ("[ANNOUNCEMENT]", msg_chat))
 
     bpm = query_params.get("bpm", None)
     if bpm:
@@ -679,7 +750,7 @@ def extract_params(params, keys):
 def get_events_to_send() -> Any:
     return [{"evid": i[0], "clock": i[1]} for i in events.items()]
 
-def handle_post(in_data, query_string, print_status) -> Tuple[Any, str]:
+def handle_post(in_data, query_string, print_status, client_address=None) -> Tuple[Any, str]:
     in_data = in_data.view(dtype=np.float32)
 
     raw_params = {}
@@ -742,6 +813,13 @@ def handle_post(in_data, query_string, print_status) -> Tuple[Any, str]:
     update_users(userid, username, server_clock, client_read_clock)
     user = users[userid]
 
+    if client_address is not None:
+        user.client_address = client_address
+
+    client_telemetry = query_params.get("client_telemetry", None)
+    if client_telemetry:
+        user.update_client_telemetry(json.loads(client_telemetry))
+
     rms_volume = query_params.get("rms_volume", None)
     if rms_volume:
         user.rms_volume = float(rms_volume)
@@ -803,6 +881,7 @@ def handle_post(in_data, query_string, print_status) -> Tuple[Any, str]:
     state.last_request_clock = server_clock
 
     n_samples = len(in_data)
+    user.last_n_samples = n_samples
 
     if client_write_clock is None:
         pass
