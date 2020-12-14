@@ -332,7 +332,7 @@ def merge_into_dict(a, b):
 users: Dict[str, Any] = {} # userid -> User
 def sendall(key, value, exclude=None):
     for userid, user in users.items():
-        if userid not in exclude:
+        if not exclude or userid not in exclude:
             user.send(key, value)
 
 def wrap_get(queue, start, len_vals) -> Any:
