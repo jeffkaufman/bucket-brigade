@@ -137,7 +137,8 @@ class ShmClient:
 
 class FakeClient:
     def handle_post(self, in_json_raw, in_data):
-        return server.handle_json_post(in_json_raw, in_data)
+        out_json_raw, out_data = server.handle_json_post(in_json_raw, in_data)
+        return out_json_raw.encode("utf-8"), out_data
 
 if __name__ == "__main__":
     ShmServer.run(sys.argv[1:])

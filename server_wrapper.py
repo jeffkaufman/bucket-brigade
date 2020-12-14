@@ -208,7 +208,7 @@ def get_telemetry(start_response) -> None:
          ("Access-Control-Max-Age", "86400"),
          ("Access-Control-Expose-Headers", "X-Audio-Metadata"),
          ("Content-Type", "application/json")])
-    return out_json_raw.encode("utf-8"),
+    return out_json_raw,
 
 
 def do_OPTIONS(environ, start_response) -> None:
