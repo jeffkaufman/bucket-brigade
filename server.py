@@ -627,6 +627,9 @@ def friendly_volume_to_scalar(volume):
 # Handle special operations that do not require a user (although they may
 #   optionally support one), but can be done server-to-server as well.
 def handle_special(query_params, server_clock, user=None, client_read_clock=None):
+    if state.last_request_clock is None:
+        state.last_request_clock = server_clock
+
     volume = query_params.get("volume", None)
     if volume:
         state.global_volume = friendly_volume_to_scalar(float(volume))
