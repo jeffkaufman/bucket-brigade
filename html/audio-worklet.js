@@ -763,11 +763,11 @@ class Player extends AudioWorkletProcessor {
 
       if (eff_rate < 0.75 * sampleRate) {
         if (this.bad_sample_rate == 0) {
-          console.warn("BAD SAMPLE RATE, WEB AUDIO BUG? Should be", sampleRate, "but seeing", eff_rate, ". Will try restarting momentarily if this persists.");
+          console.warn("BAD SAMPLE RATE, WEB AUDIO BUG? Should be", sampleRate, "but seeing", eff_rate, ". :-(");
         }
         this.bad_sample_rate += 1;
-        if (this.bad_sample_rate > 2000) {
-          console.warn("SAMPLE RATE STILL BAD. Should be", sampleRate, "but seeing", eff_rate, ". Restarting app.");
+        if (this.bad_sample_rate % 2000 == 0) {
+          console.warn("SAMPLE RATE STILL BAD. Should be", sampleRate, "but seeing", eff_rate, ". :-(");
           // Ask the main app to reload the audio input device
           /* XXX this.killed = true;
           throw {
