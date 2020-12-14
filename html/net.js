@@ -6,6 +6,8 @@ import {AudioChunk, PlaceholderChunk, CompressedAudioChunk, ServerClockReference
 //   browser to lag severely and dev tools to lag/hang/crash. Don't use this unless
 //   you actually need it.
 const LOG_ULTRA_VERBOSE = false;
+// XXX:
+console.debug = () => {}
 
 class ServerConnectionBase {
   constructor() {}
@@ -416,7 +418,9 @@ export async function samples_to_server(outdata, target_url, send_metadata) {
     xhr.open("POST", target_url, true);
     xhr.responseType = "arraybuffer";
     xhr.send(outdata);
-    console.debug("SPAM", "... XHR sent.");
+    if (LOG_ULTRA_VERBOSE) {
+      console.debug("SPAM", "... XHR sent.");
+    }
   });
 }
 
@@ -426,8 +430,8 @@ function handle_xhr_result(xhr, resolve, reject) {
 
   if (xhr.status == 200) {
     var metadata = JSON.parse(xhr.getResponseHeader("X-Audio-Metadata"));
-    console.debug("SPAM", "metadata:", metadata);
     if (LOG_ULTRA_VERBOSE) {
+      console.debug("SPAM", "metadata:", metadata);
       console.debug("SPAM", "Got XHR response w/ ID:", xhr.debug_id, "result:", xhr.response, " -- still in flight:", xhrs_inflight);
     }
 
@@ -442,7 +446,7 @@ function handle_xhr_result(xhr, resolve, reject) {
     if (metadata_raw) {
       try {
         var metadata = JSON.parse(metadata_raw);
-        console.debug("SPAM", "metadata on failed XHR:", metadata);
+        console.warning("metadata on failed XHR:", metadata);
         if (metadata.kill_client) {
           console.error("Received kill from server:", metadata.message);
           return reject("Received kill from server: " + metadata.message);

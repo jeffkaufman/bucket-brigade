@@ -887,7 +887,6 @@ async function start_singing() {
     var n_connected_users = metadata["n_connected_users"] || 0;
 
     var imLeading = metadata.leader && myUserid == metadata.leader;
-    console.debug("leader", metadata.leader, "me", myUserid, "iml", imLeading);
     update_active_users(user_summary, server_sample_rate, imLeading, n_connected_users);
 
     // XXX: needs to be reimplemented in terms of alarms / marks

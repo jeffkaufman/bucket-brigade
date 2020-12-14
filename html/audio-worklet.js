@@ -7,6 +7,12 @@ if (typeof AudioWorkletProcessor === "undefined") {
   //   (which will not be valid outside the audio worklet context).
 } else {
 
+// This gates all the logs that put references to REALLY HUGE objects into the console
+//   very frequently. When this is on, having the console open eventually causes the
+//   browser to lag severely and dev tools to lag/hang/crash. Don't use this unless
+//   you actually need it.
+const LOG_ULTRA_VERBOSE = false;
+
 console.info("Audio worklet module loading");
 
 // XXX start copy-pasted imports from lib.js
@@ -269,7 +275,9 @@ class ClockedRingBuffer {
   }
 
   read() {
-    log_every(128000, "buf_read", "leadin_samples:", this.leadin_samples, "read_clock:", this.read_clock, "buffered_data:", this.buffered_data, "space_left:", this.space_left());
+    if (LOG_ULTRA_VERBOSE) {
+      log_every(128000, "buf_read", "leadin_samples:", this.leadin_samples, "read_clock:", this.read_clock, "buffered_data:", this.buffered_data, "space_left:", this.space_left());
+    }
     if (this.read_clock === null) {
       return "no read clock" ;
     }
@@ -746,7 +754,9 @@ class Player extends AudioWorkletProcessor {
       this.acc_err += err / process_history_len;
       var target_calls = total_interval * sampleRate / 1000 / 128;
       this.dropped_calls = target_calls - this.calls
-      log_every(500, "profile_web_audio", total_interval, target_calls, this.calls, this.dropped_calls, sampleRate, eff_rate, this.process_history_ms[0], now_ms, interval, target_interval, err, this.acc_err, this.acc_err / (128 * 1000 / 22050 /* XXX... */));
+      if (LOG_ULTRA_VERBOSE) {
+        log_every(500, "profile_web_audio", total_interval, target_calls, this.calls, this.dropped_calls, sampleRate, eff_rate, this.process_history_ms[0], now_ms, interval, target_interval, err, this.acc_err, this.acc_err / (128 * 1000 / 22050 /* XXX... */));
+      }
 
       // other parameters of interesst
       // XXX // console.debug("VERYSPAM", currentTime, currentFrame, /* getOutputTimestamp(), performanceTime, contextTime*/);

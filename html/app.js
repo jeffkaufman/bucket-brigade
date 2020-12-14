@@ -25,6 +25,8 @@ const TARGET_MAX_RMS_VOL = 20;
 //   browser to lag severely and dev tools to lag/hang/crash. Don't use this unless
 //   you actually need it.
 const LOG_ULTRA_VERBOSE = false;
+// XXX:
+console.debug = () => {}
 
 function close_stream(stream) {
   stream.getTracks().forEach((track) => track.stop());
@@ -977,14 +979,14 @@ export class SingerClient extends EventTarget {
 
     this.cur_clock_cbs.push( (clock)=>{
       if (this.backing_track_start_clock && (clock > this.backing_track_start_clock)) {
-        console.debug("Firing backing track update:", (clock - this.backing_track_start_clock) / this.ctx.audioCtx.sampleRate, clock, this.backing_track_start_clock, this.ctx.audioCtx.sampleRate);
+        if (LOG_ULTRA_VERBOSE) {
+          console.debug("Firing backing track update:", (clock - this.backing_track_start_clock) / this.ctx.audioCtx.sampleRate, clock, this.backing_track_start_clock, this.ctx.audioCtx.sampleRate);
+        }
         this.dispatchEvent(new CustomEvent("backingTrackUpdate", {
           detail: {
             progress: (clock - this.backing_track_start_clock) / this.ctx.audioCtx.sampleRate
           }
         }));
-      } else if (this.backing_track_start_clock) {
-        console.debug("NOT firing backing track update, as backing track starts in future:", (clock - this.backing_track_start_clock) / this.ctx.audioCtx.sampleRate, clock, this.backing_track_start_clock, this.ctx.audioCtx.sampleRate);
       }
     });
     this.ctx.playerNode.port.postMessage({  // XXX invasive coupling
@@ -993,14 +995,15 @@ export class SingerClient extends EventTarget {
 
     var events = metadata["events"] || [];
 
-    console.debug("got marks from server:", events, "already seen:", this.events_seen_already);
+    if (LOG_ULTRA_VERBOSE) {
+      console.debug("got marks from server:", events, "already seen:", this.events_seen_already);
+    }
     var new_events = [];
     for (const ev of events) {
       // This is  bit of a hack to get things working for solstice.
       // Note that this will give unpredictable (i.e. wrong) results if one song is started while the tail end of another is still going. Don't do that.
       if (ev["evid"] == "backingTrackStart") {
         this.backing_track_start_clock = this.server_to_client_clock(ev.clock);
-        console.debug("Backing track start event received:", this.backing_track_start_clock, ev.clock)
       }
       if (!this.events_seen_already[ev["evid"]]) {
         console.info("unseen event:", ev);
