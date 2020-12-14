@@ -830,12 +830,22 @@ class Player extends AudioWorkletProcessor {
         }
         this.process_normal(input, output);
         // Hack: If we've fallen behind, pretend we were called some extra times to skip a bit of audio until we catch up. This will audibly glitch (but there is an extremely high likelihood that we actually just did anyway, to get here.)
-        while (this.dropped_calls > 15 /* arbitrary */) {
-          //XXX : we got to -348 dropped calls, whoops, which gets us negative 1s read slippage oops
-          console.warn("Making up for lost time by throwing away some audio...");
-          this.calls += 1;
-          this.dropped_calls -= 1;
-          this.process_normal(input, output);
+        if (this.dropped_calls > 20 /* arbitrary */) {
+          // Don't do too many at once, because sometimes lag can be temporary, and we don't want to overshoot too much.
+          // Do up to 10, but no more than required to get us down to 15.
+          var calls_to_make_up = Math.min(this.dropped_calls - 15, 10);
+          console.warn("Making up for lost time by throwing away some audio: calls_to_make_up =", calls_to_make_up, "total dropped calls =", this.dropped_calls);
+          while (calls_to_make_up > 0) {
+            calls_to_make_up -= 1;
+            this.calls += 1;
+            this.dropped_calls -= 1;
+            this.process_normal(input, output);
+          }
+          this.warned_overcomp = false;
+        }
+        if (this.dropped_calls < 0 && !this.warned_overcomp) {
+          this.warned_overcomp = true;
+          console.warn("Whoops, we overcompensated for call drops, we're now ahead by:", -this.dropped_calls);
         }
       }
       // Handle stereo output by cloning mono output.
