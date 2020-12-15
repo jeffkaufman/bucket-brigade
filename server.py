@@ -773,43 +773,51 @@ def handle_post(in_data, query_string, print_status, client_address=None) -> Tup
     if state.last_request_clock is None:
         state.last_request_clock = server_clock
 
+    # Prevent weirdness if it's been a very long time since we heard from
+    #   anybody. Never try to clear more than the entire length of the buffer.
+    if server_clock - state.last_request_clock > QUEUE_LENGTH:
+        state.last_request_clock = server_clock - QUEUE_LENGTH
+
+    # NOTE: If we go a long time without a request, and there is a backing
+    #   track running, weird but harmless things will happen. This scenario is
+    #   unlikely and probably not worth correcting.
+
     # Audio from clients is summed, so we need to clear the circular
     #   buffer ahead of them. The range we are clearing was "in the
     #   future" as of the last request, and we never touch the future,
     #   so nothing has touched it yet "this time around".
-    if state.last_request_clock is not None:
-        clear_samples = min(server_clock - state.last_request_clock, QUEUE_LENGTH)
-        clear_index = state.last_request_clock
-        wrap_assign(
-            n_people_queue, clear_index, np.zeros(clear_samples, np.int16))
-        wrap_assign(
-            monitor_queue, clear_index, np.zeros(clear_samples, np.float32))
-        wrap_assign(
-            audio_queue, clear_index, np.zeros(clear_samples, np.float32))
-        state.last_cleared_clock = clear_index + clear_samples
+    clear_samples = min(server_clock - state.last_request_clock, QUEUE_LENGTH)
+    clear_index = state.last_request_clock
+    wrap_assign(
+        n_people_queue, clear_index, np.zeros(clear_samples, np.int16))
+    wrap_assign(
+        monitor_queue, clear_index, np.zeros(clear_samples, np.float32))
+    wrap_assign(
+        audio_queue, clear_index, np.zeros(clear_samples, np.float32))
+    state.last_cleared_clock = clear_index + clear_samples
 
-        max_backing_track_samples = len(state.backing_track) - state.backing_track_index
-        backing_track_samples = min(max_backing_track_samples, clear_samples)
-        if backing_track_samples > 0:
+    max_backing_track_samples = len(state.backing_track) - state.backing_track_index
+    backing_track_samples = min(max_backing_track_samples, clear_samples)
+    if backing_track_samples > 0:
+        wrap_assign(
+            backing_queue, clear_index, state.backing_track[
+                state.backing_track_index :
+                state.backing_track_index + backing_track_samples])
+        state.backing_track_index += backing_track_samples
+        clear_samples -= backing_track_samples
+        clear_index += backing_track_samples
+
+        if state.backing_track_index == len(state.backing_track):
+            # the song has ended, mark it so
+            state.song_end_clock = clear_index
+
+    if clear_samples > 0:
+        if state.metronome_on:
+            write_metronome(clear_index, clear_samples)
+        else:
             wrap_assign(
-                backing_queue, clear_index, state.backing_track[
-                    state.backing_track_index :
-                    state.backing_track_index + backing_track_samples])
-            state.backing_track_index += backing_track_samples
-            clear_samples -= backing_track_samples
-            clear_index += backing_track_samples
-
-            if state.backing_track_index == len(state.backing_track):
-                # the song has ended, mark it so
-                state.song_end_clock = clear_index
-
-        if clear_samples > 0:
-            if state.metronome_on:
-                write_metronome(clear_index, clear_samples)
-            else:
-                wrap_assign(
-                    backing_queue, clear_index,
-                    np.zeros(clear_samples, np.float32))
+                backing_queue, clear_index,
+                np.zeros(clear_samples, np.float32))
 
     saved_last_request_clock = state.last_request_clock
     state.last_request_clock = server_clock
