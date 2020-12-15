@@ -840,7 +840,8 @@ class Player extends AudioWorkletProcessor {
         if (this.dropped_calls > 20 /* arbitrary */) {
           // Don't do too many at once, because sometimes lag can be temporary, and we don't want to overshoot too much.
           // Do up to 10, but no more than required to get us down to 15.
-          var calls_to_make_up = Math.min(this.dropped_calls - 15, 10);
+          // XXX: actually just do one extra call per call to heavily ratelimit it?
+          var calls_to_make_up = 1 // XXX Math.min(this.dropped_calls - 15, 10);
           console.warn("Making up for lost time by throwing away some audio: calls_to_make_up =", calls_to_make_up, "total dropped calls =", this.dropped_calls);
           while (calls_to_make_up > 0) {
             calls_to_make_up -= 1;
@@ -848,10 +849,11 @@ class Player extends AudioWorkletProcessor {
             this.dropped_calls -= 1;
             this.process_normal(input, output);
           }
-          this.warned_overcomp = false;
+          this.warned_overcomp = 0;
         }
-        if (this.dropped_calls < 0 && !this.warned_overcomp) {
-          this.warned_overcomp = true;
+        // XXX this and the message above are way too spammy now
+        if (this.dropped_calls < this.warned_overcomp) {
+          this.warned_overcomp = this.dropped_calls;
           console.warn("Whoops, we overcompensated for call drops, we're now ahead by:", -this.dropped_calls);
         }
       }
