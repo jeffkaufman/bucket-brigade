@@ -136,12 +136,12 @@ class Recorder:
         self.out = None
         self.written = 0
         self.last_clock = None
+        self.filename = None
+        self.last_filename = None
 
     @staticmethod
     def recording_fname():
-        return os.path.join(
-            RECORDINGS_DIR,
-            datetime.datetime.now().strftime('%Y-%m-%d-%H%M%S.wav'))
+        return datetime.datetime.now().strftime('%Y-%m-%d-%H%M%S.wav')
 
     @staticmethod
     def read_offset():
@@ -153,7 +153,9 @@ class Recorder:
     def start_(self):
         self.cleanup_()
 
-        self.out = wave.open(self.recording_fname(), mode='wb')
+        self.filename = self.recording_fname()
+        filepath = os.path.join(RECORDINGS_DIR, self.filename)
+        self.out = wave.open(filepath, mode='wb')
         self.out.setnchannels(1)
         self.out.setsampwidth(2)
         self.out.setframerate(SAMPLE_RATE)
@@ -164,6 +166,8 @@ class Recorder:
     def end_(self):
         self.out.close()
         self.out = None
+        self.last_filename = self.filename
+        self.filename = None
 
     def write_(self, samples):
         self.out.writeframes((samples * 2**14).astype(np.int16))
@@ -227,8 +231,12 @@ class Recorder:
                     continue
                 size = os.path.getsize(os.path.join(RECORDINGS_DIR, fname))
                 size_mb = size / 1024 / 1024
-                w("<li><a href='%s'>%s</a> (%.2f MB)" % (
-                    fname, fname, size_mb))
+                if fname == self.last_filename:
+                    w("<li><b><a href='%s'>%s</a> (%.2f MB)</b>" % (
+                        fname, fname, size_mb))
+                else:
+                    w("<li><a href='%s'>%s</a> (%.2f MB)" % (
+                        fname, fname, size_mb))
             w("</ul>")
             w("Because these files are large we only keep the most recent %s" %
               RECORDING_N_TO_KEEP)
@@ -579,12 +587,14 @@ def fix_volume(data, backing_data, n_people):
     data *= state.global_volume
     return data
 
+def copy_without_keys(d, keys):
+    return {x: copy.deepcopy(d[x]) for x in d if x not in keys}
+
 def get_telemetry():
     clients = {}
     for user in users.values():
         c = {}
-        raw = copy.deepcopy(user.__dict__)
-        del raw["list_keys"]  # redundant
+        raw = copy_without_keys(user.__dict__, ["list_keys"])
 
         try:
             c["client_time_to_next_client_samples"] = raw["last_heard_server_clock"] - raw["last_seen_write_clock"] - raw["client_telemetry"]["audio_offset"] + raw["last_n_samples"]
@@ -594,6 +604,8 @@ def get_telemetry():
 
         c["raw"] = raw
         clients[user.userid] = c
+
+    recorder_details = copy_without_keys(recorder.__dict__, ["out"])
 
     now = time.time()
     result = {
@@ -608,12 +620,11 @@ def get_telemetry():
             "n_connected_users": len(active_users()),
             "queue_size": QUEUE_LENGTH / FRAME_SIZE, # in 128-sample frames
             "events": get_events_to_send(),
-            "state": copy.deepcopy(state.__dict__),  # XXX: refine this / dedupe
+            "state": copy_without_keys(state.__dict__, ["backing_track"]),  # XXX: refine this / dedupe
         },
+        "recorder": recorder_details,
         "clients": clients
-        # XXX: missing client IPs, what else
     }
-    del result["server"]["state"]["backing_track"]  # XXX: ok but we really shouldn't have copied it in the first place
     return result
 
 def handle_json_post(in_json_raw, in_data):
