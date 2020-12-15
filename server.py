@@ -50,6 +50,8 @@ class State():
         self.reset()
 
     def reset(self):
+        self.server_controlled = False
+
         self.last_request_clock = None
         self.last_cleared_clock = None
         self.global_volume = 1.0
@@ -440,7 +442,10 @@ def clean_users(server_clock) -> None:
     for userid in to_delete:
         del users[userid]
 
-    if not users:
+    # If we have ever seen a server-to-server request, we never reset state,
+    #   because the Ritual Engine server may need to perform operations when no
+    #   users are present.
+    if not users and not state.server_controlled:
         state.reset()
 
 def setup_monitoring(monitoring_userid, monitored_userid) -> None:
@@ -627,9 +632,6 @@ def friendly_volume_to_scalar(volume):
 # Handle special operations that do not require a user (although they may
 #   optionally support one), but can be done server-to-server as well.
 def handle_special(query_params, server_clock, user=None, client_read_clock=None):
-    if state.last_request_clock is None:
-        state.last_request_clock = server_clock
-
     volume = query_params.get("volume", None)
     if volume:
         state.global_volume = friendly_volume_to_scalar(float(volume))
@@ -645,21 +647,6 @@ def handle_special(query_params, server_clock, user=None, client_read_clock=None
                 sendall("chats", (user.name, msg_chat), exclude=[user.userid])
             else:
                 sendall("chats", ("[ANNOUNCEMENT]", msg_chat))
-
-    bpm = query_params.get("bpm", None)
-    if bpm:
-        state.bpm = bpm
-        sendall("bpm", state.bpm)
-
-    repeats = query_params.get("repeats", None)
-    if repeats:
-        state.repeats = repeats
-        sendall("repeats", state.repeats)
-
-    bpr = query_params.get("bpr", None)
-    if bpr:
-        state.bpr = bpr
-        sendall("bpr", state.bpr)
 
     mic_volume = query_params.get("mic_volume", None)
     if mic_volume:
@@ -698,11 +685,8 @@ def handle_special(query_params, server_clock, user=None, client_read_clock=None
             # These must be separate from song_start/end_clock, because they
             #   are used for video sync and must be EXACTLY at the moment the
             #   backing track starts/ends, not merely close.
-            # We use "last_request_clock" because that's the moment the track
-            #   actually starts due to the way our clearing algorithm currently
-            #   works. (... I think.)
-            insert_event("backingTrackStart", state.last_request_clock)
-            insert_event("backingTrackEnd", state.last_request_clock + len(state.backing_track))
+            insert_event("backingTrackStart", server_clock)
+            insert_event("backingTrackEnd", server_clock + len(state.backing_track))
 
 
     if query_params.get("mark_stop_singing", None):
@@ -730,6 +714,25 @@ def handle_special(query_params, server_clock, user=None, client_read_clock=None
 
     for ev in new_events:
         insert_event(ev["evid"], ev["clock"])
+
+    # If we are running under Ritual Engine, disable functionality that is  not
+    #   required in that setting, and would be disruptive if triggered by
+    #   accident.
+    if not state.server_controlled:
+        bpm = query_params.get("bpm", None)
+        if bpm:
+            state.bpm = bpm
+            sendall("bpm", state.bpm)
+
+        repeats = query_params.get("repeats", None)
+        if repeats:
+            state.repeats = repeats
+            sendall("repeats", state.repeats)
+
+        bpr = query_params.get("bpr", None)
+        if bpr:
+            state.bpr = bpr
+            sendall("bpr", state.bpr)
 
 # Do some format conversions and strip the unnecessary nesting layer that urllib
 #   query parsing applies
@@ -766,8 +769,57 @@ def handle_post(in_data, query_string, print_status, client_address=None) -> Tup
     server_clock = calculate_server_clock()
     requested_user_summary = query_params.get("user_summary", None)
 
+    # Prevent weirdness on the very first request since startup
+    if state.last_request_clock is None:
+        state.last_request_clock = server_clock
+
+    # Audio from clients is summed, so we need to clear the circular
+    #   buffer ahead of them. The range we are clearing was "in the
+    #   future" as of the last request, and we never touch the future,
+    #   so nothing has touched it yet "this time around".
+    if state.last_request_clock is not None:
+        clear_samples = min(server_clock - state.last_request_clock, QUEUE_LENGTH)
+        clear_index = state.last_request_clock
+        wrap_assign(
+            n_people_queue, clear_index, np.zeros(clear_samples, np.int16))
+        wrap_assign(
+            monitor_queue, clear_index, np.zeros(clear_samples, np.float32))
+        wrap_assign(
+            audio_queue, clear_index, np.zeros(clear_samples, np.float32))
+        state.last_cleared_clock = clear_index + clear_samples
+
+        max_backing_track_samples = len(state.backing_track) - state.backing_track_index
+        backing_track_samples = min(max_backing_track_samples, clear_samples)
+        if backing_track_samples > 0:
+            wrap_assign(
+                backing_queue, clear_index, state.backing_track[
+                    state.backing_track_index :
+                    state.backing_track_index + backing_track_samples])
+            state.backing_track_index += backing_track_samples
+            clear_samples -= backing_track_samples
+            clear_index += backing_track_samples
+
+            if state.backing_track_index == len(state.backing_track):
+                # the song has ended, mark it so
+                state.song_end_clock = clear_index
+
+        if clear_samples > 0:
+            if state.metronome_on:
+                write_metronome(clear_index, clear_samples)
+            else:
+                wrap_assign(
+                    backing_queue, clear_index,
+                    np.zeros(clear_samples, np.float32))
+
+    saved_last_request_clock = state.last_request_clock
+    state.last_request_clock = server_clock
+
     # Handle server-to-server requests:
     if userid is None:
+        # If we ever get a server_to_server request, we switch off certain
+        #   automatic behavior that's troublesome in the Ritual Engine setting.
+        state.server_controlled = True
+
         # If we start a song triggered from here, mark its start at the current
         #   server clock, since we don't have a user clock to start at. (I'm
         #   not sure this clock is used for anything other than the bucket
@@ -827,7 +879,10 @@ def handle_post(in_data, query_string, print_status, client_address=None) -> Tup
     if rms_volume:
         user.rms_volume = float(rms_volume)
 
-    if query_params.get("request_lead", None):
+    # If we are running under Ritual Engine, disable functionality that is  not
+    #   required in that setting, and would be disruptive if triggered by
+    #   accident.
+    if query_params.get("request_lead", None) and not state.server_controlled:
         assign_delays(userid)
         state.song_start_clock = None
         state.song_end_clock = 0
@@ -842,46 +897,8 @@ def handle_post(in_data, query_string, print_status, client_address=None) -> Tup
     if monitor_userid:
         setup_monitoring(userid, monitor_userid)
 
-    # Audio from clients is summed, so we need to clear the circular
-    #   buffer ahead of them. The range we are clearing was "in the
-    #   future" as of the last request, and we never touch the future,
-    #   so nothing has touched it yet "this time around".
-    if state.last_request_clock is not None:
-        clear_samples = min(server_clock - state.last_request_clock, QUEUE_LENGTH)
-        clear_index = state.last_request_clock
-        wrap_assign(
-            n_people_queue, clear_index, np.zeros(clear_samples, np.int16))
-        wrap_assign(
-            monitor_queue, clear_index, np.zeros(clear_samples, np.float32))
-        wrap_assign(
-            audio_queue, clear_index, np.zeros(clear_samples, np.float32))
-        state.last_cleared_clock = clear_index + clear_samples
-
-        max_backing_track_samples = len(state.backing_track) - state.backing_track_index
-        backing_track_samples = min(max_backing_track_samples, clear_samples)
-        if backing_track_samples > 0:
-            wrap_assign(
-                backing_queue, clear_index, state.backing_track[
-                    state.backing_track_index :
-                    state.backing_track_index + backing_track_samples])
-            state.backing_track_index += backing_track_samples
-            clear_samples -= backing_track_samples
-            clear_index += backing_track_samples
-
-            if state.backing_track_index == len(state.backing_track):
-                # the song has ended, mark it so
-                state.song_end_clock = clear_index
-
-        if clear_samples > 0:
-            if state.metronome_on:
-                write_metronome(clear_index, clear_samples)
-            else:
-                wrap_assign(
-                    backing_queue, clear_index,
-                    np.zeros(clear_samples, np.float32))
-
-    saved_last_request_clock = state.last_request_clock
-    state.last_request_clock = server_clock
+    ### XXX: Debugging note: We used to do clearing of the buffer here, but now
+    ###      we do it above, closer to the top of the function.
 
     n_samples = len(in_data)
     user.last_n_samples = n_samples
