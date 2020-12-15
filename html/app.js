@@ -762,17 +762,14 @@ export class SingerClient extends EventTarget {
 
   declare_event(evid, offset) {
     console.info("Going to send new mark: declare_event", evid, offset);
-    this.cur_clock_cbs.push( (clock)=>{
+    this.with_cur_clock((clock) => {
       console.info("new mark at our clock", clock);
       const server_clock = this.client_to_server_clock(clock);
       console.info("corresponding server clock is", server_clock);
-      console.info("Sending new mark:", evid, offset, server_clock-(offset||0)*server_sample_rate);
+      console.info("Sending new mark:", evid, offset, server_clock-(offset||0)*this.server_sample_rate);
       this.x_send_metadata("event_data", {
         evid,
-        clock:server_clock-(offset||0)*server_sample_rate}, true);  // XXX invasive coupling
-    });
-    this.ctx.playerNode.port.postMessage({  // XXX invasive coupling
-      type: "request_cur_clock"
+        clock:server_clock-(offset||0)*this.server_sample_rate}, true);  // XXX invasive coupling
     });
   }
 
@@ -968,37 +965,49 @@ export class SingerClient extends EventTarget {
     this.connect_();
   }
 
+  get server_sample_rate() {
+    return this.connection.server_connection.clock_reference.sample_rate;
+  }
+
+  get client_sample_rate() {
+    return this.ctx.audioCtx.sampleRate;
+  }
+
   server_to_client_clock(clock) {
     return Math.floor(
       clock
-      / this.connection.server_connection.clock_reference.sample_rate
-      * this.ctx.audioCtx.sampleRate);
+      / this.server_sample_rate
+      * this.client_sample_rate);
   }
 
   client_to_server_clock(clock) {
     return Math.floor(
       clock
-      * this.connection.server_connection.clock_reference.sample_rate
-      / this.ctx.audioCtx.sampleRate);
+      * this.server_sample_rate
+      / this.client_sample_rate);
+  }
+
+  with_cur_clock(cb) {
+    this.cur_clock_cbs.push(cb);
+    this.ctx.playerNode.port.postMessage({
+      type: "request_cur_clock"
+    });
   }
 
   server_metadata_received(metadata) {
     console.debug("Received metadata:", metadata);
 
-    this.cur_clock_cbs.push( (clock)=>{
+    this.with_cur_clock((clock) => {
       if (this.backing_track_start_clock && (clock > this.backing_track_start_clock)) {
         if (LOG_ULTRA_VERBOSE) {
-          console.debug("Firing backing track update:", (clock - this.backing_track_start_clock) / this.ctx.audioCtx.sampleRate, clock, this.backing_track_start_clock, this.ctx.audioCtx.sampleRate);
+          console.debug("Firing backing track update:", (clock - this.backing_track_start_clock) / this.client_sample_rate, clock, this.backing_track_start_clock, this.client_sample_rate);
         }
         this.dispatchEvent(new CustomEvent("backingTrackUpdate", {
           detail: {
-            progress: (clock - this.backing_track_start_clock) / this.ctx.audioCtx.sampleRate
+            progress: (clock - this.backing_track_start_clock) / this.client_sample_rate
           }
         }));
       }
-    });
-    this.ctx.playerNode.port.postMessage({  // XXX invasive coupling
-      type: "request_cur_clock"
     });
 
     var events = metadata["events"] || [];
@@ -1024,14 +1033,14 @@ export class SingerClient extends EventTarget {
     }
 
     if (new_events.length > 0) {
-      console.info("Received new marks from server:", events);
+      console.info("Received new marks from server:", new_events);
     }
 
     for (let ev of new_events) {
       console.info("newMark:", ev);
       const client_clock = this.server_to_client_clock(ev.clock);
-      this.cur_clock_cbs.push( (clock)=>{
-        const delay_s = (client_clock - clock) / this.ctx.audioCtx.sampleRate;
+      this.with_cur_clock((clock) => {
+        const delay_s = (client_clock - clock) / this.client_sample_rate;
         console.info("translated into local clock:", client_clock, "; from now:", delay_s)
 
         this.dispatchEvent(new CustomEvent("newMark", {
@@ -1040,10 +1049,7 @@ export class SingerClient extends EventTarget {
             delay: delay_s
           }
         }));
-      });
-      this.ctx.playerNode.port.postMessage({  // XXX invasive coupling
-        type: "request_cur_clock"
-      });
+      })
 
       this.alarms[client_clock] = () => this.event_hooks.map(f=>f(ev["evid"]));
 
