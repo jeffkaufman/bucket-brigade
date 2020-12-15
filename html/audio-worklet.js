@@ -181,8 +181,6 @@ function thaw(o) {
 
 const FRAME_SIZE = 128;  // by Web Audio API spec
 
-let input_gain = 1.0;
-
 class ClockedRingBuffer {
   constructor(len_seconds, leadin_seconds, clock_reference, port) {
     if (leadin_seconds > len_seconds) {
@@ -510,7 +508,7 @@ class VolumeCalibrator {
               this.block_volumes[Math.trunc(this.block_volumes.length * .9)]
 
         const target_avg = 0.0004;
-        input_gain = Math.min(target_avg / volume_90th, 10);
+        let input_gain = Math.min(target_avg / volume_90th, 10);
         console.info("90th percentile avg volume: " + volume_90th +
                 "; input_gain: " + input_gain);
 
@@ -542,8 +540,9 @@ class Player extends AudioWorkletProcessor {
         });
       };
       this.clock_reference = new ClockReference({ sample_rate: sampleRate });
-      this.local_latency = 150 * sampleRate / 1000;  // rough initial guess;
+      this.local_latency = 150 * sampleRate / 1000;  // rough initial guess (150ms)
       this.click_volume = 0;
+      this.input_gain = 1.0;
     })
   }
 
@@ -591,6 +590,9 @@ class Player extends AudioWorkletProcessor {
     } else if (msg.type == "local_latency") {
       this.local_latency = msg.local_latency;
       return;
+    } else if (msg.type == "input_gain") {
+      this.input_gain = msg.input_gain;
+      return;
     } else if (msg.type == "latency_estimation_mode") {
       console.debug("latency estimation mode in worklet:", msg.enabled);
       this.latency_measurement_mode = msg.enabled;
@@ -601,6 +603,10 @@ class Player extends AudioWorkletProcessor {
       }
       return;
     } else if (msg.type == "ignore_input") {
+      if (this.play_buffer && this.play_buffer.read_clock) {
+        // This violates an invariant, and will cause an assertion failure elsewhere later if it happens, so blow up now instead.
+        throw new Error("Not allowed to start ignoring input after the clock has already started!");
+      }
       this.ignore_input = msg.enabled;
       return;
     } else if (msg.type == "volume_estimation_mode") {
@@ -708,7 +714,7 @@ class Player extends AudioWorkletProcessor {
         });
 
         for (var i = 0; i < input.length; i++) {
-          input[i] *= input_gain;
+          input[i] *= this.input_gain;
         }
 
         mic_chunk = new AudioChunk({
@@ -816,6 +822,7 @@ class Player extends AudioWorkletProcessor {
       } else if (this.volume_measurement_mode) {
         var calibration_result = this.volume_calibrator.process_volume_measurement(input);
         if (calibration_result !== null) {
+          this.input_gain = calibration_result.input_gain;
           this.port.postMessage(calibration_result);
         }
         output = new Float32Array(output.length);

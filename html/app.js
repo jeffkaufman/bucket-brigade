@@ -519,6 +519,14 @@ export class BucketBrigadeContext extends EventTarget {
     });
   }
 
+  send_input_gain(input_gain) {
+    console.info("Sending input gain:", input_gain);
+    this.playerNode.port.postMessage({
+      type: "input_gain",
+      input_gain,
+    });
+  }
+
   samples_to_worklet(chunk) {
     var message = {
       type: "samples_in",
@@ -1257,8 +1265,6 @@ export class VolumeCalibrator extends EventTarget {
           volume: human_readable_volume,
         }
       }))
-          window.reportedVolume.innerText =
-        Math.round(100*human_readable_volume)/100 + "dB";
       return;
     } else if (msg.type == "input_gain") {
       this.dispatchEvent(new CustomEvent("volumeCalibrated", {
