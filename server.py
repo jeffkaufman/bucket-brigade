@@ -581,7 +581,7 @@ def fix_volume(data, backing_data, n_people):
 
 def get_telemetry():
     clients = {}
-    for user in active_users():
+    for user in users.values():
         c = {}
         raw = copy.deepcopy(user.__dict__)
         del raw["list_keys"]  # redundant
