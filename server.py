@@ -96,9 +96,12 @@ DELAY_INTERVAL = 3  # 3s
 # How many links to use for the chain of users before starting to double up.
 LAYERING_DEPTH = 5
 
-# If we have not heard from a user in N seconds, assume they are no longer
-# active.
-USER_LIFETIME_SAMPLES = SAMPLE_RATE * 5
+# If we have not heard from a user in N seconds, forget all about them.
+USER_LIFETIME_SAMPLES = SAMPLE_RATE * 60 * 60  # 1hr
+
+# If we have not heard from a user in N seconds, don't consider them a
+# current user.
+USER_INACTIVE_SAMPLES = SAMPLE_RATE * 5  # 5s
 
 # Force rounding to multiple of FRAME_SIZE
 QUEUE_LENGTH = (QUEUE_SECONDS * SAMPLE_RATE // FRAME_SIZE * FRAME_SIZE)
@@ -335,8 +338,8 @@ def merge_into_dict(a, b):
 
 users: Dict[str, Any] = {} # userid -> User
 def sendall(key, value, exclude=None):
-    for userid, user in users.items():
-        if not exclude or userid not in exclude:
+    for user in active_users():
+        if not exclude or user.userid not in exclude:
             user.send(key, value)
 
 def wrap_get(queue, start, len_vals) -> Any:
@@ -414,12 +417,12 @@ def assign_delays(userid_lead) -> None:
     # have more users then positions, then double up.
     # TODO: perhaps we should prefer to double up from the end?
     state.max_position = initial_position + DELAY_INTERVAL*2
-    for i, (_, userid) in enumerate(sorted(
-            [(random.random(), userid)
-             for userid in users
-             if userid != userid_lead])):
+    for i, (_, user) in enumerate(sorted(
+            [(random.random(), user)
+             for user in active_users()
+             if user.userid != userid_lead])):
         position = positions[i % len(positions)]
-        users[userid].send("delay_seconds", position)
+        user.send("delay_seconds", position)
         state.max_position = max(position, state.max_position)
 
 def update_users(userid, username, server_clock, client_read_clock) -> None:
@@ -447,7 +450,7 @@ def clean_users(server_clock) -> None:
     # If we have ever seen a server-to-server request, we never reset state,
     #   because the Ritual Engine server may need to perform operations when no
     #   users are present.
-    if not users and not state.server_controlled:
+    if not active_users() and not state.server_controlled:
         state.reset()
 
 def setup_monitoring(monitoring_userid, monitored_userid) -> None:
@@ -465,16 +468,23 @@ def setup_monitoring(monitoring_userid, monitored_userid) -> None:
     users[monitoring_userid].send("delay_seconds", round(
         users[monitored_userid].delay_samples / SAMPLE_RATE) + DELAY_INTERVAL)
 
+def active_users():
+    server_clock = calculate_server_clock()
+    return [
+        user for user in users.values()
+        if server_clock - user.last_heard_server_clock < USER_INACTIVE_SAMPLES]
+
 def user_summary(requested_user_summary) -> List[Any]:
     summary = []
     if not requested_user_summary:
         return summary
-    for userid, user in users.items():
+
+    for user in active_users():
         summary.append((
             round(user.delay_samples / SAMPLE_RATE),
             user.name,
             user.mic_volume,
-            userid,
+            user.userid,
             user.rms_volume))
     summary.sort()
     return summary
@@ -571,7 +581,7 @@ def fix_volume(data, backing_data, n_people):
 
 def get_telemetry():
     clients = {}
-    for userid, user in users.items():
+    for user in users.values():
         c = {}
         raw = copy.deepcopy(user.__dict__)
         del raw["list_keys"]  # redundant
@@ -583,7 +593,7 @@ def get_telemetry():
             pass
 
         c["raw"] = raw
-        clients[userid] = c
+        clients[user.userid] = c
 
     now = time.time()
     result = {
@@ -595,7 +605,7 @@ def get_telemetry():
             "server_branch": SERVER_BRANCH,
             "server_clock": calculate_server_clock(),
             "server_sample_rate": SAMPLE_RATE,
-            "n_connected_users": len(users),
+            "n_connected_users": len(active_users()),
             "queue_size": QUEUE_LENGTH / FRAME_SIZE, # in 128-sample frames
             "events": get_events_to_send(),
             "state": copy.deepcopy(state.__dict__),  # XXX: refine this / dedupe
@@ -719,8 +729,8 @@ def handle_special(query_params, server_clock, user=None, client_read_clock=None
         insert_event(ev["evid"], ev["clock"])
 
     disableAutoGain = query_params.get("disableAutoGain", None)
-    if disableAutoGain: 
-        state.disable_auto_gain = disableAutoGain == "1" 
+    if disableAutoGain:
+        state.disable_auto_gain = disableAutoGain == "1"
 
     # If we are running under Ritual Engine, disable functionality that is  not
     #   required in that setting, and would be disruptive if triggered by
@@ -846,7 +856,7 @@ def handle_post(in_data, query_string, print_status, client_address=None) -> Tup
             "server_clock": server_clock,
             "server_sample_rate": SAMPLE_RATE,
             "last_request_clock": state.last_request_clock,
-            "n_connected_users": len(users),
+            "n_connected_users": len(active_users()),
             "queue_size": QUEUE_LENGTH / FRAME_SIZE, # in 128-sample frames
             "events": get_events_to_send(),
             "leader": state.leader,
@@ -1012,7 +1022,7 @@ def handle_post(in_data, query_string, print_status, client_address=None) -> Tup
         "client_read_clock": client_read_clock,
         "client_write_clock": client_write_clock,
         "n_samples": n_samples,
-        "n_connected_users": len(users),
+        "n_connected_users": len(active_users()),
         "queue_size": QUEUE_LENGTH / FRAME_SIZE, # in 128-sample frames
         "events": get_events_to_send(),
         "leader": state.leader,
