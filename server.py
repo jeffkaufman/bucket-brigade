@@ -720,7 +720,7 @@ def handle_special(query_params, server_clock, user=None, client_read_clock=None
 
     disableAutoGain = query_params.get("disableAutoGain", None)
     if disableAutoGain: 
-        state.disableAutoGain = disableAutoGain == "1" 
+        state.disable_auto_gain = disableAutoGain == "1" 
 
     # If we are running under Ritual Engine, disable functionality that is  not
     #   required in that setting, and would be disruptive if triggered by
