@@ -279,7 +279,9 @@ function persist_checkbox(checkboxId) {
 persist("userName");
 persist_checkbox("disableTutorial");
 persist_checkbox("disableLatencyMeasurement");
-persist_checkbox("enableMixingConsole");
+persist_checkbox("enableMixingConsole"); 
+//don't persist "disable auto gain" because it's an experimental feature
+
 // Persisting select boxes is harder, so we do it manually for inSelect.
 
 function setMainAppVisibility() {
@@ -801,11 +803,18 @@ function click_volume_change() {
   }
 }
 
+function disable_auto_gain_change() {
+  if (singer_client) {
+    singer_client.x_send_metadata("disableAutoGain", window.disableAutoGain.checked? 1: 0);
+  }
+}
+
 startButton.addEventListener("click", start_stop);
 window.micToggleButton.addEventListener("click", toggle_mic);
 window.speakerToggleButton.addEventListener("click", toggle_speaker);
 clickVolumeSlider.addEventListener("change", click_volume_change);
 audioOffset.addEventListener("change", audio_offset_change);
+window.disableAutoGain.addEventListener("change", disable_auto_gain_change);
 
 window.startVolumeCalibration.addEventListener("click", () => {
   window.startVolumeCalibration.disabled = true;
