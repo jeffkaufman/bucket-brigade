@@ -75,6 +75,8 @@ class State():
 
         self.last_status_ts = 0.0
 
+        self.disable_auto_gain = False
+
         if recorder:
             recorder.reset()
 
@@ -561,7 +563,8 @@ def fix_volume(data, backing_data, n_people):
     # Compare:
     #   https://www.wolframalpha.com/input/?i=graph+%281%29+%2F+%28x%29+from+1+to+10
     #   https://www.wolframalpha.com/input/?i=graph+%281%2B3%29+%2F+%28x%2B3%29+from+1+to+10
-    data *= ((1 + N_PHANTOM_PEOPLE) / (n_people + N_PHANTOM_PEOPLE)) ** 0.5
+    if not state.disable_auto_gain:
+        data *= ((1 + N_PHANTOM_PEOPLE) / (n_people + N_PHANTOM_PEOPLE)) ** 0.5
     data += (backing_data * (state.backing_volume * (1 if state.metronome_on else 0.2)))
     data *= state.global_volume
     return data
@@ -714,6 +717,10 @@ def handle_special(query_params, server_clock, user=None, client_read_clock=None
 
     for ev in new_events:
         insert_event(ev["evid"], ev["clock"])
+
+    disableAutoGain = query_params.get("disableAutoGain", None)
+    if disableAutoGain: 
+        state.disableAutoGain = disableAutoGain == "1" 
 
     # If we are running under Ritual Engine, disable functionality that is  not
     #   required in that setting, and would be disruptive if triggered by
