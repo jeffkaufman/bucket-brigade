@@ -873,6 +873,9 @@ export class SingerClient extends EventTarget {
   }
 
   send_telemetry(key, value, append) {
+    // We're disabling this for now.
+    return;
+
     if (this.connection && this.hasConnectivity) {
       this.connection.send_telemetry(key, value, append);
     } else {
