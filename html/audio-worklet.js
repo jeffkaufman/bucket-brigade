@@ -577,7 +577,7 @@ class Player extends AudioWorkletProcessor {
       this.loopback_mode = msg.loopback_mode;
 
       // This is _extra_ slack on top of the size of the server request.
-      this.client_slack = .250;  // XXX 250 ms?? // 750ms
+      this.client_slack = .500;  // 500 ms?
 
       // 15 seconds of total buffer, `this.client_slack` seconds of leadin
       this.play_buffer = new ClockedRingBuffer(15, this.client_slack, this.clock_reference, this.port);
@@ -837,10 +837,10 @@ class Player extends AudioWorkletProcessor {
         }
         this.process_normal(input, output);
         // Hack: If we've fallen behind, pretend we were called some extra times to skip a bit of audio until we catch up. This will audibly glitch (but there is an extremely high likelihood that we actually just did anyway, to get here.)
-        if (this.dropped_calls > 20 /* arbitrary */) {
+        if (this.dropped_calls > 125 /* arbitrary */) {
           // Don't do too many at once, because sometimes lag can be temporary, and we don't want to overshoot too much.
-          // Do up to 10, but no more than required to get us down to 15.
-          var calls_to_make_up = Math.min(this.dropped_calls - 15, 10);
+          // Do up to 5, but no more than required to get us down to 100.
+          var calls_to_make_up = Math.min(this.dropped_calls - 100, 5);
           console.warn("Making up for lost time by throwing away some audio: calls_to_make_up =", calls_to_make_up, "total dropped calls =", this.dropped_calls);
           while (calls_to_make_up > 0) {
             calls_to_make_up -= 1;
@@ -848,10 +848,13 @@ class Player extends AudioWorkletProcessor {
             this.dropped_calls -= 1;
             this.process_normal(input, output);
           }
-          this.warned_overcomp = false;
+          this.warned_overcomp = 0;
+          this.port.postMessage({
+            type: "audio_lag",
+          });
         }
-        if (this.dropped_calls < 0 && !this.warned_overcomp) {
-          this.warned_overcomp = true;
+        if (this.dropped_calls < this.warned_overcomp - 10) {
+          this.warned_overcomp = this.dropped_calls;
           console.warn("Whoops, we overcompensated for call drops, we're now ahead by:", -this.dropped_calls);
         }
       }

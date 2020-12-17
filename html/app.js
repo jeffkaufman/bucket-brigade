@@ -544,14 +544,6 @@ export class BucketBrigadeContext extends EventTarget {
     if (msg.type === "exception") {
       throw msg.exception;
     }
-    if (msg.type === "underflow") {
-
-      //window.lostConnectivity.style.display = "block";
-      //await restart();
-      // XXX: probably need to deal with this better, auto-restarting stuff
-      throw new Error("Underflow in SingerClient handle_message");
-      /* XXX: don't worry about this stuff for now */
-    }
     this.dispatchEvent(new CustomEvent("workletMessage_", {
       detail: {
         msg
@@ -899,6 +891,9 @@ export class SingerClient extends EventTarget {
         // console.warn("got clock "+msg.clock+" and event_data is now "+ send_metadata.event_data);
       }
       this.cur_clock_cbs = [];
+      return;
+    } else if (msg.type == "audio_lag" || msg.type === "underflow") {
+      this.dispatchEvent(new Event("audioLag"));
       return;
     } else if (msg.type != "samples_out") {
       this.close();
