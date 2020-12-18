@@ -783,6 +783,10 @@ def handle_post(in_data, query_string, print_status, client_address=None) -> Tup
     query_params = clean_query_params(raw_params)
 
     userid = query_params.get("userid", None)
+    if userid is not None:
+        if int(userid) < 0 or int(userid) > 0xffff_ffff_ffff_ffff:
+            raise ValueError("Userid must be a uint64")
+
     server_clock = calculate_server_clock()
     requested_user_summary = query_params.get("user_summary", None)
 
