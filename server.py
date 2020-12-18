@@ -423,7 +423,8 @@ def assign_delays(userid_lead) -> None:
     for i, (_, user) in enumerate(sorted(
             [(random.random(), user)
              for user in active_users()
-             if user.userid != userid_lead])):
+             if user.userid != userid_lead and
+                user not in imaginary_users])):
         position = positions[i % len(positions)]
         user.send("delay_seconds", position)
         state.max_position = max(position, state.max_position)
