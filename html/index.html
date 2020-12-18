@@ -3,21 +3,6 @@
 <meta content="text/html;charset=utf-8" http-equiv="Content-Type">
 <meta content="utf-8" http-equiv="encoding">
 <title>"Bucket Brigade" Audio Demo</title>
-<script src="https://js.sentry-cdn.com/d88678349f5d4e20b707882f78f2f78e.min.js" crossorigin="anonymous"></script>
-<script>
-  Sentry.onLoad(() => {
-    Sentry.init({
-      sendDefaultPii: true,
-      autoSessionTracking: true,
-      beforeSend(event) {
-        if (event.exception) {
-          Sentry.showReportDialog({eventId: event.event_id});
-        }
-        return event;
-      },
-    });
-  });
-</script>
 <style>
 body {
   max-width: 40em;
