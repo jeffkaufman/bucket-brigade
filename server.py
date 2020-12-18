@@ -23,12 +23,12 @@ from typing import Any, Dict, List, Tuple, Iterable
 logging.basicConfig(filename='server.log',level=logging.DEBUG)
 
 # big-endian
-# 16   userid: 16 bytes of utf8, '\0' padded
+#  8   userid: uint64
 # 32   name: 32 bytes of utf8, '\0' padded
 #  4   mic_volume: float32,
 #  4   rms_volume: float32
 #  2   delay: uint16
-BINARY_USER_CONFIG_FORMAT = struct.Struct(">16s32sffH")
+BINARY_USER_CONFIG_FORMAT = struct.Struct(">Q32sffH")
 
 FRAME_SIZE = 128
 
@@ -501,15 +501,13 @@ def binary_user_summary(summary):
        BINARY_USER_CONFIG_FORMAT
 
     Each user is 60 bytes, so 1000 users is ~50k.  We could be more
-    compact by requiring the user ID to be numeric and then coding it
-    as, say, uint32 (4 bytes).  We could also only send names if they
-    have changed.
+    compact by only sending names if they have changed.
     """
     binary_summaries = [struct.pack(">H", len(summary))]
     for delay, name, mic_volume, userid, rms_volume in summary:
         binary_summaries.append(
             BINARY_USER_CONFIG_FORMAT.pack(
-                userid.encode('utf8'),
+                int(userid),
                 name.encode('utf8'),
                 mic_volume,
                 rms_volume,
