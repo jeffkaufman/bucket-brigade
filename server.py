@@ -32,6 +32,8 @@ BINARY_USER_CONFIG_FORMAT = struct.Struct(">16s32sffH")
 
 FRAME_SIZE = 128
 
+N_IMAGINARY_USERS = 0
+
 try:
     # Grab these on startup, when they are very very likely to be the actual
     #   running version.
@@ -337,6 +339,7 @@ def merge_into_dict(a, b):
             a[k] = b[k]
 
 users: Dict[str, Any] = {} # userid -> User
+imaginary_users = []
 def sendall(key, value, exclude=None):
     for user in active_users():
         if not exclude or user.userid not in exclude:
@@ -420,12 +423,26 @@ def assign_delays(userid_lead) -> None:
     for i, (_, user) in enumerate(sorted(
             [(random.random(), user)
              for user in active_users()
-             if user.userid != userid_lead])):
+             if user.userid != userid_lead and
+                user not in imaginary_users])):
         position = positions[i % len(positions)]
         user.send("delay_seconds", position)
         state.max_position = max(position, state.max_position)
 
 def update_users(userid, username, server_clock, client_read_clock) -> None:
+    while len(imaginary_users) < N_IMAGINARY_USERS:
+        imaginary_user = User(
+            str(random.randint(0,2**32)),
+            "imaginary_%s" % (len(imaginary_users)),
+            server_clock,
+            SAMPLE_RATE * 7)
+        imaginary_users.append(imaginary_user)
+        users[imaginary_user.userid] = imaginary_user
+
+    for user in imaginary_users:
+        user.last_heard_server_clock = server_clock
+        user.rms_volume = random.random() / 10
+
     # Delete expired users BEFORE adding us to the list, so that our session
     #   will correctly reset if we are the next customer after we've been gone
     #   for awhile.
