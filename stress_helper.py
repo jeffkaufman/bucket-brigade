@@ -57,27 +57,29 @@ def stress(n_rounds, users_per_client, worker_name, url, should_sleep):
   full_start = int(time.time())
   clock_start = int((time.time() - OFFSET) * server.SAMPLE_RATE)
   for i in range(n_rounds):
-    start = time.time()
+    for u in range(users_per_client):
+      start = time.time()
 
-    ts = clock_start + PACKET_SAMPLES * (i//users_per_client)
-    resp = s.post(
-      url='%s?read_clock=%s&write_clock=%s&userid=%s%s&username=%s'
-        % (url, ts, ts - (READ_WRITE_OFFSET * server.SAMPLE_RATE), userid, i%users_per_client, worker_name),
-      data=data,
-      headers={
-          'Content-Type': 'application/octet-stream',
-          'Accept-Encoding': 'gzip',
-      })
-    if resp.status_code != 200:
-      print("got: %s (%s)" % (resp.status_code, resp.content))
+      ts = clock_start + PACKET_SAMPLES * i
+      thisurl='%s?read_clock=%s&write_clock=%s&userid=%s&username=%s' % (url, ts, ts - (READ_WRITE_OFFSET * server.SAMPLE_RATE), userid + u, worker_name + "_" + str(u))
+      #print(thisurl)
+      resp = s.post(
+        url=thisurl,
+        data=data,
+        headers={
+            'Content-Type': 'application/octet-stream',
+            'Accept-Encoding': 'gzip',
+        })
+      if resp.status_code != 200:
+        print("got: %s (%s)" % (resp.status_code, resp.content))
 
-    end = time.time()
+      end = time.time()
 
-    duration = end-start
-    timing.append(duration*1000)
+      duration = end-start
+      timing.append(duration*1000)
 
-    full_duration = end - full_start
-    expected_full_elapsed = (i//users_per_client) * PACKET_INTERVAL
+      full_duration = end - full_start
+      expected_full_elapsed = i * PACKET_INTERVAL
 
     if should_sleep:
       if full_duration < expected_full_elapsed:
