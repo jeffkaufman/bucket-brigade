@@ -583,6 +583,10 @@ class Player extends AudioWorkletProcessor {
       this.play_buffer = new ClockedRingBuffer(15, this.client_slack, this.clock_reference, this.port);
 
       this.ready = true;
+      this.port.postMessage({
+        type: "ready",
+        cookie: msg.cookie,
+      });
       return;
     } else if (msg.type == "stop") {
       this.ready = false;

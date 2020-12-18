@@ -401,6 +401,8 @@ export class BucketBrigadeContext extends EventTarget {
     super();
 
     this.audioCtx = null;
+    this.worklet_is_ready = null;
+    this.worklet_cookie = null;
     this.micNode = null;
     this.playerNode = null;
     this.encoder = null;
@@ -475,6 +477,8 @@ export class BucketBrigadeContext extends EventTarget {
     }
     this.removeEventListener("workletMessage_", this.active_handler);
     this.active_handler = null;
+    this.worklet_is_ready = false;  // This will immediately stop processing of inbound messages from the worklet (which shouldn't be required, but is conservative.)
+    this.worklet_cookie = null;
     this.playerNode.port.postMessage({
       type: "stop"
     });
@@ -488,11 +492,14 @@ export class BucketBrigadeContext extends EventTarget {
 
     this.addEventListener("workletMessage_", handler);
     this.active_handler = handler
+    this.worklet_is_ready = false;
+    this.worklet_cookie = Math.round(Math.random() * 2**32);
 
     var audio_params = {
       type: "audio_params",
       synthetic_source: synthetic_audio_source,
       click_interval: synthetic_click_interval,
+      cookie: this.worklet_cookie,
       loopback_mode,
     }
     // This will reset the audio worklet, flush its buffer, and start it up again.
@@ -543,6 +550,18 @@ export class BucketBrigadeContext extends EventTarget {
     var msg = event.data;
     if (msg.type === "exception") {
       throw msg.exception;
+    }
+    if (this.worklet_is_ready === null) {
+        throw new Error("Worklet has not been started in SingerClient handle_message?");
+    }
+    if (msg.type === "ready" && msg.cookie === this.worklet_cookie) {
+        this.worklet_is_ready = true;
+        return;
+    }
+    if (this.worklet_is_ready === false) {
+        // This will happen a lot
+        // console.debug("Worklet is not ready, dropping messsage.");
+        return;
     }
     this.dispatchEvent(new CustomEvent("workletMessage_", {
       detail: {
