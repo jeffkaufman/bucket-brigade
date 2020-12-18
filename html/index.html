@@ -112,6 +112,18 @@ body {
 
 #backingTrack { display: none; }
 
+#crash {
+  display: none;
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background-color: white;
+}
+#crashBug {
+  display: none;
+}
 #nameSelector {
   display: none;
 }
@@ -565,6 +577,15 @@ Beats Per Repeat (for rounds): <input type=text id=bpr></input>
 <br>
 <br>
 
+</div>
+
+<div id="crash">
+  <h1 id="crashMessage">This app has crashed. We're really sorry :-(</h1>
+  <div id="crashBug">
+    <h2>Please <a href="https://github.com/gwillen/solstice-audio-test/issues/new">file a bug</a> with the following information; it will help us fix it.</h2>
+    <textarea id="crashTrace" rows="50" cols="160" readonly></textarea>
+    <h2>Then refresh the page and try again.</h2>
+  </div>
 </div>
 
 <script type="module" src="./demo.js"></script>
