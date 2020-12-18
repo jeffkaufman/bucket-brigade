@@ -552,6 +552,15 @@ export class BucketBrigadeContext extends EventTarget {
     return;
   }
 
+  silentMediaStream() {
+    let ctx = this.audioCtx;
+    let oscillator = ctx.createOscillator();
+    let dst = oscillator.connect(ctx.createMediaStreamDestination());
+    oscillator.start();
+    dst.stream.getAudioTracks()[0].enabled = false;
+    return dst.stream;
+  }
+
   async start_bucket() {
     //switch_app_state(APP_STARTING);
 
@@ -578,7 +587,11 @@ export class BucketBrigadeContext extends EventTarget {
     this.sample_batch_size = this.ms_to_batch_size(INITIAL_MS_PER_BATCH);
     //window.msBatchSize.value = INITIAL_MS_PER_BATCH;
 
-    console.debug("micStream is", this.micStream);
+    console.log("micStream is", this.micStream);
+    if (this.micStream === null) {
+      this.micStream = this.silentMediaStream();
+      console.log("No mic, using silence, micstream is now:", this.micStream);
+    }
     try {
       this.micNode = new MediaStreamAudioSourceNode(this.audioCtx, { mediaStream: this.micStream });
     }
