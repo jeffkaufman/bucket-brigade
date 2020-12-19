@@ -207,7 +207,6 @@ class ClockedRingBuffer {
 
     this.port = port;
 
-    this.read_callbacks = {};
     // For debugging, mostly
     this.buffered_data = 0;
     this.last_write_clock = null;
@@ -297,11 +296,6 @@ class ClockedRingBuffer {
     this.buf[this.real_offset(this.read_clock)] = NaN;  // Mostly for debugging
     this.read_clock++;
     this.buffered_data--;
-    if (this.read_clock in this.read_callbacks) {
-      console.info("Firing callback at ", this.read_clock);
-      this.read_callbacks[this.read_clock]();
-      delete this.read_callbacks[this.read_clock];
-    }
     return val;
   }
 
@@ -543,6 +537,7 @@ class Player extends AudioWorkletProcessor {
       this.local_latency = 150 * sampleRate / 1000;  // rough initial guess (150ms)
       this.click_volume = 0;
       this.input_gain = 1.0;
+      this.time_callbacks = [];
     })
   }
 
@@ -558,6 +553,21 @@ class Player extends AudioWorkletProcessor {
         exception: {name, message, stack, unpreventable},
       });
     }
+  }
+
+  insert_time_callback(time, cb) {
+    // Events are normally given to us in order, so start at the end
+    for (var i = this.time_callbacks.length - 1; i >= 0; --i) {
+      if (time > this.time_callbacks[i].time) {
+        this.time_callbacks.splice(i + 1, 0, { time, cb });
+        break;
+      }
+    }
+    if (i == -1) {
+      this.time_callbacks.splice(0, 0, { time, cb });
+    }
+
+    console.log("inserted", time, cb, "time_callbacks is now", this.time_callbacks);
   }
 
   handle_message(event) {
@@ -639,13 +649,10 @@ class Player extends AudioWorkletProcessor {
     } else if (msg.type == "set_alarm") {
       console.info("audio worklet setting alarm", msg);
       let cb = ()=>{ this.port.postMessage({type:"alarm",time:msg.time }) };
-      if (msg.time > this.play_buffer.read_clock) {
-        console.info("alarm is in future");
-        this.play_buffer.read_callbacks[msg.time] = cb;
-      } else {
-        console.info("alarm is in past");
-        cb();
-      }
+      this.insert_time_callback(msg.time, cb);
+      return;
+    } else if (msg.type == "clear_alarms") {
+      this.time_callbacks = [];
       return;
     } else if (!this.ready) {
       console.error("received message before ready:", msg);
@@ -704,6 +711,17 @@ class Player extends AudioWorkletProcessor {
         //   whatever we're about to send to the speaker, and pretend we
         //   heard it on the mic. (This has zero latency.)
         input.set(play_chunk.data());
+      }
+
+      if (!(play_chunk instanceof PlaceholderChunk)) {
+        while ((this.time_callbacks.length > 0) &&
+               (play_chunk.end > this.time_callbacks[0].time)) {
+          console.log("firing time_callbacks[0]:",
+                      this.time_callbacks[0],
+                      "time_callbacks is now",
+                      JSON.stringify(this.time_callbacks));
+          this.time_callbacks.shift().cb();
+        }
       }
 
       var mic_chunk = null;

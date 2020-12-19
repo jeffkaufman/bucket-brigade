@@ -776,6 +776,11 @@ export class SingerClient extends EventTarget {
       }));
     })
 
+    // New SingerClient == new song; clear out any stale marks from the previous song.
+    this.ctx.playerNode.port.postMessage({  // XXX invasive coupling
+        type: "clear_alarms",
+    });
+
     this.connect_();
 
     this.speakerMuted = speakerMuted;
