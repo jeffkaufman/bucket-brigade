@@ -38,32 +38,31 @@ export class MicEnumerator {
   async force_permission_prompt() {
     // In order to enumerate devices, we must first force a permission prompt by opening a device and then closing it again.
     // See: https://stackoverflow.com/questions/60297972/navigator-mediadevices-enumeratedevices-returns-empty-labels
-    var stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    close_stream(stream);
+    try {
+      var stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      close_stream(stream);
+      return;
+    } catch (e) {
+      // Do nothing. Our only goal here is to prompt the user to allow their mic if they have one. Any failure is irrelevant to us.
+      return;
+    }
   }
 
   async wait_for_mic_permissions() {
-    var perm_status = await navigator.permissions.query({name: "microphone"}).catch(() => null);
-    if (!perm_status) {
-      this.force_permission_prompt();
-      return;
-    }
+    // First, check if we already have permission, without needing to do anything.
+    var perm_status = await navigator.permissions.query({name: "microphone"}).catch(() => ({}));
     if (perm_status.state == "granted" || perm_status.state == "denied") {
+      // Denied means we will fail, but also there's nothing more we can do about it.
       return;
     }
-    this.force_permission_prompt();
-    return new Promise((resolve, reject) => {
-      perm_status.onchange = (e) => {
-        if (e.target.state == "granted" || e.target.state == "denied") {
-          resolve();
-        }
-      }
-    });
+    // This can't fail, but eat errors just to be sure, because we don't care.
+    return this.force_permission_prompt().catch(() => {});
   }
 
   constructor() {
-    // Start the process but don't actually await since this is a constructor.
-    this.wait_for_mic_permissions();
+    // Start the process, but don't actually await since this is a constructor.
+    // This can't fail, but eat errors just to be sure.
+    this.wait_for_mic_permissions().catch(() => {});
   }
 
   async mics() {
@@ -72,7 +71,7 @@ export class MicEnumerator {
       var devices = await navigator.mediaDevices.enumerateDevices();
     } catch (e) {
       console.error("Failed to get mics:", e);
-      return undefined;
+      return [];  // empty list of devices
     }
     return devices.filter(d => d.kind === 'audioinput');
   }
