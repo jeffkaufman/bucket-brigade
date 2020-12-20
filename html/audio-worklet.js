@@ -537,6 +537,9 @@ class Player extends AudioWorkletProcessor {
       this.local_latency = 150 * sampleRate / 1000;  // rough initial guess (150ms)
       this.click_volume = 0;
       this.input_gain = 1.0;
+
+      // List of  { time, cb }, sorted in time order so we can efficiently
+      //   check for the next one to fire. See insert_time_callback.
       this.time_callbacks = [];
     })
   }
@@ -556,7 +559,8 @@ class Player extends AudioWorkletProcessor {
   }
 
   insert_time_callback(time, cb) {
-    // Events are normally given to us in order, so start at the end
+    // We need to maintain the sorted order of `this.time_callbacks`.
+    // Events are normally given to us in order, so we start at the end.
     for (var i = this.time_callbacks.length - 1; i >= 0; --i) {
       if (time > this.time_callbacks[i].time) {
         this.time_callbacks.splice(i + 1, 0, { time, cb });
