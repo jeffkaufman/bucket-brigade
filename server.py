@@ -34,6 +34,8 @@ FRAME_SIZE = 128
 
 N_IMAGINARY_USERS = 0
 
+SUPPORT_SERVER_CONTROL = False
+
 try:
     # Grab these on startup, when they are very very likely to be the actual
     #   running version.
@@ -857,7 +859,7 @@ def handle_post(in_data, query_string, print_status, client_address=None) -> Tup
     state.last_request_clock = server_clock
 
     # Handle server-to-server requests:
-    if userid is None:
+    if userid is None and SUPPORT_SERVER_CONTROL:
         # If we ever get a server_to_server request, we switch off certain
         #   automatic behavior that's troublesome in the Ritual Engine setting.
         state.server_controlled = True
