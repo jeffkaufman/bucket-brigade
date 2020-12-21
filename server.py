@@ -96,7 +96,7 @@ STATUS_PRINT_INTERVAL_S = 10
 DELAY_INTERVAL = 3  # 3s
 
 # How many links to use for the chain of users before starting to double up.
-LAYERING_DEPTH = 5
+LAYERING_DEPTH = 7
 
 # If we have not heard from a user in N seconds, forget all about them.
 USER_LIFETIME_SAMPLES = SAMPLE_RATE * 60 * 60  # 1hr
