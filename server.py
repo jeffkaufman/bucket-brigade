@@ -95,10 +95,10 @@ STATUS_PRINT_INTERVAL_S = 10
 # Leave this much space between users. Ideally this would be very
 # short, but it needs to be long enough to cover "client total time
 # consumed" or else people won't all hear each other.
-DELAY_INTERVAL = 3  # 3s
+DELAY_INTERVAL = 3  # 3s; keep in sync with demo.js:DELAY_INTERVAL
 
 # How many links to use for the chain of users before starting to double up.
-LAYERING_DEPTH = 7
+LAYERING_DEPTH = 7  # keep in sync with demo.js:N_BUCKETS
 
 # If we have not heard from a user in N seconds, forget all about them.
 USER_LIFETIME_SAMPLES = SAMPLE_RATE * 60 * 60  # 1hr

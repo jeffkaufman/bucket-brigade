@@ -179,7 +179,25 @@ input.editing {
 input.edited {
   background-color: yellow;
 }
-
+#buckets {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+}
+.bucket {
+  display: inline-block;
+  border: 1px solid black;
+  border-radius: 0.25em;
+  margin: 0.5em;
+  padding: 0.5em;
+  width: 10em;
+  overflow: hidden;
+}
+#roundsSettings {
+  border: 1px solid black;
+  border-radius: 0.25em;
+  padding: 0.5em;
+}
 </style>
 
 <link rel=stylesheet href=lyrics.css>
@@ -431,7 +449,7 @@ Song" button.
 
 </div>
 
-<h4>Chat</h4>
+<h2>Chat</h2>
 <div id=chatWindow>
   <div class=warning id=lostConnectivity>Lost connectivity to the server. Trying to reconnect&hellip;</div>
   <div id=chatDisplay></div>
@@ -443,23 +461,28 @@ Song" button.
 <button id=speakerToggleButton><img id=speakerToggleImg
    width=32 height=32 alt="turn off speaker" src="images/speaker-on.png"></button>
 
-<h4>People</h4>
+<h2>Buckets</h2>
 
-<table id=activeUsers></table>
+<div id=buckets>
+</div>
 
-<p>
-
-Everyone has a position, listed next to their name above.  Closer to
-the front and more people will be able to hear you, closer to the back
-and you will be able to hear more people.  Normally positions are
-assigned automatically, but if you don't like your assignment you can
-choose a new one. Enter a number between 6 and 115:
-<input type=text id=audioOffset value="115">
+Total users connected: <span id=total_users_connected>...</span>
 
 <p>
 
-<h4>Advanced Settings</h4>
-<h5>Best to leave these alone, since they do affect everyone</h5>
+
+<p>
+
+<h2>Advanced Settings</h2>
+
+Manual offset: <input type=text id=audioOffset value="115">
+
+<p>
+
+<div id=roundsSettings>
+
+<h3>Settings for Rounds</h3>
+<h4>Best to leave these alone, since they do affect everyone</h4>
 
 Beats per Minute: <input type=text id=bpm></input>
 <p>
@@ -468,6 +491,7 @@ Repeats (for rounds): <input type=text id=repeats></input>
 Beats Per Repeat (for rounds): <input type=text id=bpr></input>
 <p>
 <button id=roundsButtonsUpdate>update</button>
+</div>
 
 </div>
 

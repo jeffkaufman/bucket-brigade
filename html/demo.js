@@ -13,6 +13,9 @@ const APP_CALIBRATING_VOLUME = "calibrating_volume";
 const APP_STOPPING = "stopping";
 const APP_RESTARTING = "restarting";
 
+const N_BUCKETS = 7; // Keep in sync with server.py:LAYERING_DEPTH
+const DELAY_INTERVAL = 3; // keep in sync with server.py:DELAY_INTERVAL
+
 // Making these globals makes it easier to interrogate them in the Dev Tools console for debugging purposes.
 window.bucket_ctx = null;
 window.latency_calibrator = null;
@@ -67,6 +70,40 @@ function prettyTime(ms) {
   const d = Math.round(hr / 24);
   return d + "d";
 }
+
+function joinBucket(i) {
+  return () => {
+    window.buckets.children[i].children[1].disabled = true;
+    audioOffset.value = first_offset_s + DELAY_INTERVAL * i;
+    audio_offset_change();
+  }
+}
+
+const bucket_user_div = {};  // userid -> bucket user div
+const user_bucket_index = {};  // userid -> bucket index
+const bucket_divs = [];  // bucket index -> bucket div
+
+for (var i = 0; i < N_BUCKETS; i++) {
+  var bucket = document.createElement("div");
+  bucket.classList.add("bucket");
+
+  var bucketName = document.createElement("h4");
+  bucketName.appendChild(document.createTextNode(i+1))
+  bucket.appendChild(bucketName);
+
+  var joinButton = document.createElement("button");
+  joinButton.appendChild(document.createTextNode("join"));
+  joinButton.addEventListener("click", joinBucket(i));
+  bucket.appendChild(joinButton);
+
+  var bucketUsers = document.createElement("div");
+  bucketUsers.classList.add("bucketUsers");
+  bucket_divs.push(bucketUsers);
+  bucket.appendChild(bucketUsers);
+
+  window.buckets.appendChild(bucket);
+}
+
 
 function update_calendar() {
   fetch('https://www.googleapis.com/calendar/v3/calendars/gsc268k1lu78lbvfbhphdr0cs4@group.calendar.google.com/events?key=AIzaSyCDAG5mJmnmi9EaR5SujP70x8kLKOau4Is')
@@ -544,10 +581,6 @@ window.backingTrack.addEventListener("change", (e) => {
   }
 });
 
-let previous_user_summary_str = "";
-let previous_n_users = 0;
-let previous_mic_volume_inputs_str = "";
-
 // userid > consoleChannel div
 const consoleChannels = new Map();
 window.consoleChannels = consoleChannels;
@@ -606,6 +639,8 @@ function scalar_volume_to_percentage(rms_volume) {
   return percentage_volume;
 }
 
+let first_offset_s = DELAY_INTERVAL;
+
 function update_active_users(user_summary, server_sample_rate, imLeading, n_users) {
 
   if (imLeading && leadButtonState != "start-singing" &&
@@ -622,28 +657,24 @@ function update_active_users(user_summary, server_sample_rate, imLeading, n_user
     window.backingTrack.style.display = "none";
   }
 
-  if (user_summary.length == 0 || (
-        JSON.stringify(user_summary) == previous_user_summary_str &&
-      n_users == previous_n_users)) {
-    return;
-  }
-  previous_user_summary_str = JSON.stringify(user_summary);
-  previous_n_users = n_users;
-
-  // Delete previous users.
-  while (window.activeUsers.firstChild) {
-    window.activeUsers.removeChild(window.activeUsers.lastChild);
-  }
-
-  const tr = document.createElement('tr');
-  const td1 = document.createElement('td');
-  td1.colSpan = 2;
-  td1.textContent = "Total users connected: " + n_users;
-  tr.appendChild(td1);
-  window.activeUsers.appendChild(tr);
+  window.total_users_connected.innerText = n_users;
 
   const mic_volume_inputs = [];
   const userids = new Set();
+
+  if (user_summary.length > 0) {
+    // user_summary is sorted on the server
+    first_offset_s = user_summary[0][0];
+  }
+
+  function removeFromBucket(userid) {
+    bucket_divs[user_bucket_index[userid]].removeChild(
+      bucket_user_div[userid]);
+    delete user_bucket_index[userid];
+    delete bucket_user_div[userid];
+  }
+
+  const bucketedUserids = new Set();
   for (var i = 0; i < user_summary.length; i++) {
     const offset_s = user_summary[i][0];
     const name = user_summary[i][1];
@@ -651,23 +682,48 @@ function update_active_users(user_summary, server_sample_rate, imLeading, n_user
     const userid = user_summary[i][3];
     const rms_volume = user_summary[i][4];
 
+    let est_bucket = Math.round((offset_s - first_offset_s) / DELAY_INTERVAL);
+    if (est_bucket >= N_BUCKETS) {
+      est_bucket = N_BUCKETS - 1;
+    } else if (est_bucket < 0) {
+      throw new Error("this should never happen");
+    }
+
+    if (userid == myUserid) {
+      for (var j = 0 ; j < N_BUCKETS; j++) {
+        window.buckets.children[j].children[1].disabled = est_bucket === j;
+      }
+    }
+
     mic_volume_inputs.push([name, userid, mic_volume, rms_volume, offset_s]);
     userids.add(userid);
 
-    if (user_summary.length < 40) {
-      const tr = document.createElement('tr');
+    // Only bucket the first 40 users, for performance.
+    if (i < 40) {
+      bucketedUserids.add(userid);
 
-      const td1 = document.createElement('td');
-      td1.textContent = offset_s;
-      tr.appendChild(td1);
+      if (user_bucket_index[userid] != est_bucket) {
+        if (bucket_user_div[userid]) {
+          removeFromBucket(userid);
+        }
 
-      const td2 = document.createElement('td');
-      td2.textContent = name;
-      tr.appendChild(td2);
-
-      window.activeUsers.appendChild(tr);
+        user_bucket_index[userid] = est_bucket;
+        const bucket_div = document.createElement("div");
+        bucket_div.classList.add("bucketUser");
+        bucket_div.appendChild(document.createTextNode(name));
+        bucket_divs[est_bucket].appendChild(bucket_div);
+        bucket_user_div[userid] = bucket_div;
+      }
     }
   }
+
+  for (const userid in user_bucket_index) {
+    if (!bucketedUserids.has(userid)) {
+      removeFromBucket(userid);
+    }
+  }
+
+
   if (!window.enableMixingConsole.checked) {
     return;
   }
