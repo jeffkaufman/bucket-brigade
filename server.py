@@ -32,7 +32,7 @@ BINARY_USER_CONFIG_FORMAT = struct.Struct(">16s32sffH")
 
 FRAME_SIZE = 128
 
-N_IMAGINARY_USERS = 0
+N_IMAGINARY_USERS = 0  # for debugging user summary + mixing console performance
 
 SUPPORT_SERVER_CONTROL = False
 
@@ -64,9 +64,9 @@ class State():
         self.song_start_clock = None
         self.requested_track: Any = None
 
-        self.bpm = None
+        self.bpm = 0
         self.repeats = 0
-        self.bpr = None
+        self.bpr = 0
         self.leftover_beat_samples = 0
 
         self.leader = None
@@ -95,10 +95,10 @@ STATUS_PRINT_INTERVAL_S = 10
 # Leave this much space between users. Ideally this would be very
 # short, but it needs to be long enough to cover "client total time
 # consumed" or else people won't all hear each other.
-DELAY_INTERVAL = 3  # 3s
+DELAY_INTERVAL = 3  # 3s; keep in sync with demo.js:DELAY_INTERVAL
 
 # How many links to use for the chain of users before starting to double up.
-LAYERING_DEPTH = 7
+LAYERING_DEPTH = 7  # keep in sync with demo.js:N_BUCKETS
 
 # If we have not heard from a user in N seconds, forget all about them.
 USER_LIFETIME_SAMPLES = SAMPLE_RATE * 60 * 60  # 1hr
@@ -446,6 +446,10 @@ def update_users(userid, username, server_clock, client_read_clock) -> None:
     for user in imaginary_users:
         user.last_heard_server_clock = server_clock
         user.rms_volume = random.random() / 10
+        user.delay_samples = (
+            SAMPLE_RATE *
+            DELAY_INTERVAL *
+            random.randint(1,LAYERING_DEPTH))
 
     # Delete expired users BEFORE adding us to the list, so that our session
     #   will correctly reset if we are the next customer after we've been gone
@@ -546,7 +550,7 @@ def binary_user_summary(summary):
 def write_metronome(clear_index, clear_samples):
     metronome_samples = np.zeros(clear_samples, np.float32)
 
-    if state.bpm is not None:
+    if state.bpm:
         beat_samples = SAMPLE_RATE * 60 // state.bpm
 
         # We now want to mark a beat at positions matching
@@ -763,17 +767,17 @@ def handle_special(query_params, server_clock, user=None, client_read_clock=None
     if not state.server_controlled:
         bpm = query_params.get("bpm", None)
         if bpm:
-            state.bpm = bpm
+            state.bpm = int(bpm)
             sendall("bpm", state.bpm)
 
         repeats = query_params.get("repeats", None)
         if repeats:
-            state.repeats = repeats
+            state.repeats = int(repeats)
             sendall("repeats", state.repeats)
 
         bpr = query_params.get("bpr", None)
         if bpr:
-            state.bpr = bpr
+            state.bpr = int(bpr)
             sendall("bpr", state.bpr)
 
 # Do some format conversions and strip the unnecessary nesting layer that urllib
