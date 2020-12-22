@@ -94,6 +94,7 @@ for (var i = 0; i < N_BUCKETS; i++) {
   var joinButton = document.createElement("button");
   joinButton.appendChild(document.createTextNode("join"));
   joinButton.addEventListener("click", joinBucket(i));
+  joinButton.disabled = true;
   bucket.appendChild(joinButton);
 
   var bucketUsers = document.createElement("div");
@@ -674,6 +675,16 @@ function update_active_users(user_summary, server_sample_rate, imLeading, n_user
     delete bucket_user_div[userid];
   }
 
+  function estimateBucket(offset_s) {
+    let est_bucket = Math.round((offset_s - first_offset_s) / DELAY_INTERVAL);
+    if (est_bucket >= N_BUCKETS) {
+      est_bucket = N_BUCKETS - 1;
+    } else if (est_bucket < 0) {
+      throw new Error("this should never happen");
+    }
+    return est_bucket;
+  }
+
   const bucketedUserids = new Set();
   for (var i = 0; i < user_summary.length; i++) {
     const offset_s = user_summary[i][0];
@@ -682,16 +693,18 @@ function update_active_users(user_summary, server_sample_rate, imLeading, n_user
     const userid = user_summary[i][3];
     const rms_volume = user_summary[i][4];
 
-    let est_bucket = Math.round((offset_s - first_offset_s) / DELAY_INTERVAL);
-    if (est_bucket >= N_BUCKETS) {
-      est_bucket = N_BUCKETS - 1;
-    } else if (est_bucket < 0) {
-      throw new Error("this should never happen");
-    }
+    let est_bucket = estimateBucket(offset_s);
 
     if (userid == myUserid) {
+      const last_offset_s = user_summary[user_summary.length-1][0];
+
+      const no_song_being_led =
+            first_offset_s > 110 ||
+            last_offset_s - first_offset_s < DELAY_INTERVAL / 2;
+
       for (var j = 0 ; j < N_BUCKETS; j++) {
-        window.buckets.children[j].children[1].disabled = est_bucket === j;
+        window.buckets.children[j].children[1].disabled =
+          no_song_being_led || est_bucket === j;
       }
     }
 
