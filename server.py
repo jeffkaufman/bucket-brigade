@@ -444,6 +444,10 @@ def update_users(userid, username, server_clock, client_read_clock) -> None:
     for user in imaginary_users:
         user.last_heard_server_clock = server_clock
         user.rms_volume = random.random() / 10
+        user.delay_samples = (
+            SAMPLE_RATE *
+            DELAY_INTERVAL *
+            random.randint(1,LAYERING_DEPTH))
 
     # Delete expired users BEFORE adding us to the list, so that our session
     #   will correctly reset if we are the next customer after we've been gone
