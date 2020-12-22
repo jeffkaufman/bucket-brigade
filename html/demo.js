@@ -202,36 +202,32 @@ window.jumpToEnd.addEventListener("click", () => {
   audio_offset_change();
 });
 
-window.bpmUpdate.addEventListener("click", () => {
+window.bpm.addEventListener("change", () => {
   const newBpm = parseInt(window.bpm.value);
-  if (isNaN(newBpm) || newBpm < 1 || newBpm > 500) {
-    window.bpm.value = "invalid";
-    return;
-  }
-  if (singer_client) {
-    singer_client.x_send_metadata("bpm", newBpm);
+  if (isNaN(newBpm) || newBpm < 0 || newBpm > 500) {
+    window.bpm.value = last_server_bpm;
   }
 });
 
-window.repeatsUpdate.addEventListener("click", () => {
+window.repeats.addEventListener("change", () => {
   const newRepeats = parseInt(window.repeats.value);
   if (isNaN(newRepeats) || newRepeats < 0 || newRepeats > 20) {
-    window.repeats.value = "invalid";
-    return;
-  }
-  if (singer_client) {
-    singer_client.x_send_metadata("repeats", newRepeats);
+    window.repeats.value = last_server_repeats;
   }
 });
 
-window.bprUpdate.addEventListener("click", () => {
+window.bpr.addEventListener("change", () => {
   const newBpr = parseInt(window.bpr.value);
   if (isNaN(newBpr) || newBpr < 0 || newBpr > 500) {
-    window.bpr.value = "invalid";
-    return;
+    window.bpr.value = last_server_bpr;
   }
+});
+
+window.roundsButtonsUpdate.addEventListener("click", () => {
   if (singer_client) {
-    singer_client.x_send_metadata("bpr", newBpr);
+    singer_client.x_send_metadata("bpm", window.bpm.value);
+    singer_client.x_send_metadata("repeats", window.repeats.value);
+    singer_client.x_send_metadata("bpr", window.bpr.value);
   }
 });
 
@@ -304,7 +300,7 @@ function persist_checkbox(checkboxId) {
 persist("userName");
 persist_checkbox("disableTutorial");
 persist_checkbox("disableLatencyMeasurement");
-persist_checkbox("enableMixingConsole"); 
+persist_checkbox("enableMixingConsole");
 //don't persist "disable auto gain" because it's an experimental feature
 
 // Persisting select boxes is harder, so we do it manually for inSelect.
@@ -858,6 +854,10 @@ window.startVolumeCalibration.addEventListener("click", () => {
   });
 });
 
+var last_server_bpm = 0;
+var last_server_bpr = 0;
+var last_server_repeats = 0;
+
 async function start_singing() {
   var final_url = new URL(serverPath.value, document.location).href;
 
@@ -939,12 +939,15 @@ async function start_singing() {
 
     if (server_bpm != null) {
       window.bpm.value = server_bpm;
+      last_server_bpm = server_bpm;
     }
     if (server_repeats != null) {
       window.repeats.value = server_repeats;
+      last_server_repeats = server_repeats;
     }
     if (server_bpr != null) {
       window.bpr.value = server_bpr;
+      last_server_bpr = server_bpr;
     }
     singer_client.x_send_metadata("user_summary", 1);
 
