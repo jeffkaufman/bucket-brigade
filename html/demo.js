@@ -937,13 +937,13 @@ async function start_singing() {
       update_backing_tracks(tracks);
     }
 
-    if (server_bpm) {
+    if (server_bpm != null) {
       window.bpm.value = server_bpm;
     }
-    if (server_repeats) {
+    if (server_repeats != null) {
       window.repeats.value = server_repeats;
     }
-    if (server_bpr) {
+    if (server_bpr != null) {
       window.bpr.value = server_bpr;
     }
     singer_client.x_send_metadata("user_summary", 1);

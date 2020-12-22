@@ -64,9 +64,9 @@ class State():
         self.song_start_clock = None
         self.requested_track: Any = None
 
-        self.bpm = None
+        self.bpm = 0
         self.repeats = 0
-        self.bpr = None
+        self.bpr = 0
         self.leftover_beat_samples = 0
 
         self.leader = None
@@ -544,7 +544,7 @@ def binary_user_summary(summary):
 def write_metronome(clear_index, clear_samples):
     metronome_samples = np.zeros(clear_samples, np.float32)
 
-    if state.bpm is not None:
+    if state.bpm:
         beat_samples = SAMPLE_RATE * 60 // state.bpm
 
         # We now want to mark a beat at positions matching
@@ -757,17 +757,17 @@ def handle_special(query_params, server_clock, user=None, client_read_clock=None
     if not state.server_controlled:
         bpm = query_params.get("bpm", None)
         if bpm:
-            state.bpm = bpm
+            state.bpm = int(bpm)
             sendall("bpm", state.bpm)
 
         repeats = query_params.get("repeats", None)
         if repeats:
-            state.repeats = repeats
+            state.repeats = int(repeats)
             sendall("repeats", state.repeats)
 
         bpr = query_params.get("bpr", None)
         if bpr:
-            state.bpr = bpr
+            state.bpr = int(bpr)
             sendall("bpr", state.bpr)
 
 # Do some format conversions and strip the unnecessary nesting layer that urllib
