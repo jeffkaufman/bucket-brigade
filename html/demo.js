@@ -654,17 +654,19 @@ function update_active_users(user_summary, server_sample_rate, imLeading, n_user
     mic_volume_inputs.push([name, userid, mic_volume, rms_volume, offset_s]);
     userids.add(userid);
 
-    const tr = document.createElement('tr');
+    if (user_summary.length < 40) {
+      const tr = document.createElement('tr');
 
-    const td1 = document.createElement('td');
-    td1.textContent = offset_s;
-    tr.appendChild(td1);
+      const td1 = document.createElement('td');
+      td1.textContent = offset_s;
+      tr.appendChild(td1);
 
-    const td2 = document.createElement('td');
-    td2.textContent = name;
-    tr.appendChild(td2);
+      const td2 = document.createElement('td');
+      td2.textContent = name;
+      tr.appendChild(td2);
 
-    window.activeUsers.appendChild(tr);
+      window.activeUsers.appendChild(tr);
+    }
   }
   if (!window.enableMixingConsole.checked) {
     return;
