@@ -891,6 +891,10 @@ export class SingerClient extends EventTarget {
     this.connect_();
   }
 
+  send_user_backing_volume(new_user_backing_volume) {
+    this.x_send_metadata('user_backing_volume', new_user_backing_volume);
+  }
+
   x_send_metadata(key, value, append) {
     if (this.connection && this.hasConnectivity) {
       this.connection.x_send_metadata(key, value, append);

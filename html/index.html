@@ -179,7 +179,9 @@ input.editing {
 input.edited {
   background-color: yellow;
 }
-
+#backingVolumeSlider {
+  width: 30em;
+}
 </style>
 
 <link rel=stylesheet href=lyrics.css>
@@ -455,6 +457,12 @@ and you will be able to hear more people.  Normally positions are
 assigned automatically, but if you don't like your assignment you can
 choose a new one. Enter a number between 6 and 115:
 <input type=text id=audioOffset value="115">
+
+<p>
+
+<label for=backingVolumeSlider>Backing Track and Metronome:</label>
+<input type="range" min="0" max="200" value="100" id="backingVolumeSlider">
+
 
 <p>
 

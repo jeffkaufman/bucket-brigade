@@ -304,7 +304,7 @@ function persist_checkbox(checkboxId) {
 persist("userName");
 persist_checkbox("disableTutorial");
 persist_checkbox("disableLatencyMeasurement");
-persist_checkbox("enableMixingConsole"); 
+persist_checkbox("enableMixingConsole");
 //don't persist "disable auto gain" because it's an experimental feature
 
 // Persisting select boxes is harder, so we do it manually for inSelect.
@@ -507,6 +507,20 @@ function audio_offset_change() {
     switch_app_state(APP_RUNNING);
   }
 }
+
+window.backingVolumeSlider.addEventListener("change", () => {
+  const userBackingVolume = parseInt(backingVolumeSlider.value);
+  if (isNaN(userBackingVolume) ||
+      userBackingVolume < 0 ||
+      userBackingVolume > 200) {
+    throw new Error(
+        "backing volume should not be able to go out of range, but we got " +
+        userBackingVolume);
+  }
+  if (singer_client) {
+    singer_client.send_user_backing_volume(userBackingVolume / 100);
+  }
+});
 
 async function start_stop() {
   if (app_state == APP_RUNNING) {
