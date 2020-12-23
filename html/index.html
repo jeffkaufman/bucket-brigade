@@ -338,18 +338,20 @@ Beats Per Repeat (for rounds): <input type=text id=bpr></input>
 <div id=debugSettings class=middlePane>
 <div>
 
+  <h3>Settings that only affect you</h3>
+
     Disable tutorial:
   <input type="checkbox" id="disableTutorial">
-  <br>
+  <p>
     Disable latency measurement:
     <input type="checkbox" id="disableLatencyMeasurement">
-  <br>
+  <p>
     Enable mixing console:
   <input type="checkbox" id="enableMixingConsole">
-  <br>
-    Disable auto gain:
-  <input type="checkbox" id="disableAutoGain">
-  <br>
+  <p>
+    Server path:
+    <input type=text id=serverPath value="/api">
+  <p>
     Loopback mode:
     <select id=loopbackMode>
       <option value=none selected>None (default)</option>
@@ -357,9 +359,13 @@ Beats Per Repeat (for rounds): <input type=text id=bpr></input>
       <option value=main>In main app thread</option>
       <option value=server>Server-side</option>
     </select>
-  <br>
-    Server path:
-    <input type=text id=serverPath value="/api">
+  <h3>Settings that affect everyone</h3>
+  <i>Leave these alone unless you know what you're doing</i>
+
+<p>
+
+    Disable auto gain:
+  <input type="checkbox" id="disableAutoGain">
   <br>
     <div id=clickParams>(Clicks BPM if selected: <input type=text id=clickBPM value=60>)</div>
     <div id=eventTest>
@@ -367,13 +373,13 @@ Beats Per Repeat (for rounds): <input type=text id=bpr></input>
     Offset (optional): <input type="text" id=testEventOffset>
     <button id=testEventGo>Fire test event</button>
     </div>
-    <br>
+    <p>
     Global Volume Control (0-2):
     <input type=text id=globalVolumeControl>
-    <br>
+    <p>
     Backing Track Volume Control (0-2):
     <input type=text id=backingVolumeControl>
-    <br>
+    <p>
     <div id=mixingConsole>
     <button id=sortConsole>Sort</button>
     </div>
