@@ -207,7 +207,7 @@ body {
 #topbar {
   border-bottom: 1px solid black;
   width: 100%;
-  background-color: rgba(50, 169, 171, 0.30);
+  background-color: rgba(50, 169, 171, 0.22);
 }
 
 #toplinks {
@@ -232,10 +232,17 @@ body {
 
 #bottombar {
   display: flex;
-  background-color: rgba(50, 169, 171, 0.30);
+  background-color: rgba(50, 169, 171, 0.22);
   justify-content: space-between;
   align-items: baseline;
   border-top: 1px solid black;
+}
+
+#controlsbar {
+  display: flex;
+  background-color: rgba(50, 169, 171, 0.22);
+  border-top: 1px solid black;
+  align-items: baseline;
 }
 
 #topbar > * {
@@ -244,6 +251,10 @@ body {
 }
 
 #bottombar > * {
+  margin: 1em;
+}
+
+#controlsbar > * {
   margin: 1em;
 }
 
@@ -295,9 +306,9 @@ h1 {
 
     <a target="_blank" href="recordings/">Recent Recordings</a>
 
-    <a href="#" id=booktimeLink>Book Time</a>
-
     <a target="_blank" href="https://calendar.google.com/calendar/u/0/embed?src=gsc268k1lu78lbvfbhphdr0cs4@group.calendar.google.com">View Calendar</a>
+
+    <a target="_blank" href="https://github.com/gwillen/solstice-audio-test">Source Code</a>
 
     <a target="_blank" href="https://github.com/gwillen/solstice-audio-test/issues/new">Report a problem</a>
   </div>
@@ -651,11 +662,6 @@ song.  They should click the "Lead a Song" button.
 
 </div>
 
-<div>Total users connected: <span id=total_users_connected>...</span></div>
-
-<label for=backingVolumeSlider>Backing Track and Metronome:</label>
-<input type="range" min="0" max="200" value="100" id="backingVolumeSlider">
-
 <div id=buckets>
 </div>
 
@@ -674,19 +680,27 @@ song.  They should click the "Lead a Song" button.
 </div>
 </div>
 
-<div id=bottombar>
+<div id=controlsbar>
   <div>
     <button disabled id=micToggleButton>mute mic</button>
     <button disabled id=speakerToggleButton>mute speaker</button>
   </div>
 
+  <div>
+  <label for=backingVolumeSlider>Backing Volume:</label>
+  <input type="range" min="0" max="200" value="100" id="backingVolumeSlider">
+  </div>
+
   <div>Offset: <input type=text id=audioOffset value="115"></div>
 
+  <div>Users: <span id=total_users_connected>...</span></div>
+</div>
+
+<div id=bottombar>
   <a href="#" id=debugInfoLink>Debug Info</a>
   <a href="#" id=debugSettingsLink>Debug Settings</a>
   <a href="#" id=advancedSettingsLink>Advanced Settings</a>
-
-  <a target="_blank" href="https://github.com/gwillen/solstice-audio-test">Source Code</a>
+  <a href="#" id=booktimeLink>Book Time</a>
 
 </div>
 </div>

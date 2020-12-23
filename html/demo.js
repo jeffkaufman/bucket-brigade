@@ -452,6 +452,7 @@ function set_controls() {
   setEnabledIn(window.startVolumeCalibration, [APP_CALIBRATING_VOLUME]);
 
   setEnabledIn(window.audioOffset, [APP_RUNNING]);
+  setEnabledIn(window.backingVolumeSlider, [APP_RUNNING]);
 
   setVisibleIn(window.mainInterface, [APP_RUNNING, APP_RESTARTING]);
 
