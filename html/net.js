@@ -165,8 +165,12 @@ export class ServerConnection extends ServerConnectionBase {
       let pos = 2;
       for (var user_index = 0; user_index < users_in_summary;
            user_index++) {
-        const userid = utf8decoder.decode(data.slice(pos, pos + 16)).replace(/\0/g, "");
-        pos += 16
+        // getUint64 doesn't exist, but we know here that it's < MAX_SAFE_INT
+        const useridView = new DataView(data.slice(pos, pos + 8));
+        const left =  useridView.getUint32(0, /*littleEndian=*/false);
+        const right = useridView.getUint32(4, /*littleEndian=*/false);
+        const userid = "" + (2**32*left + right);
+        pos += 8;
 
         let name = "<undecodable>";
         try {
