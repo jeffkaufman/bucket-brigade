@@ -411,9 +411,6 @@ function setEnabledIn(element, enabled_states) {
 }
 
 function set_controls() {
-  setVisibleIn(window.micToggleButton, [APP_RUNNING]);
-  setVisibleIn(window.speakerToggleButton, [APP_RUNNING]);
-
   setEnabledIn(loopbackMode, [APP_STOPPED])
   setEnabledIn(clickBPM, allStatesExcept([APP_STOPPED]));
 
@@ -427,11 +424,11 @@ function set_controls() {
   startButton.textContent = ". . .";
   if (app_state == APP_STOPPED) {
     startButton.textContent = "Start";
+    startButton.style.display = 'block';
   } else if (app_state != APP_INITIALIZING) {
-    startButton.textContent = "Disconnect";
+    startButton.style.display = 'none';
   }
 
-  setVisibleIn(window.pleaseBeKind, allStatesExcept(ACTIVE_STATES));
   setVisibleIn(window.inputSelector,
                allStatesExcept(ACTIVE_STATES.concat([APP_TUTORIAL])));
   setVisibleIn(window.nameSelector,
@@ -440,8 +437,8 @@ function set_controls() {
   setEnabledIn(window.chatPost, allStatesExcept([APP_RESTARTING]));
   setEnabledIn(audioOffset, allStatesExcept([APP_RESTARTING]));
 
-  setVisibleIn(window.micToggleButton, [APP_RUNNING, APP_RESTARTING], "inline-block");
-  setVisibleIn(window.speakerToggleButton, [APP_RUNNING, APP_RESTARTING], "inline-block");
+  setEnabledIn(window.micToggleButton, [APP_RUNNING, APP_RESTARTING]);
+  setEnabledIn(window.speakerToggleButton, [APP_RUNNING, APP_RESTARTING]);
 
   setVisibleIn(window.latencyCalibrationInstructions, [APP_STOPPED, APP_INITIALIZING, APP_CALIBRATING_LATENCY,
     APP_CALIBRATING_LATENCY_CONTINUE]);
@@ -453,7 +450,9 @@ function set_controls() {
   setVisibleIn(window.volumeCalibration, [APP_CALIBRATING_VOLUME]);
   setEnabledIn(window.startVolumeCalibration, [APP_CALIBRATING_VOLUME]);
 
-  setVisibleIn(window.runningInstructions, [APP_RUNNING, APP_RESTARTING]);
+  setEnabledIn(window.audioOffset, [APP_RUNNING]);
+
+  setVisibleIn(window.mainInterface, [APP_RUNNING, APP_RESTARTING]);
 
   setVisibleIn(window.noAudioInputInstructions, []);
 
@@ -497,22 +496,19 @@ set_controls();
 
 var micPaused = false;
 function toggle_mic() {
-  micPaused = !micPaused;
-  window.micToggleImg.alt = micPaused ? "turn mic on" : "turn mic off";
-  window.micToggleImg.src =
-    "images/mic-" + (micPaused ? "off" : "on") + ".png";
   if (singer_client) {
+    micPaused = !micPaused;
+    window.micToggleButton.innerText = micPaused ? "unmute mic" : "mute mic";
     singer_client.micMuted = micPaused;
   }
 }
 
 var speakerPaused = false;
 function toggle_speaker() {
-  speakerPaused = !speakerPaused;
-  window.speakerToggleImg.alt = speakerPaused ? "turn speaker on" : "turn speaker off";
-  window.speakerToggleImg.src =
-    "images/speaker-" + (speakerPaused ? "off" : "on") + ".png";
   if (singer_client) {
+    speakerPaused = !speakerPaused;
+    window.speakerToggleButton.innerText =
+      speakerPaused ? "unmute speaker" : "mute speaker";
     singer_client.speakerMuted = speakerPaused;
   }
 }
