@@ -254,7 +254,7 @@ state = State()
 
 events: Dict[str, str] = {}
 
-METRONOME = "metronome -- set BPM below"
+METRONOME = "metronome -- set BPM under Advanced Settings"
 
 tracks = []
 def populate_tracks() -> None:
