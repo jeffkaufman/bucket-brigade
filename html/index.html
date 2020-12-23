@@ -198,16 +198,16 @@ body {
   width: 100%;
   height: 100%;
   overflow: hidden;
-  background-color: rgba(50, 169, 171, 0.15);
+  background-color: rgb(224, 242, 242);
   display: flex;
   flex-direction: column;
   justify-content: flex-start;
 }
 
 #topbar {
-  border-bottom: 1px solid black;
   width: 100%;
-  background-color: rgba(50, 169, 171, 0.22);
+  background-color: rgb(186, 226, 227);
+  padding-bottom: 0.5em;
 }
 
 #toplinks {
@@ -230,19 +230,35 @@ body {
   margin: 1em;
 }
 
-#bottombar {
+#tabbar {
   display: flex;
-  background-color: rgba(50, 169, 171, 0.22);
-  justify-content: space-between;
+  background-color: rgb(186, 226, 227);
   align-items: baseline;
-  border-top: 1px solid black;
+}
+
+#tabbar > * {
+  padding: 0.5em;
+  background-color: rgb(145, 209, 210);
+  border-radius: 0.5em 0.5em 0 0;
+  border: 1px solid #aaa;
+  border-bottom: 0;
+  border-left: 0;
+}
+
+#tabbar > .activeTab {
+  background-color: rgb(224, 242, 242);
 }
 
 #controlsbar {
   display: flex;
-  background-color: rgba(50, 169, 171, 0.22);
+  background-color: rgb(186, 226, 227);
   border-top: 1px solid black;
   align-items: baseline;
+}
+
+
+#controlsbar > * {
+  margin: 1em;
 }
 
 #topbar > * {
@@ -251,10 +267,6 @@ body {
 }
 
 #bottombar > * {
-  margin: 1em;
-}
-
-#controlsbar > * {
   margin: 1em;
 }
 
@@ -316,6 +328,14 @@ h1 {
   <div id=currentEvent>loading...</div>
 </div>
 
+<div id=tabbar>
+  <span class=activeTab id=mainViewTab>Home</span>
+  <span id=debugInfoTab>Debug Info</span>
+  <span id=debugSettingsTab>Debug Settings</span>
+  <span id=advancedSettingsTab>Advanced Settings</span>
+  <span id=booktimeTab>Book Time</span>
+</div>
+
 <div id=advancedSettings class=middlePane>
 <div>
 <h4>Best to leave these alone, since they do affect everyone</h4>
@@ -327,10 +347,6 @@ Repeats (for rounds): <input type=text id=repeats></input>
 Beats Per Repeat (for rounds): <input type=text id=bpr></input>
 <p>
 <button id=roundsButtonsUpdate>update</button>
-
-<p>
-
-<button id=dismissAdvancedSettings>dismiss</button>
 </div>
 </div>
 
@@ -380,33 +396,28 @@ Beats Per Repeat (for rounds): <input type=text id=bpr></input>
     <div id=mixingConsole>
     <button id=sortConsole>Sort</button>
     </div>
-
-<p>
-
-<button id=dismissDebugSettings>dismiss</button>
-
 </div>
 </div>
 
 
 <div id=booktime class=middlePane>
 <div id=booktimeDescription>
-This only supports one event at a time. You may book time by sending a
+Send a
 calendar invitation to
-<tt>gsc268k1lu78lbvfbhphdr0cs4@group.calendar.google.com</tt>. For example, you can add that email address as a guest for an event in google Calendar.  <a target="_blank" href="https://calendar.google.com/calendar/u/0/embed?src=gsc268k1lu78lbvfbhphdr0cs4@group.calendar.google.com">View Calendar</a>.
-</div>
-<button id=dismissBookTime>dismiss</button>
+<tt>gsc268k1lu78lbvfbhphdr0cs4@group.calendar.google.com</tt>. For example, you can add that email address as a guest for an event in google Calendar.
 
+<p>
+
+<a target="_blank" href="https://calendar.google.com/calendar/u/0/embed?src=gsc268k1lu78lbvfbhphdr0cs4@group.calendar.google.com">View Calendar</a>.
+</div>
 </div>
 
 <div id=notchrome  class=middlePane>
   <div>
   It looks like you're not using Chrome or Firefox.  Unfortunately,
-  this doesn't yet work in other browsers:
+  this doesn't yet work in other browsers because they don't have AudioWorklet.
 
-  <ul>
-  <li>Safari doesn't yet support AudioWorklet</li>
-  </ul>
+  <p>
 
   While we don't recommend trying to continue anyway, because it will
   probably fail silently and just be frustrating for you, if you want
@@ -451,10 +462,6 @@ calendar invitation to
 <br>
   Web Audio Jank (current) (ms):
   <input type=text id=msWebAudioJankCurrent value="(not available yet)" disabled>
-
-<p>
-
-    <button id=dismissDebugInfo>dismiss</button>
 </div>
 </div>
 
@@ -702,13 +709,6 @@ song.  They should click the "Lead a Song" button.
   <div>Users: <span id=total_users_connected>...</span></div>
 </div>
 
-<div id=bottombar>
-  <a href="#" id=debugInfoLink>Debug Info</a>
-  <a href="#" id=debugSettingsLink>Debug Settings</a>
-  <a href="#" id=advancedSettingsLink>Advanced Settings</a>
-  <a href="#" id=booktimeLink>Book Time</a>
-
-</div>
 </div>
 
 </div>
@@ -723,8 +723,7 @@ song.  They should click the "Lead a Song" button.
 </div>
 
 <script>
-  if (navigator.userAgent.match(/Chrome/) ||
-      navigator.userAgent.match(/Firefox/)) {
+  if (AudioWorklet) {
     window.notchrome.style.display = "none";
     window.middle.style.display = "block";
   }
@@ -735,37 +734,47 @@ song.  They should click the "Lead a Song" button.
     window.debugInfo,
     window.booktime,
     window.advancedSettings,
-    window.notchrome]
+    window.notchrome];
 
-  function configureClickListeners(arg) {
-    const [div, link, dismiss] = arg;
-    if (link) {
-      link.addEventListener(
+  const tabs = [
+    window.mainViewTab,
+    window.debugSettingsTab,
+    window.debugInfoTab,
+    window.booktimeTab,
+    window.advancedSettingsTab,
+  ];
+
+  function configureClickListener(arg) {
+    const [div, tab, dismiss] = arg;
+        tab.addEventListener(
         "click", () => {
           for (const middlePane of middlePanes) {
             middlePane.style.display = "none";
           }
+          for (const tab of tabs) {
+            tab.classList.remove("activeTab");
+          }
           div.style.display = "block";
-          window.middle.style.display = "none";
+          tab.classList.add("activeTab");
         });
-     }
-     dismiss.addEventListener(
-       "click", () => {
-         for (const middlePane of middlePanes) {
-           middlePane.style.display = "none";
-         }
-         window.middle.style.display = "block";
-       });
   }
 
+  [[window.middle, window.mainViewTab],
+   [window.debugSettings, window.debugSettingsTab],
+   [window.debugInfo, window.debugInfoTab],
+   [window.booktime, window.booktimeTab],
+   [window.advancedSettings, window.advancedSettingsTab]].forEach(
+    configureClickListener);
 
+  window.dismissNotChrome.addEventListener(
+    "click", () => {
+       for (const middlePane of middlePanes) {
+          middlePane.style.display = "none";
+       }
+       window.middle.style.display = "block";
+       window.mainViewTab.classList.add("activeTab");
+     });
 
-  [[window.debugSettings, window.debugSettingsLink, window.dismissDebugSettings],
-   [window.debugInfo, window.debugInfoLink, window.dismissDebugInfo],
-   [window.booktime, window.booktimeLink, window.dismissBookTime],
-   [window.advancedSettings, window.advancedSettingsLink, window.dismissAdvancedSettings],
-   [window.notchrome, null, window.dismissNotChrome]].forEach(
-    configureClickListeners);
 </script>
 
 <script type="module" src="./demo.js"></script>

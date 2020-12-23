@@ -754,10 +754,12 @@ function update_active_users(user_summary, server_sample_rate, imLeading, n_user
     }
   }
 
-
   // Don't update the mixing console and we are not looking at that screen.
   if (window.debugSettings.style.display == "none") {
     return;
+  }
+  if (mic_volume_inputs.length == 0) {
+    return;   // Restarting
   }
   for (const existingUserId of consoleChannels.keys()) {
     if (!userids.has(existingUserId)) {
