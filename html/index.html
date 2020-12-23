@@ -226,6 +226,10 @@ body {
   display: block;
 }
 
+#isMobile {
+  display: none;
+}
+
 .middlePane > * {
   margin: 1em;
 }
@@ -424,6 +428,23 @@ calendar invitation to
   you can continue:
 
     <button id=dismissNoAudioWorklet>dismiss</button>
+  </div>
+</div>
+
+<div id=isMobile class=middlePane>
+  <div>
+
+  It looks like you are on a mobile browser. This is not recommended:
+  we haven't found any mobile devices that are able to keep up with
+  the strain of encoding and decoding audio in JavaScript.
+
+  <p>
+
+  While we don't recommend trying to continue anyway, because it will
+  probably fail silently and just be frustrating for you, if you want
+  you can continue:
+
+    <button id=dismissIsMobile>dismiss</button>
   </div>
 </div>
 
@@ -726,6 +747,13 @@ song.  They should click the "Lead a Song" button.
   if (window.AudioWorklet) {
     window.noAudioWorklet.style.display = "none";
     window.middle.style.display = "block";
+
+   // We only need to check for Android, because no other mobile
+   // device supports audio worklet.
+   if (navigator.userAgent.match(/Android/i)) {
+     window.isMobile.style.display = "block";
+     window.middle.style.display = "none";
+   }
   }
 
   const middlePanes = [
@@ -734,7 +762,8 @@ song.  They should click the "Lead a Song" button.
     window.debugInfo,
     window.booktime,
     window.advancedSettings,
-    window.noAudioWorklet];
+    window.noAudioWorklet,
+    window.isMobile];
 
   const tabs = [
     window.mainViewTab,
@@ -766,14 +795,16 @@ song.  They should click the "Lead a Song" button.
    [window.advancedSettings, window.advancedSettingsTab]].forEach(
     configureClickListener);
 
-  window.dismissNoAudioWorklet.addEventListener(
-    "click", () => {
-       for (const middlePane of middlePanes) {
-          middlePane.style.display = "none";
-       }
-       window.middle.style.display = "block";
-       window.mainViewTab.classList.add("activeTab");
-     });
+  for (dismiss of [window.dismissNoAudioWorklet, window.dismissIsMobile]) {
+    dismiss.addEventListener(
+      "click", () => {
+         for (const middlePane of middlePanes) {
+            middlePane.style.display = "none";
+         }
+         window.middle.style.display = "block";
+         window.mainViewTab.classList.add("activeTab");
+       });
+  }
 
 </script>
 
