@@ -250,6 +250,7 @@ body {
 }
 
 h1 {
+ display: inline-block;
  font-family: sans-serif;
 }
 
@@ -263,16 +264,28 @@ h1 {
   display: flex;
   flex-direction: column;
 }
+
+#toplinks img {
+  position: relative;
+  top: 1em;
+}
+
 </style>
 
 <link rel=stylesheet href=lyrics.css>
+<link rel="icon"
+      type="image/png"
+      href="https://www.jefftk.com/bucket-brigade-logo.png">
 </head>
 
 <div id=page>
 
 <div id=topbar>
   <div id=toplinks>
+    <div>
+    <img src="https://www.jefftk.com/bucket-brigade-logo.png" width=64 height=64>
     <h1>Bucket Brigade</h1>
+    </div>
 
     <a target="_blank" href="recordings/">Recent Recordings</a>
 
