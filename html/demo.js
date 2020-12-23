@@ -538,6 +538,20 @@ function audio_offset_change() {
   }
 }
 
+window.backingVolumeSlider.addEventListener("change", () => {
+  const userBackingVolume = parseInt(backingVolumeSlider.value);
+  if (isNaN(userBackingVolume) ||
+      userBackingVolume < 0 ||
+      userBackingVolume > 200) {
+    throw new Error(
+        "backing volume should not be able to go out of range, but we got " +
+        userBackingVolume);
+  }
+  if (singer_client) {
+    singer_client.send_user_backing_volume(userBackingVolume / 100);
+  }
+});
+
 async function start_stop() {
   if (app_state == APP_RUNNING) {
     await stop();

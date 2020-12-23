@@ -163,6 +163,9 @@ input.editing {
 input.edited {
   background-color: yellow;
 }
+#backingVolumeSlider {
+  width: 30em;
+}
 #buckets {
   display: flex;
   flex-direction: row;
@@ -646,6 +649,9 @@ song.  They should click the "Lead a Song" button.
 </div>
 
 <div>Total users connected: <span id=total_users_connected>...</span></div>
+
+<label for=backingVolumeSlider>Backing Track and Metronome:</label>
+<input type="range" min="0" max="200" value="100" id="backingVolumeSlider">
 
 <div id=buckets>
 </div>

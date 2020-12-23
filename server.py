@@ -292,6 +292,8 @@ class User:
         self.is_monitoring = False
         self.rms_volume = 0
 
+        self.backing_volume = 1.0
+
         # For debugging purposes only
         self.last_seen_read_clock = None
         self.last_seen_write_clock = None
@@ -587,7 +589,7 @@ def repeat_length_samples():
     repeat_length_s = beat_length_s * state.bpr
     return int(repeat_length_s * SAMPLE_RATE)
 
-def fix_volume(data, backing_data, n_people):
+def fix_volume(data, backing_data, n_people, user_backing_volume=1.0):
     # We could scale volume by having n_people be the number of
     # earlier people and then scale by a simple 1/n_people.  But a
     # curve of (1 + X) / (n_people + X) falls a bit less
@@ -598,7 +600,11 @@ def fix_volume(data, backing_data, n_people):
     #   https://www.wolframalpha.com/input/?i=graph+%281%2B3%29+%2F+%28x%2B3%29+from+1+to+10
     if not state.disable_auto_gain:
         data *= ((1 + N_PHANTOM_PEOPLE) / (n_people + N_PHANTOM_PEOPLE)) ** 0.5
-    data += (backing_data * (state.backing_volume * (1 if state.metronome_on else 0.2)))
+    data += (
+        backing_data *
+        (state.backing_volume * (1 if state.metronome_on else 0.2)) *
+        user_backing_volume
+    )
     data *= state.global_volume
     return data
 
@@ -927,6 +933,11 @@ def handle_post(in_data, query_string, print_status, client_address=None) -> Tup
     if rms_volume:
         user.rms_volume = float(rms_volume)
 
+    user_backing_volume = query_params.get("user_backing_volume", None)
+    if user_backing_volume:
+        user.backing_volume = friendly_volume_to_scalar(
+            float(user_backing_volume))
+
     # If we are running under Ritual Engine, disable functionality that is  not
     #   required in that setting, and would be disruptive if triggered by
     #   accident.
@@ -1036,7 +1047,7 @@ def handle_post(in_data, query_string, print_status, client_address=None) -> Tup
         n_people = wrap_get(
             n_people_queue, client_read_clock - n_samples, n_samples)
 
-        data = fix_volume(data, backing_data, n_people)
+        data = fix_volume(data, backing_data, n_people, user.backing_volume)
 
     x_audio_metadata = {
         "server_clock": server_clock,
