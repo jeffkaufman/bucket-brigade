@@ -16,6 +16,11 @@ const APP_RESTARTING = "restarting";
 const N_BUCKETS = 7; // Keep in sync with server.py:LAYERING_DEPTH
 const DELAY_INTERVAL = 3; // keep in sync with server.py:DELAY_INTERVAL
 
+
+// Typical numbers, but better to measure.
+const UNMEASURED_CLIENT_LATENCY = navigator.userAgent.match(/Firefox/) ? 67 : 125;
+
+
 // Making these globals makes it easier to interrogate them in the Dev Tools console for debugging purposes.
 window.bucket_ctx = null;
 window.latency_calibrator = null;
@@ -282,8 +287,8 @@ function enableSpectatorMode() {
   bucket_ctx.send_ignore_input(true);  // XXX: private
 
   // Make something up.
-  window.estLatency.innerText = "150ms";
-  bucket_ctx.send_local_latency(150);  // XXX: private
+  window.estLatency.innerText = UNMEASURED_CLIENT_LATENCY + "ms";
+  bucket_ctx.send_local_latency(UNMEASURED_CLIENT_LATENCY);  // XXX: private
 
   // No reason to continue with volume calibration, go right to running.
   switch_app_state(APP_RUNNING);
@@ -1140,8 +1145,8 @@ async function start(spectatorMode=false) {
     switch_app_state(APP_CALIBRATING_LATENCY);
   } else {
     switch_app_state(APP_RUNNING);
-    window.estLatency.innerText = "150ms";
-    bucket_ctx.send_local_latency(150);  // XXX: private
+    window.estLatency.innerText = UNMEASURED_CLIENT_LATENCY + "ms";
+    bucket_ctx.send_local_latency(UNMEASURED_CLIENT_LATENCY);  // XXX: private
     start_singing();
   }
 }
