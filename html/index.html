@@ -4,9 +4,6 @@
 <meta content="utf-8" http-equiv="encoding">
 <title>"Bucket Brigade" Audio Demo</title>
 <style>
-body {
-  max-width: 40em;
-}
 .warning {
   border: 1px dashed red;
   border-radius: 0.25em;
@@ -14,7 +11,7 @@ body {
   margin: 1em;
   padding: 1em;
 }
-#calibration, #runningInstructions, #mainApp {
+#calibration, #mainInterface, #mainApp {
   display: none;
 }
 #estQuality {
@@ -38,13 +35,14 @@ body {
   border: none;
 }
 #chatWindow {
-  margin: 1em;
-  background: #eee;
+  margin-left: 1em;
+  margin-right: 1em;
 }
 #chatDisplay {
+  overflow-y: scroll;
   padding: 0.25em;
   height: 15em;
-  overflow-y: scroll;
+  background-color: rgba(0, 0, 0, 0.05);
 }
 #chatPost {
   width: 3em;
@@ -63,17 +61,10 @@ body {
 #noAudioInputInstructions {
   display: none;
 }
-#notchrome {
-  width: 100%;
-  height: 100%;
-  background: black;
-  color: white;
-  font-size: 200%;
-  position: fixed;
-  top: 0;
-  left: 0;
-  z-index: 2;
+#booktimeDescription {
+  padding: 2em;
 }
+
 #tutorial > div {
   margin: 1em;
 }
@@ -102,10 +93,6 @@ body {
   display: inline-block;
 }
 
-#micToggleButton, #speakerToggleButton {
-  display: none;
-}
-
 #volumeCalibration {
   display: none;
 }
@@ -125,9 +112,6 @@ body {
   display: none;
 }
 #nameSelector {
-  display: none;
-}
-#mainApp {
   display: none;
 }
 #calendar {
@@ -179,10 +163,9 @@ input.editing {
 input.edited {
   background-color: yellow;
 }
-<<<<<<< HEAD
 #backingVolumeSlider {
   width: 30em;
-=======
+}
 #buckets {
   display: flex;
   flex-direction: row;
@@ -201,39 +184,206 @@ input.edited {
   border: 1px solid black;
   border-radius: 0.25em;
   padding: 0.5em;
->>>>>>> master
 }
+
+#remainderWindow > * {
+  margin: 1em;
+}
+
+body {
+  margin: 0;
+}
+
+#page {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background-color: rgba(50, 169, 171, 0.15);
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+}
+
+#topbar {
+  border-bottom: 1px solid black;
+  width: 100%;
+  background-color: rgba(50, 169, 171, 0.30);
+}
+
+#toplinks {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+.middlePane {
+  display: none;
+  flex-grow: 1;
+  overflow-y: scroll;
+}
+
+#notchrome {
+  display: block;
+}
+
+.middlePane > * {
+  margin: 1em;
+}
+
+#bottombar {
+  display: flex;
+  background-color: rgba(50, 169, 171, 0.30);
+  justify-content: space-between;
+  align-items: baseline;
+  border-top: 1px solid black;
+}
+
+#topbar > * {
+  margin-left: 1em;
+  margin-right: 1em;
+}
+
+#bottombar > * {
+  margin: 1em;
+}
+
+#currentEvent {
+  margin-left: 1em;
+  margin-bottom: 0.25em;
+}
+
+h1 {
+ display: inline-block;
+ font-family: sans-serif;
+}
+
+#mainInterface {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+}
+
+#mainInterface > * {
+  display: flex;
+  flex-direction: column;
+}
+
+#toplinks img {
+  position: relative;
+  top: 1em;
+}
+
 </style>
 
 <link rel=stylesheet href=lyrics.css>
+<link rel="icon"
+      type="image/png"
+      href="https://www.jefftk.com/bucket-brigade-logo.png">
 </head>
 
-<h1>Bucket Brigade Singing</h1>
+<div id=page>
 
-<div id=currentEvent>loading...</div>
+<div id=topbar>
+  <div id=toplinks>
+    <div>
+    <img src="https://www.jefftk.com/bucket-brigade-logo.png" width=64 height=64>
+    <h1>Bucket Brigade</h1>
+    </div>
 
-<div class=warning id=pleaseBeKind>
+    <a target="_blank" href="recordings/">Recent Recordings</a>
 
-This is new and still has some issues. If you run into a problem, we
-would appreciate it if you would <a
-href="https://github.com/gwillen/solstice-audio-test/issues/new">tell
-us about it</a>.
+    <a href="#" id=booktimeLink>Book Time</a>
 
+    <a target="_blank" href="https://calendar.google.com/calendar/u/0/embed?src=gsc268k1lu78lbvfbhphdr0cs4@group.calendar.google.com">View Calendar</a>
+
+    <a target="_blank" href="https://github.com/gwillen/solstice-audio-test/issues/new">Report a problem</a>
+  </div>
+
+  <div id=currentEvent>loading...</div>
 </div>
 
-<div id=calendar>
+<div id=advancedSettings class=middlePane>
+<div>
+<h4>Best to leave these alone, since they do affect everyone</h4>
 
+Beats per Minute: <input type=text id=bpm></input>
+<p>
+Repeats (for rounds): <input type=text id=repeats></input>
+<p>
+Beats Per Repeat (for rounds): <input type=text id=bpr></input>
+<p>
+<button id=roundsButtonsUpdate>update</button>
+
+<p>
+
+<button id=dismissAdvancedSettings>dismiss</button>
+</div>
+</div>
+
+
+<div id=debugSettings class=middlePane>
+<div>
+
+    Disable tutorial:
+  <input type="checkbox" id="disableTutorial">
+  <br>
+    Disable latency measurement:
+    <input type="checkbox" id="disableLatencyMeasurement">
+  <br>
+    Enable mixing console:
+  <input type="checkbox" id="enableMixingConsole">
+  <br>
+    Disable auto gain:
+  <input type="checkbox" id="disableAutoGain">
+  <br>
+    Loopback mode:
+    <select id=loopbackMode>
+      <option value=none selected>None (default)</option>
+      <option value=worklet>Inside worklet process()</option>
+      <option value=main>In main app thread</option>
+      <option value=server>Server-side</option>
+    </select>
+  <br>
+    Server path:
+    <input type=text id=serverPath value="/api">
+  <br>
+    <div id=clickParams>(Clicks BPM if selected: <input type=text id=clickBPM value=60>)</div>
+    <div id=eventTest>
+    Test event contents: <input type="text" id=testEventContents>
+    Offset (optional): <input type="text" id=testEventOffset>
+    <button id=testEventGo>Fire test event</button>
+    </div>
+    <br>
+    Global Volume Control (0-2):
+    <input type=text id=globalVolumeControl>
+    <br>
+    Backing Track Volume Control (0-2):
+    <input type=text id=backingVolumeControl>
+    <br>
+    <div id=mixingConsole>
+    <button id=sortConsole>Sort</button>
+    </div>
+
+<p>
+
+<button id=dismissDebugSettings>dismiss</button>
+
+</div>
+</div>
+
+
+<div id=booktime class=middlePane>
+<div id=booktimeDescription>
 This only supports one event at a time. You may book time by sending a
 calendar invitation to
 <tt>gsc268k1lu78lbvfbhphdr0cs4@group.calendar.google.com</tt>. For example, you can add that email address as a guest for an event in google Calendar.  <a target="_blank" href="https://calendar.google.com/calendar/u/0/embed?src=gsc268k1lu78lbvfbhphdr0cs4@group.calendar.google.com">View Calendar</a>.
-
-<br><br>
-
-Automatic recordings of the most recent few songs: <a target="_blank" href="recordings/">recordings</a>
+</div>
+<button id=dismissBookTime>dismiss</button>
 
 </div>
 
-<div id=notchrome>
+<div id=notchrome  class=middlePane>
+  <div>
   It looks like you're not using Chrome or Firefox.  Unfortunately,
   this doesn't yet work in other browsers:
 
@@ -246,16 +396,53 @@ Automatic recordings of the most recent few songs: <a target="_blank" href="reco
   you can continue:
 
     <button id=dismissNotChrome>dismiss</button>
+  </div>
 </div>
 
-<script>
-  window.dismissNotChrome.addEventListener(
-    "click", () => window.notchrome.style.display = "none");
-  if (navigator.userAgent.match(/Chrome/) ||
-      navigator.userAgent.match(/Firefox/)) {
-    window.notchrome.style.display = "none";
-  }
-</script>
+<div id=debugInfo class=middlePane>
+<div>
+  Sample rate:
+  <input type=text id=sampleRate value="(not available yet)" disabled>
+<br>
+  Input / output peak absolute amplitude:
+  <input type=text id=peakIn value="(not available yet)" disabled>
+  <input type=text id=peakOut value="(not available yet)" disabled>
+<br>
+  Input gain (scalar):
+  <input type=text id=inputGain value="(not available yet)" disabled>
+<br>
+  This client total time consumed (s):
+  <input type=text id=clientTotalTime value="(not available yet)" disabled>
+<br>
+  This client read slippage (s):
+  <input type=text id=clientReadSlippage value="(not available yet)" disabled>
+<br>
+  Total time to next client [more than 3 is bad] (s):
+  <input type=text id=clientTimeToNextClient value="(not available yet)" disabled>
+<br>
+  Batch size (ms):
+  <input type=text id=msBatchSize value="(not available yet)" disabled>
+<br>
+  Client Latency (ms):
+  <input type=text id=msClientLatency value="(not available yet)" disabled>
+<br>
+  Web Audio Jank (initial) (ms):
+  <input type=text id=msWebAudioJank value="(not available yet)" disabled>
+<br>
+  "True" (de-janked) Latency (ms):
+  <input type=text id=msTrueLatency value="(not available yet)" disabled>
+<br>
+  Web Audio Jank (current) (ms):
+  <input type=text id=msWebAudioJankCurrent value="(not available yet)" disabled>
+
+<p>
+
+    <button id=dismissDebugInfo>dismiss</button>
+</div>
+</div>
+
+
+<div id=middle class=middlePane>
 
 <div id=tutorial>
   <div id=tutorial_questions>
@@ -272,7 +459,6 @@ Automatic recordings of the most recent few songs: <a target="_blank" href="reco
       <button>Singing and Listening</button>
       <button>Only Listening</button>
     </div>
-
     <div id=q_headphones_present>
       Are you using headphones?
       <button>Yes</button>
@@ -415,8 +601,6 @@ value=100>
 
 </div>
 
-<p>
-
 <div id=volumeCalibration>
   Your latency is now calibrated.  You probably want to turn your
   speaker volume back down. Next we need to calibrate your singing
@@ -431,20 +615,30 @@ value=100>
   </div>
 
 </div>
+<div id=mainInterface>
+<div>
 
-<p>
+<div id=chatWindow>
+  <div id=chatDisplay></div>
+  <form id=chatForm><input type="text" id=chatEntry></input><input type="submit" id=chatPost value="Post"></input></form>
+</div>
 
-<div id=runningInstructions>
 
-You're fully calibrated now!  Talk to each other in chat and figure
-out who's going to lead the next song.  They should click the "Lead a
-Song" button.
+<div id=remainderWindow>
+
+<div class=warning id=lostConnectivity>Lost connectivity to the server. Trying to reconnect&hellip;</div>
+
+<div>
+
+Talk to each other in chat and figure out who's going to lead the next
+song.  They should click the "Lead a Song" button.
 
 <fieldset id=songControls>
 <button id=takeLead>Lead a Song</button>
 <button id=jumpToEnd>Jump To End</button>
 <select id=backingTrack></select>
 </fieldset>
+</div>
 
 <div id=startSingingCountdown>
 
@@ -454,59 +648,17 @@ Song" button.
 
 </div>
 
-<h2>Chat</h2>
-<div id=chatWindow>
-  <div class=warning id=lostConnectivity>Lost connectivity to the server. Trying to reconnect&hellip;</div>
-  <div id=chatDisplay></div>
-  <form id=chatForm><input type="text" id=chatEntry></input><input type="submit" id=chatPost value="Post"></input></form>
-</div>
-
-<button id=micToggleButton><img id=micToggleImg
-   width=32 height=32 alt="turn off mic" src="images/mic-on.png"></button>
-<button id=speakerToggleButton><img id=speakerToggleImg
-   width=32 height=32 alt="turn off speaker" src="images/speaker-on.png"></button>
-
-<h2>Buckets</h2>
-
-<div id=buckets>
-</div>
-
-Total users connected: <span id=total_users_connected>...</span>
-
-<p>
+<div>Total users connected: <span id=total_users_connected>...</span></div>
 
 <label for=backingVolumeSlider>Backing Track and Metronome:</label>
 <input type="range" min="0" max="200" value="100" id="backingVolumeSlider">
 
-<h2>Advanced Settings</h2>
-
-Manual offset: <input type=text id=audioOffset value="115">
-
-<p>
-
-<div id=roundsSettings>
-
-<h3>Settings for Rounds</h3>
-<h4>Best to leave these alone, since they do affect everyone</h4>
-
-Beats per Minute: <input type=text id=bpm></input>
-<p>
-Repeats (for rounds): <input type=text id=repeats></input>
-<p>
-Beats Per Repeat (for rounds): <input type=text id=bpr></input>
-<p>
-<button id=roundsButtonsUpdate>update</button>
+<div id=buckets>
 </div>
 
 </div>
 
-<br>
-<br>
-<br>
-<br>
-<br>
-<br>
-<hr>
+</div>
 
 <div style="display:none">
   <h3>Lyrics</h3>
@@ -516,91 +668,25 @@ Beats Per Repeat (for rounds): <input type=text id=bpr></input>
   <input type=checkbox id=lyricCtrlCb name=lyricCtrlCb><label for=lyricCtrlCb>Control lyric advancement</label><br>
 </div>
 
-<button type="button" data-otherlabel="Close debug settings" class="collapse">Open debug settings</button>
-<div style="display:none">
-    Disable tutorial:
-  <input type="checkbox" id="disableTutorial">
-  <br>
-    Disable latency measurement:
-    <input type="checkbox" id="disableLatencyMeasurement">
-  <br>
-    Enable mixing console:
-  <input type="checkbox" id="enableMixingConsole">
-  <br>
-    Disable auto gain:
-  <input type="checkbox" id="disableAutoGain">
-  <br>
-    Loopback mode:
-    <select id=loopbackMode>
-      <option value=none selected>None (default)</option>
-      <option value=worklet>Inside worklet process()</option>
-      <option value=main>In main app thread</option>
-      <option value=server>Server-side</option>
-    </select>
-  <br>
-    Server path:
-    <input type=text id=serverPath value="/api">
-  <br>
-    <div id=clickParams>(Clicks BPM if selected: <input type=text id=clickBPM value=60>)</div>
-    <div id=eventTest>
-    Test event contents: <input type="text" id=testEventContents>
-    Offset (optional): <input type="text" id=testEventOffset>
-    <button id=testEventGo>Fire test event</button>
-    </div>
-    <br>
-    Global Volume Control (0-2):
-    <input type=text id=globalVolumeControl>
-    <br>
-    Backing Track Volume Control (0-2):
-    <input type=text id=backingVolumeControl>
-    <br>
-    <div id=mixingConsole>
-    <button id=sortConsole>Sort</button>
-    </div>
-
-<h3>Debug info:</h3>
-
-<a href="https://github.com/gwillen/solstice-audio-test">source code</a>
-
-<p>
-
-  Sample rate:
-  <input type=text id=sampleRate value="(not available yet)" disabled>
-<br>
-  Input / output peak absolute amplitude:
-  <input type=text id=peakIn value="(not available yet)" disabled>
-  <input type=text id=peakOut value="(not available yet)" disabled>
-<br>
-  Input gain (scalar):
-  <input type=text id=inputGain value="(not available yet)" disabled>
-<br>
-  This client total time consumed (s):
-  <input type=text id=clientTotalTime value="(not available yet)" disabled>
-<br>
-  This client read slippage (s):
-  <input type=text id=clientReadSlippage value="(not available yet)" disabled>
-<br>
-  Total time to next client [more than 3 is bad] (s):
-  <input type=text id=clientTimeToNextClient value="(not available yet)" disabled>
-<br>
-  Batch size (ms):
-  <input type=text id=msBatchSize value="(not available yet)" disabled>
-<br>
-  Client Latency (ms):
-  <input type=text id=msClientLatency value="(not available yet)" disabled>
-<br>
-  Web Audio Jank (initial) (ms):
-  <input type=text id=msWebAudioJank value="(not available yet)" disabled>
-<br>
-  "True" (de-janked) Latency (ms):
-  <input type=text id=msTrueLatency value="(not available yet)" disabled>
-<br>
-  Web Audio Jank (current) (ms):
-  <input type=text id=msWebAudioJankCurrent value="(not available yet)" disabled>
+</div>
 </div>
 
-<br>
-<br>
+<div id=bottombar>
+  <div>
+    <button disabled id=micToggleButton>mute mic</button>
+    <button disabled id=speakerToggleButton>mute speaker</button>
+  </div>
+
+  <div>Offset: <input type=text id=audioOffset value="115"></div>
+
+  <a href="#" id=debugInfoLink>Debug Info</a>
+  <a href="#" id=debugSettingsLink>Debug Settings</a>
+  <a href="#" id=advancedSettingsLink>Advanced Settings</a>
+
+  <a target="_blank" href="https://github.com/gwillen/solstice-audio-test">Source Code</a>
+
+</div>
+</div>
 
 </div>
 
@@ -612,6 +698,52 @@ Beats Per Repeat (for rounds): <input type=text id=bpr></input>
     <h2>Then refresh the page and try again.</h2>
   </div>
 </div>
+
+<script>
+  if (navigator.userAgent.match(/Chrome/) ||
+      navigator.userAgent.match(/Firefox/)) {
+    window.notchrome.style.display = "none";
+    window.middle.style.display = "block";
+  }
+
+  const middlePanes = [
+    window.middle,
+    window.debugSettings,
+    window.debugInfo,
+    window.booktime,
+    window.advancedSettings,
+    window.notchrome]
+
+  function configureClickListeners(arg) {
+    const [div, link, dismiss] = arg;
+    if (link) {
+      link.addEventListener(
+        "click", () => {
+          for (const middlePane of middlePanes) {
+            middlePane.style.display = "none";
+          }
+          div.style.display = "block";
+          window.middle.style.display = "none";
+        });
+     }
+     dismiss.addEventListener(
+       "click", () => {
+         for (const middlePane of middlePanes) {
+           middlePane.style.display = "none";
+         }
+         window.middle.style.display = "block";
+       });
+  }
+
+
+
+  [[window.debugSettings, window.debugSettingsLink, window.dismissDebugSettings],
+   [window.debugInfo, window.debugInfoLink, window.dismissDebugInfo],
+   [window.booktime, window.booktimeLink, window.dismissBookTime],
+   [window.advancedSettings, window.advancedSettingsLink, window.dismissAdvancedSettings],
+   [window.notchrome, null, window.dismissNotChrome]].forEach(
+    configureClickListeners);
+</script>
 
 <script type="module" src="./demo.js"></script>
 <!--<script type="module" src="./lyrics.js"></script>-->
