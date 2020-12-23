@@ -49,6 +49,7 @@ addEventListener('unhandledrejection', (event) => {
 
 console.info("Starting up");
 
+// Must fit in a uint64.
 const myUserid = Math.round(Math.random()*100000000000)
 
 function prettyTime(ms) {
