@@ -344,7 +344,7 @@ function persist_checkbox(checkboxId) {
 persist("userName");
 persist_checkbox("disableTutorial");
 persist_checkbox("disableLatencyMeasurement");
-persist_checkbox("enableMixingConsole");
+
 //don't persist "disable auto gain" because it's an experimental feature
 
 // Persisting select boxes is harder, so we do it manually for inSelect.
@@ -729,7 +729,8 @@ function update_active_users(user_summary, server_sample_rate, imLeading, n_user
     userids.add(userid);
 
     // Only bucket the first 40 users, for performance.
-    if (i < 40) {
+    // Don't update user buckets when we are not looking at that screen.
+    if (i < 40 && window.middle.style.display != "none") {
       bucketedUserids.add(userid);
 
       if (user_bucket_index[userid] != est_bucket) {
@@ -754,7 +755,8 @@ function update_active_users(user_summary, server_sample_rate, imLeading, n_user
   }
 
 
-  if (!window.enableMixingConsole.checked) {
+  // Don't update the mixing console and we are not looking at that screen.
+  if (window.debugSettings.style.display == "none") {
     return;
   }
   for (const existingUserId of consoleChannels.keys()) {
