@@ -212,8 +212,15 @@ body {
 
 #toplinks {
   display: flex;
-  justify-content: space-between;
   align-items: baseline;
+}
+
+#logoAndName {
+  flex-grow: 1;
+}
+
+#toplinks > a {
+  padding: 1em;
 }
 
 .middlePane {
@@ -315,7 +322,7 @@ h1 {
 
 <div id=topbar>
   <div id=toplinks>
-    <div>
+    <div id=logoAndName>
     <img src="https://www.jefftk.com/bucket-brigade-logo.png" width=64 height=64>
     <h1>Bucket Brigade</h1>
     </div>
