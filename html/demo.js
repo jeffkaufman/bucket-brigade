@@ -927,7 +927,7 @@ window.startVolumeCalibration.addEventListener("click", () => {
   })
 
   volume_calibrator.addEventListener("volumeChange", (event) => {
-    window.reportedVolume.innerText = Math.round(100 * event.detail.volume) / 100 + "dB";
+    window.reportedVolume.innerText = Math.round(100 * event.detail.volume) / 100;
   });
   volume_calibrator.addEventListener("volumeCalibrated", (event) => {
     window.inputGain.value = event.detail.inputGain;
