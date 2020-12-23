@@ -222,7 +222,7 @@ body {
   overflow-y: scroll;
 }
 
-#notchrome {
+#noAudioWorklet {
   display: block;
 }
 
@@ -412,7 +412,7 @@ calendar invitation to
 </div>
 </div>
 
-<div id=notchrome  class=middlePane>
+<div id=noAudioWorklet  class=middlePane>
   <div>
   It looks like you're not using Chrome or Firefox.  Unfortunately,
   this doesn't yet work in other browsers because they don't have AudioWorklet.
@@ -423,7 +423,7 @@ calendar invitation to
   probably fail silently and just be frustrating for you, if you want
   you can continue:
 
-    <button id=dismissNotChrome>dismiss</button>
+    <button id=dismissNoAudioWorklet>dismiss</button>
   </div>
 </div>
 
@@ -723,8 +723,8 @@ song.  They should click the "Lead a Song" button.
 </div>
 
 <script>
-  if (AudioWorklet) {
-    window.notchrome.style.display = "none";
+  if (window.AudioWorklet) {
+    window.noAudioWorklet.style.display = "none";
     window.middle.style.display = "block";
   }
 
@@ -734,7 +734,7 @@ song.  They should click the "Lead a Song" button.
     window.debugInfo,
     window.booktime,
     window.advancedSettings,
-    window.notchrome];
+    window.noAudioWorklet];
 
   const tabs = [
     window.mainViewTab,
@@ -766,7 +766,7 @@ song.  They should click the "Lead a Song" button.
    [window.advancedSettings, window.advancedSettingsTab]].forEach(
     configureClickListener);
 
-  window.dismissNotChrome.addEventListener(
+  window.dismissNoAudioWorklet.addEventListener(
     "click", () => {
        for (const middlePane of middlePanes) {
           middlePane.style.display = "none";
