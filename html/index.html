@@ -110,10 +110,6 @@
 #nameSelector {
   display: none;
 }
-#calendar {
-  width: 100%;
-  height: 50%;
-}
 #latencyCalibrationFailed {
   border: 1px dashed red;
   border-radius: 0.25em;
@@ -232,6 +228,21 @@ body {
 
 .middlePane > * {
   margin: 1em;
+}
+
+#booktime > div {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+}
+#booktimeDescription {
+  margin: 1em;
+}
+
+#calendar {
+  flex-grow: 1;
 }
 
 #tabbar {
@@ -405,6 +416,7 @@ Beats Per Repeat (for rounds): <input type=text id=bpr></input>
 
 
 <div id=booktime class=middlePane>
+<div>
 <div id=booktimeDescription>
 
 If no one currently has Bucket Brigade reserved, feel free to use it.
@@ -417,11 +429,9 @@ calendar invitation to
 <tt>gsc268k1lu78lbvfbhphdr0cs4@group.calendar.google.com</tt>. For
 example, you can add that email address as a guest for an event in
 Google Calendar.
-
-<p>
+</div>
 
 <iframe id=calendar src="https://calendar.google.com/calendar/u/0/embed?src=gsc268k1lu78lbvfbhphdr0cs4@group.calendar.google.com"></iframe>
-
 </div>
 </div>
 
