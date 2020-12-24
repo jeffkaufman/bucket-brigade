@@ -764,18 +764,18 @@ def handle_special(query_params, server_clock, user=None, client_read_clock=None
     #   accident.
     if not state.server_controlled:
         bpm = query_params.get("bpm", None)
-        if bpm:
-            state.bpm = int(bpm)
+        if bpm is not None:
+            state.bpm = bpm
             sendall("bpm", state.bpm)
 
         repeats = query_params.get("repeats", None)
-        if repeats:
-            state.repeats = int(repeats)
+        if repeats is not None:
+            state.repeats = repeats
             sendall("repeats", state.repeats)
 
         bpr = query_params.get("bpr", None)
-        if bpr:
-            state.bpr = int(bpr)
+        if bpr is not None:
+            state.bpr = bpr
             sendall("bpr", state.bpr)
 
 # Do some format conversions and strip the unnecessary nesting layer that urllib
