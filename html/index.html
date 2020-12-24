@@ -314,6 +314,10 @@ h1 {
 #audioOffset {
   width: 3em;
 }
+
+#rememberedCalibrationInstructions, #latencyCalibrationInstructions {
+  display: none;
+}
 </style>
 
 <link rel=stylesheet href=lyrics.css>
@@ -581,6 +585,8 @@ Input device:
 
 <div id=latencyCalibrationInstructions>
 
+<p>
+
 In the next step we are going to need to make some really loud beeps to
 calibrate latency.
 
@@ -591,6 +597,17 @@ Please turn your volume all the way up.
 Take your headphones off your head, and position the earpieces as
 close as possible to your mic.  On a mac laptop this is near the "esc"
 key.</span>  Press "start" when ready.
+
+</div>
+
+<div id=rememberedCalibrationInstructions>
+<p>
+Reusing earlier calibration. If you've changed something about your
+audio setup press "recalibrate".  Otherwise press "start" to begin.
+
+<p>
+
+<button id=recalibrate>Recalibrate</button>
 
 </div>
 

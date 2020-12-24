@@ -446,8 +446,14 @@ function set_controls() {
   setEnabledIn(window.micToggleButton, [APP_RUNNING, APP_RESTARTING]);
   setEnabledIn(window.speakerToggleButton, [APP_RUNNING, APP_RESTARTING]);
 
-  setVisibleIn(window.latencyCalibrationInstructions, [APP_STOPPED, APP_INITIALIZING, APP_CALIBRATING_LATENCY,
-    APP_CALIBRATING_LATENCY_CONTINUE]);
+  if (visitedRecently) {
+    setVisibleIn(window.rememberedCalibrationInstructions, [
+      APP_STOPPED, APP_INITIALIZING]);
+  } else {
+    setVisibleIn(window.latencyCalibrationInstructions, [
+      APP_STOPPED, APP_INITIALIZING, APP_CALIBRATING_LATENCY,
+      APP_CALIBRATING_LATENCY_CONTINUE]);
+  }
 
   setVisibleIn(window.calibration, [APP_CALIBRATING_LATENCY,
                                     APP_CALIBRATING_LATENCY_CONTINUE]);
@@ -477,8 +483,12 @@ function in_select_change() {
   reset_if_running();
 }
 
+const visitedRecently = (
+  Date.now() -
+    parseInt(window.sessionStorage.getItem("calibrationTs"))) / 1000 / 60 < 30;
+
 var app_state = APP_TUTORIAL;
-if (window.disableTutorial.checked) {
+if (window.disableTutorial.checked || visitedRecently) {
    app_state = APP_INITIALIZING;
 }
 
@@ -928,6 +938,10 @@ window.speakerToggleButton.addEventListener("click", toggle_speaker);
 clickVolumeSlider.addEventListener("change", click_volume_change);
 audioOffset.addEventListener("change", audio_offset_change);
 window.disableAutoGain.addEventListener("change", disable_auto_gain_change);
+window.recalibrate.addEventListener("click", () => {
+  window.sessionStorage.clear();
+  window.location.reload();
+});
 
 window.startVolumeCalibration.addEventListener("click", () => {
   window.startVolumeCalibration.disabled = true;
@@ -940,6 +954,9 @@ window.startVolumeCalibration.addEventListener("click", () => {
   });
   volume_calibrator.addEventListener("volumeCalibrated", (event) => {
     window.inputGain.value = event.detail.inputGain;
+    window.sessionStorage.setItem("clientVolume", event.detail.inputGain);
+    window.sessionStorage.setItem("calibrationTs", Date.now());
+
     switch_app_state(APP_RUNNING);
     volume_calibrator = null;
     start_singing();
@@ -1125,6 +1142,8 @@ function do_latency_calibration() {
     if (details.done) {
       if (details.success) {
         latency_calibrator = null;
+        window.sessionStorage.setItem("clientLatency", details.estLatency);
+        window.sessionStorage.setItem("calibrationTs", Date.now());
         switch_app_state(APP_CALIBRATING_VOLUME);
       } else {
         switch_app_state(APP_CALIBRATING_LATENCY_CONTINUE);
@@ -1144,6 +1163,13 @@ async function start(spectatorMode=false) {
 
   if (spectatorMode) {
     enableSpectatorMode();
+  } else if (visitedRecently) {
+    switch_app_state(APP_RUNNING);
+    window.inputGain.value = parseFloat(window.sessionStorage.getItem("clientVolume"));
+    const clientLatency = parseInt(window.sessionStorage.getItem("clientLatency"));
+    window.estLatency.innerText = clientLatency + "ms";
+    bucket_ctx.send_local_latency(clientLatency);  // XXX: private
+    start_singing();
   } else if (!disableLatencyMeasurement.checked) {
     do_latency_calibration();
     switch_app_state(APP_CALIBRATING_LATENCY);
