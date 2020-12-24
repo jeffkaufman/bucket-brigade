@@ -737,8 +737,10 @@ def handle_special(query_params, server_clock, user=None, client_read_clock=None
 
         if user is not None:
             state.song_end_clock = user.last_write_clock
-            # They're done singing, send them to the end.
-            user.send("delay_seconds", state.max_position)
+            # TODO: Make a better interface for telling users that the song has ended.
+            insert_event("Song Ended @%s" % (
+                state.song_end_clock // SAMPLE_RATE),
+                         state.song_end_clock)
         else:
             state.song_end_clock = server_clock
 
@@ -979,9 +981,6 @@ def handle_post(in_data, query_string, print_status, client_address=None) -> Tup
                     f'{client_write_clock - n_samples} - '
                     f'{user.last_seen_write_clock} = '
                     f'{client_write_clock - n_samples - user.last_seen_write_clock})')
-            if user.last_write_clock <= state.song_end_clock <= client_write_clock:
-                # XXX: I'm not sure we still consider this desirable?
-                user.send("delay_seconds", state.max_position)
 
         user.last_seen_write_clock = client_write_clock
         if client_write_clock is not None:
