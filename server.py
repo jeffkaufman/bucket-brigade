@@ -530,6 +530,11 @@ def binary_user_summary(summary):
     """
     binary_summaries = [struct.pack(">H", len(summary))]
     for delay, name, mic_volume, userid, rms_volume in summary:
+        # delay is encoded as a uint16
+        if delay < 0:
+            delay = 0
+        elif delay > 0xffff:
+            delay = 0xffff
         binary_summaries.append(
             BINARY_USER_CONFIG_FORMAT.pack(
                 int(userid),
