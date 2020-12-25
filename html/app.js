@@ -952,6 +952,13 @@ export class SingerClient extends EventTarget {
     this.diagnostics.web_audio_jank = msg.jank / 1000.0;  // convert from ms to s
     this.diagnostics.web_audio_jank_frac = msg.jank / msg.jank_over;  // fraction of dropped callbacks
     this.diagnostics.dropped_calls = msg.dropped_calls;
+
+    // If we fall behind by enough, reload the page and hope.  This is
+    // about a minute's worth of dropped calls.
+    if (msg.dropped_calls > 20000) {
+      window.location.reload();
+    }
+
     // XXX: just for debugging
     // XXX: window.msWebAudioJankCurrent.value = Math.round(msg.jank) + "ms";
 
@@ -1506,4 +1513,3 @@ function thaw(o) {
   }
   return o;
 }
-
