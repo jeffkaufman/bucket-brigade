@@ -915,6 +915,10 @@ def handle_post(in_data, query_string, print_status, client_address=None) -> Tup
     if client_read_clock is None:
         raise ValueError("no client read clock")
 
+    if client_read_clock > server_clock:
+        raise ValueError("Attempted to read %s samples into the future" % (
+            client_read_clock - server_clock))
+
     username = query_params.get("username", None)
     if not username:
         username = "<anonymous>"
