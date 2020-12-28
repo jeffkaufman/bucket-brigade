@@ -61,7 +61,7 @@ class State():
         self.global_volume = 1.0
         self.backing_volume = 1.0
         self.song_end_clock = 0
-        self.song_start_clock = None
+        self.song_start_clock = 0
         self.requested_track: Any = None
 
         self.bpm = 0
@@ -726,6 +726,10 @@ def handle_special(query_params, server_clock, user=None, client_read_clock=None
         else:
             state.song_start_clock = server_clock
         state.song_end_clock = 0
+
+        sendall("song_start_clock", state.song_start_clock)
+        sendall("song_end_clock", state.song_end_clock)
+
         state.metronome_on = False
         if state.bpm and state.bpr and state.repeats:
             state.requested_track = METRONOME
@@ -752,6 +756,8 @@ def handle_special(query_params, server_clock, user=None, client_read_clock=None
                          state.song_end_clock)
         else:
             state.song_end_clock = server_clock
+
+        sendall("song_end_clock", state.song_end_clock)
 
     if query_params.get("clear_events", None):
         events.clear()
@@ -869,6 +875,7 @@ def handle_post(in_data, query_string, print_status, client_address=None) -> Tup
         if state.backing_track_index == len(state.backing_track):
             # the song has ended, mark it so
             state.song_end_clock = clear_index
+            sendall("song_end_clock", state.song_end_clock)
 
     if clear_samples > 0:
         if state.metronome_on:
@@ -960,8 +967,11 @@ def handle_post(in_data, query_string, print_status, client_address=None) -> Tup
     #   accident.
     if query_params.get("request_lead", None) and not state.server_controlled:
         assign_delays(userid)
-        state.song_start_clock = None
+        state.song_start_clock = 0
         state.song_end_clock = 0
+        sendall("song_start_clock", state.song_start_clock)
+        sendall("song_end_clock", state.song_end_clock)
+
         state.metronome_on = False
         state.leader = userid
         clear_whole_buffer()
@@ -1076,10 +1086,6 @@ def handle_post(in_data, query_string, print_status, client_address=None) -> Tup
         "leader": state.leader,
         "n_people_heard": int(n_people[0]),
     }
-
-
-    if state.song_start_clock:
-        x_audio_metadata["song_start_clock"] = state.song_start_clock
 
     x_audio_metadata.update(user.to_send)
     user.mark_sent()

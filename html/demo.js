@@ -668,7 +668,25 @@ function scalar_volume_to_percentage(rms_volume) {
 }
 
 let first_bucket_s = DELAY_INTERVAL;
-function update_active_users(user_summary, server_sample_rate, imLeading, n_users) {
+
+function estimateBucket(offset_s, clamp=true) {
+  let est_bucket = Math.round((offset_s - first_bucket_s) / DELAY_INTERVAL);
+  if (!clamp) {
+    return est_bucket;
+  }
+
+  if (est_bucket >= N_BUCKETS) {
+    est_bucket = N_BUCKETS - 1;
+  } else if (est_bucket < 0) {
+    est_bucket = 0; // this can happen if someone seeks to before bucket #1
+  }
+  return est_bucket;
+}
+
+function update_active_users(
+  user_summary, server_sample_rate, leaderId, n_users) {
+  const hasLeader = !!leaderId;
+  const imLeading = hasLeader && myUserid == leaderId;
 
   if (imLeading && leadButtonState != "start-singing" &&
       leadButtonState != "stop-singing") {
@@ -696,16 +714,6 @@ function update_active_users(user_summary, server_sample_rate, imLeading, n_user
     delete bucket_user_div[userid];
   }
 
-  function estimateBucket(offset_s) {
-    let est_bucket = Math.round((offset_s - first_bucket_s) / DELAY_INTERVAL);
-    if (est_bucket >= N_BUCKETS) {
-      est_bucket = N_BUCKETS - 1;
-    } else if (est_bucket < 0) {
-      est_bucket = 0; // this can happen if someone seeks to before bucket #1
-    }
-    return est_bucket;
-  }
-
   const bucketedUserids = new Set();
   for (var i = 0; i < user_summary.length; i++) {
     const offset_s = user_summary[i][0];
@@ -717,17 +725,12 @@ function update_active_users(user_summary, server_sample_rate, imLeading, n_user
     let est_bucket = estimateBucket(offset_s);
 
     if (userid == myUserid) {
-      const last_offset_s = user_summary[user_summary.length-1][0];
-
-      // TODO: This is not accurate; once the server sends the notion
-      // of song end we can fix it.
-      const no_song_being_led = user_summary[0][0] > 110;
-
       for (var j = 0 ; j < N_BUCKETS; j++) {
         window.buckets.children[j].children[1].disabled =
-          no_song_being_led || est_bucket === j;
+          (!in_song && !hasLeader) || est_bucket === j;
       }
     }
+
 
     mic_volume_inputs.push([name, userid, mic_volume, rms_volume, offset_s]);
     userids.add(userid);
@@ -961,6 +964,11 @@ var last_server_bpm = 0;
 var last_server_bpr = 0;
 var last_server_repeats = 0;
 
+var song_start_clock = 0;
+var song_end_clock = 0;
+
+let in_song = false;
+
 async function start_singing() {
   var final_url = new URL(serverPath.value, document.location).href;
 
@@ -1016,7 +1024,12 @@ async function start_singing() {
     var chats = metadata["chats"] || [];
     var delay_seconds = metadata["delay_seconds"];
     var server_sample_rate = metadata["server_sample_rate"];
-    var song_start_clock = metadata["song_start_clock"];
+    if (metadata["song_start_clock"] != null) {
+      song_start_clock = metadata["song_start_clock"];
+    }
+    if (metadata["song_end_clock"] != null) {
+      song_end_clock = metadata["song_end_clock"];
+    }
     var client_read_clock = metadata["client_read_clock"];
     var server_bpm = metadata["bpm"];
     var server_repeats = metadata["repeats"];
@@ -1025,16 +1038,47 @@ async function start_singing() {
 
     first_bucket_s = metadata["first_bucket"] || first_bucket_s;
 
-    var imLeading = metadata.leader && myUserid == metadata.leader;
-    update_active_users(user_summary, server_sample_rate, imLeading, n_connected_users);
+    in_song = song_start_clock && song_start_clock <= client_read_clock &&
+      (!song_end_clock || song_end_clock > client_read_clock);
+
+    update_active_users(user_summary, server_sample_rate, metadata.leader, n_connected_users);
 
     // XXX: needs to be reimplemented in terms of alarms / marks
     if (song_start_clock && song_start_clock > client_read_clock) {
       window.startSingingCountdown.style.display = "block";
-      window.countdown.innerText = Math.round(
+      window.startCountdown.innerText = Math.round(
         (song_start_clock - client_read_clock) / server_sample_rate) + "s";
     } else {
       window.startSingingCountdown.style.display = "none";
+
+      if (song_end_clock && song_end_clock < client_read_clock) {
+        // Figure out the clock that corresponds to the highest active
+        // bucket, but don't count users who have manually seat to a
+        // position past the last bucket.
+        let highest_bucket = 0;
+        let my_bucket = 0;
+        for (var i = 0; i < user_summary.length; i++) {
+          let est_bucket = estimateBucket(user_summary[i][0], /*clamp=*/ false);
+          if (est_bucket > highest_bucket && est_bucket < N_BUCKETS) {
+            highest_bucket = est_bucket;
+          }
+          if (user_summary[i][3] == myUserid) {
+            my_bucket = est_bucket;
+          }
+        }
+
+        const effective_end_clock = song_end_clock + (
+          (highest_bucket - my_bucket) * DELAY_INTERVAL * server_sample_rate);
+        if (effective_end_clock > client_read_clock) {
+          window.stopSingingCountdown.style.display = "block";
+          window.stopCountdown.innerText = Math.round(
+            (effective_end_clock - client_read_clock) / server_sample_rate) + "s";
+        } else {
+          window.stopSingingCountdown.style.display = "none";
+        }
+      } else {
+        window.stopSingingCountdown.style.display = "none";
+      }
     }
 
     chats.forEach((msg) => receiveChatMessage(msg[0], msg[1]));
