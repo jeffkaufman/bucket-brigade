@@ -726,7 +726,7 @@ export class SingerClient extends EventTarget {
   // * newMark { "delay": [seconds until it happens], "data": [arbitrary] }
   // * backingTrackUpdate { "progress": [seconds since start of backing track, float] }
   // * markReached { "data" }
-  // * x_metadataRecieved { metadata: { ... } }
+  // * x_metadataReceived { metadata: { ... } }
 
   constructor(options) {
     super();
