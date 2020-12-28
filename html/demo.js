@@ -280,11 +280,15 @@ window.latencyCalibrationRetry.addEventListener("click", () => {
   switch_app_state(APP_CALIBRATING_LATENCY);
 });
 
+let in_spectator_mode = false;
 function enableSpectatorMode() {
   // This forcibly mutes us, ignoring the mute button.
   // This is ONLY safe to do at the VERY beginning of things, before we send
   //   any real audio anywhere.
   bucket_ctx.send_ignore_input(true);  // XXX: private
+  window.takeLead.disabled = true;
+  window.micToggleButton.innerText = "unmute mic";
+  in_spectator_mode = true;
 
   // Make something up.
   window.estLatency.innerText = UNMEASURED_CLIENT_LATENCY + "ms";
@@ -443,7 +447,8 @@ function set_controls() {
   setEnabledIn(window.chatPost, allStatesExcept([APP_RESTARTING]));
   setEnabledIn(audioOffset, allStatesExcept([APP_RESTARTING]));
 
-  setEnabledIn(window.micToggleButton, [APP_RUNNING, APP_RESTARTING]);
+  setEnabledIn(window.micToggleButton,
+               in_spectator_mode ? [] : [APP_RUNNING, APP_RESTARTING]);
   setEnabledIn(window.speakerToggleButton, [APP_RUNNING, APP_RESTARTING]);
 
   if (visitedRecently) {
@@ -474,7 +479,6 @@ function set_controls() {
   window.estLatency.innerText = "...";
 
   window.backingTrack.display = "none";
-
   setMainAppVisibility();
 }
 
