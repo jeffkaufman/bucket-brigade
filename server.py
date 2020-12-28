@@ -1007,7 +1007,7 @@ def handle_post(in_data, query_string, print_status, client_address=None) -> Tup
             update_audio(pos, n_samples, in_data, user.is_monitored)
 
             if state.bpr and state.bpm and state.repeats:
-                for i in range(state.repeats):
+                for i in range(1, state.repeats):
                     repeat_pos = pos + repeat_length_samples()*i
                     if repeat_pos + n_samples < server_clock:
                         update_audio(repeat_pos, n_samples, in_data, False)
