@@ -588,7 +588,7 @@ export class BucketBrigadeContext extends EventTarget {
     }
 
     // Do NOT set the sample rate to a fixed value. We MUST let the audioContext use
-    // whatever it thinks the native sample rate is. This is becuse:
+    // whatever it thinks the native sample rate is. This is because:
     // * Firefox does not have a resampler, so it will refuse to operate if we try
     //   to force a sample rate other than the native one
     // * Chrome does have a resampler, but it's buggy and has a habit of dropping
