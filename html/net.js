@@ -106,7 +106,7 @@ export class ServerConnection extends ServerConnectionBase {
     }
     this.read_clock += chunk.length;
 
-    // These could change while we're alseep
+    // These could change while we're asleep
     var saved_read_clock = this.read_clock;
     var saved_write_clock = this.write_clock;
 
