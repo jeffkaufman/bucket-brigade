@@ -69,6 +69,8 @@ class State():
         self.bpr = 0
         self.leftover_beat_samples = 0
 
+        self.first_bucket = DELAY_INTERVAL
+
         self.leader = None
 
         self.metronome_on = False
@@ -415,7 +417,9 @@ def assign_delays(userid_lead) -> None:
     if initial_position > 90:
         initial_position = 90
 
-    users[userid_lead].send("delay_seconds", initial_position + DELAY_INTERVAL)
+    state.first_bucket = initial_position + DELAY_INTERVAL
+    users[userid_lead].send("delay_seconds", state.first_bucket)
+    sendall("first_bucket", state.first_bucket)
 
     positions = [initial_position + x*DELAY_INTERVAL
                  for x in range(2, LAYERING_DEPTH)]

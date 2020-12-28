@@ -80,7 +80,7 @@ function prettyTime(ms) {
 function joinBucket(i) {
   return () => {
     window.buckets.children[i].children[1].disabled = true;
-    audioOffset.value = first_offset_s + DELAY_INTERVAL * i;
+    audioOffset.value = first_bucket_s + DELAY_INTERVAL * i;
     audio_offset_change();
   }
 }
@@ -667,8 +667,7 @@ function scalar_volume_to_percentage(rms_volume) {
   return percentage_volume;
 }
 
-let first_offset_s = DELAY_INTERVAL;
-
+let first_bucket_s = DELAY_INTERVAL;
 function update_active_users(user_summary, server_sample_rate, imLeading, n_users) {
 
   if (imLeading && leadButtonState != "start-singing" &&
@@ -690,11 +689,6 @@ function update_active_users(user_summary, server_sample_rate, imLeading, n_user
   const mic_volume_inputs = [];
   const userids = new Set();
 
-  if (user_summary.length > 0) {
-    // user_summary is sorted on the server
-    first_offset_s = user_summary[0][0];
-  }
-
   function removeFromBucket(userid) {
     bucket_divs[user_bucket_index[userid]].removeChild(
       bucket_user_div[userid]);
@@ -703,11 +697,11 @@ function update_active_users(user_summary, server_sample_rate, imLeading, n_user
   }
 
   function estimateBucket(offset_s) {
-    let est_bucket = Math.round((offset_s - first_offset_s) / DELAY_INTERVAL);
+    let est_bucket = Math.round((offset_s - first_bucket_s) / DELAY_INTERVAL);
     if (est_bucket >= N_BUCKETS) {
       est_bucket = N_BUCKETS - 1;
     } else if (est_bucket < 0) {
-      throw new Error("this should never happen");
+      est_bucket = 0; // this can happen if someone seeks to before bucket #1
     }
     return est_bucket;
   }
@@ -725,9 +719,9 @@ function update_active_users(user_summary, server_sample_rate, imLeading, n_user
     if (userid == myUserid) {
       const last_offset_s = user_summary[user_summary.length-1][0];
 
-      const no_song_being_led =
-            first_offset_s > 110 ||
-            last_offset_s - first_offset_s < DELAY_INTERVAL / 2;
+      // TODO: This is not accurate; once the server sends the notion
+      // of song end we can fix it.
+      const no_song_being_led = user_summary[0][0] > 110;
 
       for (var j = 0 ; j < N_BUCKETS; j++) {
         window.buckets.children[j].children[1].disabled =
@@ -1028,6 +1022,8 @@ async function start_singing() {
     var server_repeats = metadata["repeats"];
     var server_bpr = metadata["bpr"];
     var n_connected_users = metadata["n_connected_users"] || 0;
+
+    first_bucket_s = metadata["first_bucket"] || first_bucket_s;
 
     var imLeading = metadata.leader && myUserid == metadata.leader;
     update_active_users(user_summary, server_sample_rate, imLeading, n_connected_users);
