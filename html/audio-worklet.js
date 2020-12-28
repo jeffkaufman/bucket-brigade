@@ -790,7 +790,7 @@ class Player extends AudioWorkletProcessor {
         log_every(500, "profile_web_audio", total_interval, target_calls, this.calls, this.dropped_calls, sampleRate, eff_rate, this.process_history_ms[0], now_ms, interval, target_interval, err, this.acc_err, this.acc_err / (128 * 1000 / 22050 /* XXX... */));
       }
 
-      // other parameters of interesst
+      // other parameters of interest
       // XXX // console.debug("VERYSPAM", currentTime, currentFrame, /* getOutputTimestamp(), performanceTime, contextTime*/);
 
       if (eff_rate < 0.75 * sampleRate) {
