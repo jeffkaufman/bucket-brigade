@@ -1041,6 +1041,19 @@ async function start_singing() {
     in_song = song_start_clock && song_start_clock <= client_read_clock &&
       (!song_end_clock || song_end_clock > client_read_clock);
 
+    if (metadata.leader) {
+      window.chooseLeaderInstructions.style.display = "none";
+      window.activeLeader.style.display = "block";
+      for (var i = 0; i < user_summary.length; i++) {
+        if (user_summary[i][3] == metadata.leader) {
+          window.leaderName.innerText = user_summary[i][1];
+        }
+      }
+    } else {
+      window.chooseLeaderInstructions.style.display = "block";
+      window.activeLeader.style.display = "none";
+    }
+
     update_active_users(user_summary, server_sample_rate, metadata.leader, n_connected_users);
 
     // XXX: needs to be reimplemented in terms of alarms / marks

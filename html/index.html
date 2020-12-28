@@ -318,6 +318,10 @@ h1 {
 #rememberedCalibrationInstructions, #latencyCalibrationInstructions {
   display: none;
 }
+
+#activeLeader {
+  display: none;
+}
 </style>
 
 <link rel=stylesheet href=lyrics.css>
@@ -714,8 +718,14 @@ value=100>
 
 <div>
 
+<div id=chooseLeaderInstructions>
 Talk to each other in chat and figure out who's going to lead the next
 song.  They should click the "Lead a Song" button.
+</div>
+
+<div id=activeLeader>
+User <i><span id=leaderName>...</span></i> is leading
+</div>
 
 <fieldset id=songControls>
 <button id=takeLead>Lead a Song</button>
