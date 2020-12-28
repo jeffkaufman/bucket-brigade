@@ -682,7 +682,7 @@ export class BucketBrigadeContext extends EventTarget {
           num_of_channels: 1,
           // Frame duration will be derived from the encoded data.
       };
-      console.debug("Setting up opus decder. Decoder params:", dec_cfg);
+      console.debug("Setting up opus decoder. Decoder params:", dec_cfg);
       await this.decoder.setup(dec_cfg);
     }
     this.decoder.reset();
