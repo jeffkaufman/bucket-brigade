@@ -559,7 +559,7 @@ export class BucketBrigadeContext extends EventTarget {
     }
     if (this.worklet_is_ready === false) {
         // This will happen a lot
-        // console.debug("Worklet is not ready, dropping messsage.");
+        // console.debug("Worklet is not ready, dropping message.");
         return;
     }
     this.dispatchEvent(new CustomEvent("workletMessage_", {
