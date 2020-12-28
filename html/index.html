@@ -322,6 +322,11 @@ h1 {
 #activeLeader {
   display: none;
 }
+
+#lagmute {
+  color: red;
+  display: none;
+}
 </style>
 
 <link rel=stylesheet href=lyrics.css>
@@ -772,6 +777,7 @@ User <i><span id=leaderName>...</span></i> is leading
   <div>
     <button disabled id=micToggleButton>mute mic</button>
     <button disabled id=speakerToggleButton>mute speaker</button>
+    <div id=lagmute>You've been muted due to lag</div>
   </div>
 
   <div>

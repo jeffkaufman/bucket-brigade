@@ -520,7 +520,9 @@ function toggle_mic() {
   if (singer_client) {
     micPaused = !micPaused;
     window.micToggleButton.innerText = micPaused ? "unmute mic" : "mute mic";
+    window.takeLead.disabled = micPaused;
     singer_client.micMuted = micPaused;
+    window.lagmute.style.display = "none";
   }
 }
 
@@ -995,14 +997,16 @@ async function start_singing() {
     window.clientTimeToNextClient.value = singer_client.diagnostics.client_time_to_next_client;
 
     // XXX: this doesn't belong in diagnosticChange, this should be more official elsewhere
-    // XXX: also 2.9 is very arbitrary (100ms before we will cause problems for the next person)
-    if (singer_client.diagnostics.client_time_to_next_client > 2.9) {
+    // XXX: also 0.1 is very arbitrary (100ms before we will cause problems for the next person)
+    if (singer_client.diagnostics.client_time_to_next_client >
+        DELAY_INTERVAL - 0.1) {
       // We have fallen too far behind, we have various options here but we're just going to mute
       //   ourselves for the moment.
-      if (!micPaused) {
+      if (!micPaused && ! in_spectator_mode) {
         // This is maybe not exactly what we want; this will show the person they are muted, and
         //   allow them to unmute themselves if they so desire.
         toggle_mic();
+        window.lagmute.style.display = "block";
       }
     }
   })
@@ -1045,14 +1049,18 @@ async function start_singing() {
     in_song = song_start_clock && song_start_clock <= client_read_clock &&
       (!song_end_clock || song_end_clock > client_read_clock);
 
-    if (metadata.leader) {
+
+    let leaderName = "";
+    for (var i = 0; i < user_summary.length; i++) {
+      if (user_summary[i][3] == metadata.leader) {
+        leaderName = user_summary[i][1];
+      }
+    }
+
+    if (leaderName) {
       window.chooseLeaderInstructions.style.display = "none";
       window.activeLeader.style.display = "block";
-      for (var i = 0; i < user_summary.length; i++) {
-        if (user_summary[i][3] == metadata.leader) {
-          window.leaderName.innerText = user_summary[i][1];
-        }
-      }
+      window.leaderName.innerText = leaderName;
     } else {
       window.chooseLeaderInstructions.style.display = "block";
       window.activeLeader.style.display = "none";
