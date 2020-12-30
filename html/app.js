@@ -559,7 +559,7 @@ export class BucketBrigadeContext extends EventTarget {
     }
     if (this.worklet_is_ready === false) {
         // This will happen a lot
-        // console.debug("Worklet is not ready, dropping messsage.");
+        // console.debug("Worklet is not ready, dropping message.");
         return;
     }
     this.dispatchEvent(new CustomEvent("workletMessage_", {
@@ -588,7 +588,7 @@ export class BucketBrigadeContext extends EventTarget {
     }
 
     // Do NOT set the sample rate to a fixed value. We MUST let the audioContext use
-    // whatever it thinks the native sample rate is. This is becuse:
+    // whatever it thinks the native sample rate is. This is because:
     // * Firefox does not have a resampler, so it will refuse to operate if we try
     //   to force a sample rate other than the native one
     // * Chrome does have a resampler, but it's buggy and has a habit of dropping
@@ -682,7 +682,7 @@ export class BucketBrigadeContext extends EventTarget {
           num_of_channels: 1,
           // Frame duration will be derived from the encoded data.
       };
-      console.debug("Setting up opus decder. Decoder params:", dec_cfg);
+      console.debug("Setting up opus decoder. Decoder params:", dec_cfg);
       await this.decoder.setup(dec_cfg);
     }
     this.decoder.reset();
@@ -726,7 +726,7 @@ export class SingerClient extends EventTarget {
   // * newMark { "delay": [seconds until it happens], "data": [arbitrary] }
   // * backingTrackUpdate { "progress": [seconds since start of backing track, float] }
   // * markReached { "data" }
-  // * x_metadataRecieved { metdata: { ... } }
+  // * x_metadataReceived { metadata: { ... } }
 
   constructor(options) {
     super();

@@ -23,7 +23,7 @@ Debugging notes 2020-07-24:
 
 Debugging notes 2020-07-26:
 * Automatic latency calibration is absolutely mandatory to have
-  * For futher testing, in case of any doubt, multiple options would be good to make sure there's something that works for everyone, as long as they're all easy to try and it's obvious if it worked.
+  * For further testing, in case of any doubt, multiple options would be good to make sure there's something that works for everyone, as long as they're all easy to try and it's obvious if it worked.
 * Noise is obnoxiously additive
   * I think a lot of this is quantization noise from naive downsampling to 8-bit. Some is just background noise. (Jeff suggests gating.)
 * No point in sending audio if we know it's silent OR we know we're the caboose
