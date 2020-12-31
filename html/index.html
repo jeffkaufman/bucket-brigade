@@ -78,7 +78,7 @@
   display: none;
 }
 
-#startSingingCountdown {
+#startSingingCountdown, #stopSingingCountdown {
   display: none;
 }
 #countdown {
@@ -174,7 +174,9 @@ input.edited {
   border-radius: 0.25em;
   padding: 0.5em;
 }
-
+#remote-media-div {
+  margin: 1em;
+}
 #remainderWindow > * {
   margin: 1em;
 }
@@ -323,9 +325,9 @@ h1 {
   display: none;
 }
 
-#lagmute {
-  color: red;
+#lagmute, #spectatorMode {
   display: none;
+  padding: 0.5em;
 }
 </style>
 
@@ -730,7 +732,7 @@ value=100>
 </div>
 
 <div id=chooseLeaderInstructions>
-Talk to each other in chat and figure out who's going to lead the next
+Talk to each other and figure out who's going to lead the next
 song.  They should click the "Lead a Song" button.
 </div>
 
@@ -784,7 +786,9 @@ User <i><span id=leaderName>...</span></i> is leading
     <button disabled id=micToggleButton>mute mic</button>
     <button disabled id=speakerToggleButton>mute speaker</button>
     <button disabled id=videoToggleButton>...</button>
-    <div id=lagmute>You've been muted due to lag</div>
+    <div id=lagmute>Due to lag, your singing is not included
+      <button id=unlagmute>Try Again</button></div>
+    <div id=spectatorMode>As a spectator, your singing is not included</div>
   </div>
 
   <div>

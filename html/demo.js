@@ -287,8 +287,8 @@ function enableSpectatorMode() {
   //   any real audio anywhere.
   bucket_ctx.send_ignore_input(true);  // XXX: private
   window.takeLead.disabled = true;
-  window.micToggleButton.innerText = "unmute mic";
   in_spectator_mode = true;
+  window.spectatorMode.style.display = "block";
 
   // Make something up.
   window.estLatency.innerText = UNMEASURED_CLIENT_LATENCY + "ms";
@@ -447,8 +447,7 @@ function set_controls() {
   setEnabledIn(window.chatPost, allStatesExcept([APP_RESTARTING]));
   setEnabledIn(audioOffset, allStatesExcept([APP_RESTARTING]));
 
-  setEnabledIn(window.micToggleButton,
-               in_spectator_mode ? [] : [APP_RUNNING, APP_RESTARTING]);
+  setEnabledIn(window.micToggleButton, [APP_RUNNING, APP_RESTARTING]);
   setEnabledIn(window.speakerToggleButton, [APP_RUNNING, APP_RESTARTING]);
   setEnabledIn(window.videoToggleButton, [APP_RUNNING, APP_RESTARTING]);
 
@@ -516,14 +515,32 @@ function switch_app_state(newstate) {
 }
 set_controls();
 
+let in_lagmute_mode = false;
+function dismissLagmute() {
+  in_lagmute_mode = false;
+  window.lagmute.style.display = "none";
+  window.takeLead.disabled = false;
+  singer_client.micMuted = micPaused;
+}
+
+function enterLagmute() {
+  in_lagmute_mode = true;
+  window.lagmute.style.display = "block";
+  window.takeLead.disabled = true;
+  singer_client.micMuted = micPaused;
+}
+
+window.unlagmute.addEventListener("click", dismissLagmute);
+
 var micPaused = false;
 function toggle_mic() {
   if (singer_client) {
     micPaused = !micPaused;
     window.micToggleButton.innerText = micPaused ? "unmute mic" : "mute mic";
-    window.takeLead.disabled = micPaused;
-    singer_client.micMuted = micPaused;
-    window.lagmute.style.display = "none";
+    if (!in_spectator_mode && !in_lagmute_mode) {
+      window.takeLead.disabled = micPaused;
+      singer_client.micMuted = micPaused;
+    }
 
     if (twilio_room) {
       twilio_room.localParticipant.audioTracks.forEach(publication => {
@@ -1124,11 +1141,8 @@ async function start_singing() {
         DELAY_INTERVAL - 0.1) {
       // We have fallen too far behind, we have various options here but we're just going to mute
       //   ourselves for the moment.
-      if (!micPaused && ! in_spectator_mode) {
-        // This is maybe not exactly what we want; this will show the person they are muted, and
-        //   allow them to unmute themselves if they so desire.
-        toggle_mic();
-        window.lagmute.style.display = "block";
+      if (!micPaused && !in_spectator_mode) {
+        enterLagmute();
       }
     }
   })
