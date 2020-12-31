@@ -1164,7 +1164,7 @@ async function start_singing() {
     var server_bpm = metadata["bpm"];
     var server_repeats = metadata["repeats"];
     var server_bpr = metadata["bpr"];
-    var n_connected_users = metadata["n_connected_users"] || 0;first_bucket_s
+    var n_connected_users = metadata["n_connected_users"] || 0;
 
     first_bucket_s = metadata["first_bucket"] || first_bucket_s;
 
