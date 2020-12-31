@@ -576,9 +576,17 @@ function toggle_video() {
         publication.track.stop();
         publication.unpublish();
       });
+      if (myVideoDiv) {
+        document.getElementById('remote-media-div').removeChild(myVideoDiv);
+        myVideoDiv = null;
+      }
     } else {
       Twilio.Video.createLocalVideoTrack({width: 160}).then(localVideoTrack => {
         twilio_room.localParticipant.publishTrack(localVideoTrack);
+        myVideoDiv = localVideoTrack.attach();
+        document.getElementById('remote-media-div').insertAdjacentElement(
+          'afterbegin', myVideoDiv);
+        myVideoDiv.style.transform = 'scale(-1, 1)';
       }).then(publication => {
         console.log('Successfully unmuted your video:', publication);
       });
@@ -1030,7 +1038,7 @@ let in_song = false;
 let twilio_room = null;
 
 const activeTrackDivs = {};
-
+let myVideoDiv = null;
 function connect_twilio() {
   Twilio.Video.createLocalTracks({
     audio: true,
@@ -1038,7 +1046,9 @@ function connect_twilio() {
   }).then(tracks => {
     for (const track of tracks) {
       if (track.kind === "video") {
-        document.getElementById('remote-media-div').appendChild(track.attach());
+        myVideoDiv = track.attach();
+        document.getElementById('remote-media-div').appendChild(myVideoDiv);
+        myVideoDiv.style.transform = 'scale(-1, 1)';
         break;
       }
     }
