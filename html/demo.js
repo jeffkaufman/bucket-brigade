@@ -29,7 +29,7 @@ window.singer_client = null;
 
 addEventListener('error', (event) => {
   event.preventDefault();
-  console.warn("TOP LEVEL ERROR HANLDER FIRED:", event);
+  console.warn("TOP LEVEL ERROR HANDLER FIRED:", event);
   if (document.getElementById('crash').style.display) {
     return;
   }

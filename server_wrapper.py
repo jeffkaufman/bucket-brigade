@@ -1,8 +1,4 @@
 #!/usr/bin/env python3
-
-import sentry_sdk
-sentry_sdk.init("https://d88678349f5d4e20b707882f78f2f78e@o490365.ingest.sentry.io/5554165")
-
 import os
 import sys
 import json
@@ -263,7 +259,6 @@ def do_GET(environ, start_response) -> None:
     return b'ok',
 
 def die500(start_response, e):
-    sentry_sdk.capture_exception(e)
     # This is slightly sketchy: this assumes we are currently in the middle
     #   of an exception handler for the exception e (which happens to be
     #   true.)

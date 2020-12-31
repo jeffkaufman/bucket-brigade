@@ -12,7 +12,7 @@ console.debug = () => {}
 class ServerConnectionBase {
   constructor() {}
 
-  // This is how much notional time we take up between getting audio and sending it back, server-to-server. ("Notional" becuase the flow of samples is not continuous, so for most purposes the size of the chunks we send to the server must be added to this.)
+  // This is how much notional time we take up between getting audio and sending it back, server-to-server. ("Notional" because the flow of samples is not continuous, so for most purposes the size of the chunks we send to the server must be added to this.)
   get client_window_time() {
     if (!this.running || !this.read_clock || !this.write_clock || !this.clock_reference.sample_rate) {
       return undefined;
@@ -106,7 +106,7 @@ export class ServerConnection extends ServerConnectionBase {
     }
     this.read_clock += chunk.length;
 
-    // These could change while we're alseep
+    // These could change while we're asleep
     var saved_read_clock = this.read_clock;
     var saved_write_clock = this.write_clock;
 
