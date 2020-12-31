@@ -333,6 +333,9 @@ h1 {
 <link rel="icon"
       type="image/png"
       href="https://www.jefftk.com/bucket-brigade-logo.png">
+
+<script src="//media.twiliocdn.com/sdk/js/video/releases/2.8.0/twilio-video.min.js"></script>
+
 </head>
 
 <div id=page>
@@ -723,6 +726,9 @@ value=100>
 
 <div>
 
+<div id="remote-media-div">
+</div>
+
 <div id=chooseLeaderInstructions>
 Talk to each other in chat and figure out who's going to lead the next
 song.  They should click the "Lead a Song" button.
@@ -777,6 +783,7 @@ User <i><span id=leaderName>...</span></i> is leading
   <div>
     <button disabled id=micToggleButton>mute mic</button>
     <button disabled id=speakerToggleButton>mute speaker</button>
+    <button disabled id=videoToggleButton>...</button>
     <div id=lagmute>You've been muted due to lag</div>
   </div>
 

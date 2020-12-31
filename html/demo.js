@@ -450,6 +450,7 @@ function set_controls() {
   setEnabledIn(window.micToggleButton,
                in_spectator_mode ? [] : [APP_RUNNING, APP_RESTARTING]);
   setEnabledIn(window.speakerToggleButton, [APP_RUNNING, APP_RESTARTING]);
+  setEnabledIn(window.videoToggleButton, [APP_RUNNING, APP_RESTARTING]);
 
   if (visitedRecently) {
     setVisibleIn(window.rememberedCalibrationInstructions, [
@@ -523,6 +524,16 @@ function toggle_mic() {
     window.takeLead.disabled = micPaused;
     singer_client.micMuted = micPaused;
     window.lagmute.style.display = "none";
+
+    if (twilio_room) {
+      twilio_room.localParticipant.audioTracks.forEach(publication => {
+        if (micPaused) {
+          publication.track.disable();
+        } else {
+          publication.track.enable();
+        }
+      });
+    }
   }
 }
 
@@ -533,6 +544,28 @@ function toggle_speaker() {
     window.speakerToggleButton.innerText =
       speakerPaused ? "unmute speaker" : "mute speaker";
     singer_client.speakerMuted = speakerPaused;
+  }
+}
+
+var videoPaused = false;
+function toggle_video() {
+  if (twilio_room) {
+    videoPaused = !videoPaused;
+    window.videoToggleButton.innerText =
+      videoPaused ? "enable video" : "disable video";
+
+    if (videoPaused) {
+      twilio_room.localParticipant.videoTracks.forEach(publication => {
+        publication.track.stop();
+        publication.unpublish();
+      });
+    } else {
+      Twilio.Video.createLocalVideoTrack({width: 160}).then(localVideoTrack => {
+        twilio_room.localParticipant.publishTrack(localVideoTrack);
+      }).then(publication => {
+        console.log('Successfully unmuted your video:', publication);
+      });
+    }
   }
 }
 
@@ -674,6 +707,7 @@ function scalar_volume_to_percentage(rms_volume) {
 }
 
 let first_bucket_s = DELAY_INTERVAL;
+let twilio_token = null;
 
 function estimateBucket(offset_s, clamp=true) {
   let est_bucket = Math.round((offset_s - first_bucket_s) / DELAY_INTERVAL);
@@ -938,6 +972,7 @@ function disable_auto_gain_change() {
 startButton.addEventListener("click", start_stop);
 window.micToggleButton.addEventListener("click", toggle_mic);
 window.speakerToggleButton.addEventListener("click", toggle_speaker);
+window.videoToggleButton.addEventListener("click", toggle_video);
 clickVolumeSlider.addEventListener("change", click_volume_change);
 audioOffset.addEventListener("change", audio_offset_change);
 window.disableAutoGain.addEventListener("change", disable_auto_gain_change);
@@ -974,6 +1009,93 @@ var song_start_clock = 0;
 var song_end_clock = 0;
 
 let in_song = false;
+
+let twilio_room = null;
+
+const activeTrackDivs = {};
+
+function connect_twilio() {
+  Twilio.Video.createLocalTracks({
+    audio: true,
+    video: {width: 160}
+  }).then(tracks => {
+    for (const track of tracks) {
+      if (track.kind === "video") {
+        document.getElementById('remote-media-div').appendChild(track.attach());
+        break;
+      }
+    }
+
+    Twilio.Video.connect(twilio_token, {
+      tracks,
+      name: 'BucketBrigade'
+    }).then(room => {
+
+      console.log(`Successfully joined a Room: ${room}`);
+      twilio_room = room;
+      window.videoToggleButton.innerText =
+        videoPaused ? "enable video" : "disable video";
+
+      function addTrack(track) {
+        console.log("adding track", track);
+        if (track.name in activeTrackDivs) {
+          console.log("skipping already present track", track);
+          return;
+        }
+        const trackDiv = track.attach();
+        activeTrackDivs[track.name] = trackDiv;
+        document.getElementById('remote-media-div').appendChild(trackDiv);
+      }
+
+      function removeTrack(track) {
+        console.log("removing track", track);
+        const trackDiv = activeTrackDivs[track.name];
+        if (trackDiv) {
+          delete activeTrackDivs[track.name];
+          document.getElementById('remote-media-div').removeChild(trackDiv);
+        }
+      }
+
+      function addPublicationOrTrack(publicationOrTrack) {
+        console.log("addPublicationOrTrack", publicationOrTrack);
+
+        if (publicationOrTrack.mediaStreamTrack) {
+          addTrack(publicationOrTrack);
+        } else {
+          const publication = publicationOrTrack;
+          if (publication.isSubscribed) {
+            addTrack(publication.track);
+          }
+          publication.on('subscribed', addTrack);
+          publication.on('unsubscribed', removeTrack);
+        }
+      }
+
+      function removePublicationOrTrack(publicationOrTrack) {
+        if (publicationOrTrack.mediaStreamTrack) {
+          removeTrack(publicationOrTrack);
+        }
+      }
+
+      function addParticipant(participant) {
+        participant.tracks.forEach(addPublicationOrTrack);
+        participant.on('trackSubscribed', addPublicationOrTrack);
+        participant.on('trackUnsubscribed', removePublicationOrTrack);
+      }
+
+      function removeParticipant(participant) {
+        console.log("removeParticipant", participant);
+        participant.tracks.forEach(removeTrack);
+      }
+
+      room.on('participantConnected', addParticipant);
+      room.on('participantDisconnected', removeParticipant);
+      room.participants.forEach(addParticipant);
+    }, error => {
+      console.error(`Unable to connect to Room: ${error.message}`);
+    });
+  });
+}
 
 async function start_singing() {
   var final_url = new URL(serverPath.value, document.location).href;
@@ -1042,9 +1164,14 @@ async function start_singing() {
     var server_bpm = metadata["bpm"];
     var server_repeats = metadata["repeats"];
     var server_bpr = metadata["bpr"];
-    var n_connected_users = metadata["n_connected_users"] || 0;
+    var n_connected_users = metadata["n_connected_users"] || 0;first_bucket_s
 
     first_bucket_s = metadata["first_bucket"] || first_bucket_s;
+
+    if (metadata["twilio_token"]) {
+      twilio_token = metadata["twilio_token"];
+      connect_twilio();
+    }
 
     in_song = song_start_clock && song_start_clock <= client_read_clock &&
       (!song_end_clock || song_end_clock > client_read_clock);
