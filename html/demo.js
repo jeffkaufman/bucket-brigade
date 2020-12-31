@@ -537,20 +537,27 @@ function toggle_mic() {
   if (singer_client) {
     micPaused = !micPaused;
     window.micToggleButton.innerText = micPaused ? "unmute mic" : "mute mic";
-    if (!in_spectator_mode && !in_lagmute_mode) {
-      window.takeLead.disabled = micPaused;
-      singer_client.micMuted = micPaused;
-    }
+    updateTwilioMute();
+    updateBucketBrigadeMute();
+  }
+}
 
-    if (twilio_room) {
-      twilio_room.localParticipant.audioTracks.forEach(publication => {
-        if (micPaused) {
-          publication.track.disable();
-        } else {
-          publication.track.enable();
-        }
-      });
-    }
+function updateBucketBrigadeMute() {
+  if (!in_spectator_mode && !in_lagmute_mode) {
+    window.takeLead.disabled = micPaused;
+    singer_client.micMuted = micPaused;
+  }
+}
+
+function updateTwilioMute() {
+  if (twilio_room) {
+    twilio_room.localParticipant.audioTracks.forEach(publication => {
+      if (micPaused || in_beforesong || in_song || in_aftersong) {
+        publication.track.disable();
+      } else {
+        publication.track.enable();
+      }
+    });
   }
 }
 
@@ -1033,7 +1040,9 @@ var last_server_repeats = 0;
 var song_start_clock = 0;
 var song_end_clock = 0;
 
-let in_song = false;
+let in_beforesong = false;  // Have other people started singing?
+let in_song = false;  // Is our current position in a song?
+let in_aftersong = false;  // Are other people still singing?
 
 let twilio_room = null;
 
@@ -1200,7 +1209,6 @@ async function start_singing() {
     in_song = song_start_clock && song_start_clock <= client_read_clock &&
       (!song_end_clock || song_end_clock > client_read_clock);
 
-
     let leaderName = "";
     for (var i = 0; i < user_summary.length; i++) {
       if (user_summary[i][3] == metadata.leader) {
@@ -1222,10 +1230,12 @@ async function start_singing() {
     // XXX: needs to be reimplemented in terms of alarms / marks
     if (song_start_clock && song_start_clock > client_read_clock) {
       window.startSingingCountdown.style.display = "block";
+      in_beforesong = true;
       window.startCountdown.innerText = Math.round(
         (song_start_clock - client_read_clock) / server_sample_rate) + "s";
     } else {
       window.startSingingCountdown.style.display = "none";
+      in_beforesong = false;
 
       if (song_end_clock && song_end_clock < client_read_clock) {
         // Figure out the clock that corresponds to the highest active
@@ -1246,16 +1256,23 @@ async function start_singing() {
         const effective_end_clock = song_end_clock + (
           (highest_bucket - my_bucket) * DELAY_INTERVAL * server_sample_rate);
         if (effective_end_clock > client_read_clock) {
+          in_aftersong = true;
           window.stopSingingCountdown.style.display = "block";
           window.stopCountdown.innerText = Math.round(
             (effective_end_clock - client_read_clock) / server_sample_rate) + "s";
         } else {
           window.stopSingingCountdown.style.display = "none";
+          in_aftersong = false;
         }
       } else {
         window.stopSingingCountdown.style.display = "none";
+        in_aftersong = false;
       }
     }
+
+    // Either in_song and in_aftersong could have changed above, so
+    // check whether we need to mute/unmute Twilio.
+    updateTwilioMute();
 
     chats.forEach((msg) => receiveChatMessage(msg[0], msg[1]));
     if (tracks) {
