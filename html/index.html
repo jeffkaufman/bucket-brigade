@@ -67,6 +67,9 @@
 #tutorial button {
   margin: 0.25em;
 }
+#chooseCamera {
+  display: none;
+}
 .headphoneAdvice,
 #q_headphones_present,
 #q_wired_headphones_available,
@@ -176,6 +179,9 @@ input.edited {
 }
 #remote-media-div {
   margin: 1em;
+}
+#remote-media-div > * {
+  width: 160px;
 }
 #remainderWindow > * {
   margin: 1em;
@@ -328,6 +334,9 @@ h1 {
 #lagmute, #spectatorMode {
   display: none;
   padding: 0.5em;
+}
+#noCameraFound {
+  display: none;
 }
 </style>
 
@@ -581,6 +590,15 @@ Google Calendar.
     <button class=dismiss_tutorial>Get Started</button>
   </div>
   </div>
+
+<div id=chooseCamera>
+<div id=noCameraFound>No camera found</div>
+<div id=cameraPreview><span>loading...</span></div>
+<p>
+<button id=nextCamera>Switch camera</button>
+<button id=chosenCamera>Use this camera</button>
+<button id=noCamera>Continue without camera</button>
+</div>
 
 <div id=nameSelector>
 

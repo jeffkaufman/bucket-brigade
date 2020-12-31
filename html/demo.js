@@ -3,6 +3,7 @@
 import * as bb from './app.js';
 
 const APP_TUTORIAL = "tutorial";
+const APP_CHOOSE_CAMERA = "choose_camera";
 const APP_INITIALIZING = "initializing";
 const APP_STOPPED = "stopped";
 const APP_STARTING = "starting";
@@ -277,7 +278,6 @@ window.roundsButtonsUpdate.addEventListener("click", () => {
 
 window.latencyCalibrationRetry.addEventListener("click", () => {
   do_latency_calibration();
-  switch_app_state(APP_CALIBRATING_LATENCY);
 });
 
 let in_spectator_mode = false;
@@ -294,9 +294,8 @@ function enableSpectatorMode() {
   window.estLatency.innerText = UNMEASURED_CLIENT_LATENCY + "ms";
   bucket_ctx.send_local_latency(UNMEASURED_CLIENT_LATENCY);  // XXX: private
 
-  // No reason to continue with volume calibration, go right to running.
-  switch_app_state(APP_RUNNING);
-  start_singing();
+  // No reason to continue with volume calibration, go right to camera.
+  connect_camera();
 };
 
 window.latencyCalibrationGiveUp.addEventListener("click", enableSpectatorMode);
@@ -354,7 +353,9 @@ persist_checkbox("disableLatencyMeasurement");
 // Persisting select boxes is harder, so we do it manually for inSelect.
 
 function setMainAppVisibility() {
-  if (window.userName.value && app_state != APP_TUTORIAL) {
+  if (window.userName.value &&
+      app_state != APP_TUTORIAL &&
+      app_state != APP_CHOOSE_CAMERA) {
     window.mainApp.style.display = "block";
   }
 }
@@ -427,9 +428,10 @@ function set_controls() {
   setEnabledIn(inSelect, allStatesExcept([APP_INITIALIZING, APP_RESTARTING]));
   setEnabledIn(startButton, allStatesExcept([APP_INITIALIZING, APP_RESTARTING]));
 
-  setVisibleIn(startButton, allStatesExcept([APP_TUTORIAL]));
+  setVisibleIn(startButton, allStatesExcept([APP_TUTORIAL, APP_CHOOSE_CAMERA]));
 
   setVisibleIn(window.tutorial, [APP_TUTORIAL]);
+  setVisibleIn(window.chooseCamera, [APP_CHOOSE_CAMERA]);
 
   startButton.textContent = ". . .";
   if (app_state == APP_STOPPED) {
@@ -440,9 +442,11 @@ function set_controls() {
   }
 
   setVisibleIn(window.inputSelector,
-               allStatesExcept(ACTIVE_STATES.concat([APP_TUTORIAL])));
+               allStatesExcept(ACTIVE_STATES.concat(
+                 [APP_TUTORIAL, APP_CHOOSE_CAMERA])));
   setVisibleIn(window.nameSelector,
-               allStatesExcept(ACTIVE_STATES.concat([APP_TUTORIAL])));
+               allStatesExcept(ACTIVE_STATES.concat(
+                 [APP_TUTORIAL, APP_CHOOSE_CAMERA])));
   setEnabledIn(window.songControls, allStatesExcept([APP_RESTARTING]));
   setEnabledIn(window.chatPost, allStatesExcept([APP_RESTARTING]));
   setEnabledIn(audioOffset, allStatesExcept([APP_RESTARTING]));
@@ -493,13 +497,13 @@ const visitedRecently = (
 
 var app_state = APP_TUTORIAL;
 if (window.disableTutorial.checked || visitedRecently) {
-   app_state = APP_INITIALIZING;
+  app_state = APP_CHOOSE_CAMERA;
 }
 
 var app_initialized = false;
 
 const ALL_STATES = [
-  APP_TUTORIAL, APP_INITIALIZING, APP_STOPPED, APP_STARTING, APP_RUNNING,
+  APP_TUTORIAL, APP_CHOOSE_CAMERA, APP_INITIALIZING, APP_STOPPED, APP_STARTING, APP_RUNNING,
   APP_CALIBRATING_LATENCY, APP_CALIBRATING_LATENCY_CONTINUE,
   APP_CALIBRATING_VOLUME, APP_STOPPING, APP_RESTARTING];
 
@@ -588,7 +592,10 @@ function toggle_video() {
         myVideoDiv = null;
       }
     } else {
-      Twilio.Video.createLocalVideoTrack({width: 160}).then(localVideoTrack => {
+      Twilio.Video.createLocalVideoTrack({
+        deviceId: {exact: camera_devices[chosen_camera_index].deviceId},
+        width: 160
+      }).then(localVideoTrack => {
         twilio_room.localParticipant.publishTrack(localVideoTrack);
         myVideoDiv = localVideoTrack.attach();
         document.getElementById('remote-media-div').insertAdjacentElement(
@@ -1027,9 +1034,8 @@ window.startVolumeCalibration.addEventListener("click", () => {
     window.sessionStorage.setItem("clientVolume", event.detail.inputGain);
     window.sessionStorage.setItem("calibrationTs", Date.now());
 
-    switch_app_state(APP_RUNNING);
     volume_calibrator = null;
-    start_singing();
+    connect_camera();
   });
 });
 
@@ -1048,88 +1054,160 @@ let twilio_room = null;
 
 const activeTrackDivs = {};
 let myVideoDiv = null;
-function connect_twilio() {
-  Twilio.Video.createLocalTracks({
+
+let twilio_tracks = null;
+let camera_devices = null;
+let chosen_camera_index = 0;
+
+async function connect_camera() {
+  switch_app_state(APP_CHOOSE_CAMERA);
+
+  camera_devices = await navigator.mediaDevices.enumerateDevices();
+  camera_devices = camera_devices.filter(
+    (device) => device.kind=='videoinput' && device.deviceId);
+
+  if (!camera_devices) {
+    window.noCameraFound.style.display = "block";
+    window.cameraPreview.style.display = "none";
+    window.nextCamera.style.display = "none";
+    window.chosenCamera.style.display = "none";
+    return;
+  }
+
+  const saved_camera_id = localStorage.getItem("camera_device_id");
+  for (var i = 0; i < camera_devices.length; i++) {
+    if (camera_devices[i].deviceId === saved_camera_id) {
+      chosen_camera_index = i;
+    }
+  }
+
+  update_preview_camera();
+}
+
+async function update_preview_camera() {
+  twilio_tracks = await Twilio.Video.createLocalTracks({
     audio: true,
-    video: {width: 160}
-  }).then(tracks => {
-    for (const track of tracks) {
-      if (track.kind === "video") {
-        myVideoDiv = track.attach();
-        document.getElementById('remote-media-div').appendChild(myVideoDiv);
-        myVideoDiv.style.transform = 'scale(-1, 1)';
-        break;
+    video:  {
+      deviceId: {exact: camera_devices[chosen_camera_index].deviceId},
+      width: 160
+    }
+  });
+
+  for (const track of twilio_tracks) {
+    if (track.kind === "video") {
+      myVideoDiv = track.attach();
+      while (window.cameraPreview.children.length) {
+        window.cameraPreview.removeChild(window.cameraPreview.children[0]);
+      }
+      window.cameraPreview.appendChild(myVideoDiv);
+      myVideoDiv.style.transform = 'scale(-1, 1)';
+      break;
+    }
+  }
+}
+
+async function selected_camera(useCamera) {
+  // We don't want them clicking any buttons while we wait for Twilio to start.
+  window.chooseCamera.style.display = "none";
+
+  while (window.cameraPreview.children.length) {
+    window.cameraPreview.removeChild(window.cameraPreview.children[0]);
+  }
+
+  if (useCamera) {
+    document.getElementById('remote-media-div').insertAdjacentElement(
+      'afterbegin', myVideoDiv);
+    myVideoDiv.style.transform = 'scale(-1, 1)';
+    localStorage.setItem("camera_device_id",
+                         camera_devices[chosen_camera_index].deviceId);
+  } else {
+    videoToggleButton.style.display = "none";
+    myVideoDiv = null;
+    twilio_tracks = await Twilio.Video.createLocalTracks({
+      audio: true,
+      video: false
+    });
+  }
+
+  switch_app_state(APP_RUNNING);
+  start_singing();
+}
+
+window.nextCamera.addEventListener("click", () => {
+  chosen_camera_index++;
+  if (chosen_camera_index >= camera_devices.length) {
+    chosen_camera_index = 0;
+  }
+  update_preview_camera();
+});
+
+function connect_twilio() {
+  Twilio.Video.connect(twilio_token, {
+    tracks: twilio_tracks,
+    name: 'BucketBrigade'
+  }).then(room => {
+    console.log(`Successfully joined a Room: ${room}`);
+    twilio_room = room;
+    window.videoToggleButton.innerText =
+      videoPaused ? "enable video" : "disable video";
+
+    function addTrack(track) {
+      console.log("adding track", track);
+      if (track.name in activeTrackDivs) {
+        console.log("skipping already present track", track);
+        return;
+      }
+      const trackDiv = track.attach();
+      activeTrackDivs[track.name] = trackDiv;
+      document.getElementById('remote-media-div').appendChild(trackDiv);
+    }
+
+    function removeTrack(track) {
+      console.log("removing track", track);
+      const trackDiv = activeTrackDivs[track.name];
+      if (trackDiv) {
+        delete activeTrackDivs[track.name];
+        document.getElementById('remote-media-div').removeChild(trackDiv);
       }
     }
 
-    Twilio.Video.connect(twilio_token, {
-      tracks,
-      name: 'BucketBrigade'
-    }).then(room => {
+    function addPublicationOrTrack(publicationOrTrack) {
+      console.log("addPublicationOrTrack", publicationOrTrack);
 
-      console.log(`Successfully joined a Room: ${room}`);
-      twilio_room = room;
-      window.videoToggleButton.innerText =
-        videoPaused ? "enable video" : "disable video";
-
-      function addTrack(track) {
-        console.log("adding track", track);
-        if (track.name in activeTrackDivs) {
-          console.log("skipping already present track", track);
-          return;
+      if (publicationOrTrack.mediaStreamTrack) {
+        addTrack(publicationOrTrack);
+      } else {
+        const publication = publicationOrTrack;
+        if (publication.isSubscribed) {
+          addTrack(publication.track);
         }
-        const trackDiv = track.attach();
-        activeTrackDivs[track.name] = trackDiv;
-        document.getElementById('remote-media-div').appendChild(trackDiv);
-      }
-
-      function removeTrack(track) {
-        console.log("removing track", track);
-        const trackDiv = activeTrackDivs[track.name];
-        if (trackDiv) {
-          delete activeTrackDivs[track.name];
-          document.getElementById('remote-media-div').removeChild(trackDiv);
+        publication.on('subscribed', addTrack);
+        publication.on('unsubscribed', removeTrack);
         }
+    }
+
+    function removePublicationOrTrack(publicationOrTrack) {
+      if (publicationOrTrack.mediaStreamTrack) {
+        removeTrack(publicationOrTrack);
       }
+    }
 
-      function addPublicationOrTrack(publicationOrTrack) {
-        console.log("addPublicationOrTrack", publicationOrTrack);
+    function addParticipant(participant) {
+      participant.tracks.forEach(addPublicationOrTrack);
+      participant.on('trackSubscribed', addPublicationOrTrack);
+      participant.on('trackUnsubscribed', removePublicationOrTrack);
+    }
 
-        if (publicationOrTrack.mediaStreamTrack) {
-          addTrack(publicationOrTrack);
-        } else {
-          const publication = publicationOrTrack;
-          if (publication.isSubscribed) {
-            addTrack(publication.track);
-          }
-          publication.on('subscribed', addTrack);
-          publication.on('unsubscribed', removeTrack);
-        }
-      }
+    function removeParticipant(participant) {
+      console.log("removeParticipant", participant);
+      participant.tracks.forEach(removeTrack);
+    }
 
-      function removePublicationOrTrack(publicationOrTrack) {
-        if (publicationOrTrack.mediaStreamTrack) {
-          removeTrack(publicationOrTrack);
-        }
-      }
-
-      function addParticipant(participant) {
-        participant.tracks.forEach(addPublicationOrTrack);
-        participant.on('trackSubscribed', addPublicationOrTrack);
-        participant.on('trackUnsubscribed', removePublicationOrTrack);
-      }
-
-      function removeParticipant(participant) {
-        console.log("removeParticipant", participant);
-        participant.tracks.forEach(removeTrack);
-      }
-
-      room.on('participantConnected', addParticipant);
-      room.on('participantDisconnected', removeParticipant);
-      room.participants.forEach(addParticipant);
-    }, error => {
-      console.error(`Unable to connect to Room: ${error.message}`);
-    });
+    room.on('participantConnected', addParticipant);
+    room.on('participantDisconnected', removeParticipant);
+    room.participants.forEach(addParticipant);
+  }, error => {
+    console.error(`Unable to connect to Room: ${error.message}`);
   });
 }
 
@@ -1352,6 +1430,7 @@ async function initialize() {
 }
 
 function do_latency_calibration() {
+  switch_app_state(APP_CALIBRATING_LATENCY);
   latency_calibrator = new bb.LatencyCalibrator({
     context: bucket_ctx,
     clickVolume: parseFloat(clickVolumeSlider.value),
@@ -1397,20 +1476,17 @@ async function start(spectatorMode=false) {
   if (spectatorMode) {
     enableSpectatorMode();
   } else if (visitedRecently) {
-    switch_app_state(APP_RUNNING);
+    connect_camera();
     window.inputGain.value = parseFloat(window.sessionStorage.getItem("clientVolume"));
     const clientLatency = parseInt(window.sessionStorage.getItem("clientLatency"));
     window.estLatency.innerText = clientLatency + "ms";
     bucket_ctx.send_local_latency(clientLatency);  // XXX: private
-    start_singing();
   } else if (!disableLatencyMeasurement.checked) {
     do_latency_calibration();
-    switch_app_state(APP_CALIBRATING_LATENCY);
   } else {
-    switch_app_state(APP_RUNNING);
+    connect_camera();
     window.estLatency.innerText = UNMEASURED_CLIENT_LATENCY + "ms";
     bucket_ctx.send_local_latency(UNMEASURED_CLIENT_LATENCY);  // XXX: private
-    start_singing();
   }
 }
 
@@ -1463,6 +1539,14 @@ document.querySelectorAll(".dismiss_tutorial").forEach(
   (button) => button.addEventListener("click", () => {
     switch_app_state(app_initialized ? APP_STOPPED : APP_INITIALIZING);
   }));
+
+window.chosenCamera.addEventListener("click", () => {
+  selected_camera(true);
+});
+
+window.noCamera.addEventListener("click", () => {
+  selected_camera(false);
+});
 
 document.querySelectorAll("#tutorial_questions button").forEach(
   (button) => button.addEventListener("click", () => tutorial_answer(button)));
