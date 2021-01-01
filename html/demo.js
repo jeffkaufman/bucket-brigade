@@ -1063,8 +1063,7 @@ async function connect_camera() {
   switch_app_state(APP_CHOOSE_CAMERA);
 
   camera_devices = await navigator.mediaDevices.enumerateDevices();
-  camera_devices = camera_devices.filter(
-    (device) => device.kind=='videoinput' && device.deviceId);
+  camera_devices = camera_devices.filter((device) => device.kind == 'videoinput');
 
   if (!camera_devices.length) {
     window.noCameraFound.style.display = "block";
@@ -1085,13 +1084,23 @@ async function connect_camera() {
 }
 
 async function update_preview_camera() {
+  const video_options = {width: 160};
+
+  let have_permission = !!camera_devices[chosen_camera_index].deviceId;
+  if (have_permission) {
+    video_options.deviceId = {exact: camera_devices[chosen_camera_index].deviceId};
+  }
+
   twilio_tracks = await Twilio.Video.createLocalTracks({
     audio: true,
-    video:  {
-      deviceId: {exact: camera_devices[chosen_camera_index].deviceId},
-      width: 160
-    }
+    video: video_options
   });
+
+  if (!have_permission) {
+    camera_devices = await navigator.mediaDevices.enumerateDevices();
+    camera_devices = camera_devices.filter(
+      (device) => device.kind == 'videoinput' && device.deviceId);
+  }
 
   for (const track of twilio_tracks) {
     if (track.kind === "video") {
