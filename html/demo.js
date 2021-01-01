@@ -1066,7 +1066,7 @@ async function connect_camera() {
   camera_devices = camera_devices.filter(
     (device) => device.kind=='videoinput' && device.deviceId);
 
-  if (!camera_devices) {
+  if (!camera_devices.length) {
     window.noCameraFound.style.display = "block";
     window.cameraPreview.style.display = "none";
     window.nextCamera.style.display = "none";
