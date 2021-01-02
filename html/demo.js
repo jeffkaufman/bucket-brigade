@@ -518,6 +518,31 @@ function switch_app_state(newstate) {
 }
 set_controls();
 
+// If the user has started interacting, and then has not interacted
+// for 15 minutes, refresh the page. This keeps users from staying
+// connected when they don't mean to, and keeps us from running up a
+// large Twilio bill.
+const INACTIVITY_TIMEOUT_S = 60*15;
+let last_active_ts = Date.now();
+function resetInactivityTimer() {
+  last_active_ts = Date.now();
+}
+setInterval(() => {
+  if (app_state != APP_TUTORIAL && app_state != APP_CHOOSE_CAMERA) {
+    // App is at least partially running.
+    if (Date.now() - last_active_ts > INACTIVITY_TIMEOUT_S*1000) {
+      window.location.reload();
+    }
+  }
+}, 30000 /* 30s */);
+
+window.addEventListener('scroll', resetInactivityTimer, true);
+document.addEventListener("touchmove", resetInactivityTimer);
+document.addEventListener("mousemove", resetInactivityTimer);
+document.addEventListener("mousedown", resetInactivityTimer);
+document.addEventListener("keydown", resetInactivityTimer);
+document.addEventListener("keypress", resetInactivityTimer);
+
 let in_lagmute_mode = false;
 function dismissLagmute() {
   in_lagmute_mode = false;
