@@ -330,7 +330,7 @@ class User:
         token = AccessToken(secrets["twilio"]["account_sid"],
                             secrets["twilio"]["api_key"],
                             secrets["twilio"]["api_secret"],
-                            identity=self.name)
+                            identity=self.userid)
 
         # Create a Video grant and add to token
         video_grant = VideoGrant(room=TWILIO_ROOM)

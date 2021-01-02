@@ -180,9 +180,6 @@ input.edited {
 #remote-media-div {
   margin: 1em;
 }
-#remote-media-div > * {
-  width: 160px;
-}
 #remainderWindow > * {
   margin: 1em;
 }
@@ -338,6 +335,22 @@ h1 {
 #noCameraFound {
   display: none;
 }
+.participant {
+  display: none;
+  background-color: white;
+  width: 160;
+  overflow: hidden;
+  min-height: 2em;
+  border-radius: 0.25em;
+  border: 1px solid #ccc;
+}
+.participantInfo {
+  margin: 0.25em;
+}
+.participant > video {
+  width: 160px;
+}
+
 </style>
 
 <link rel=stylesheet href=lyrics.css>

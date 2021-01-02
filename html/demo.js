@@ -86,7 +86,6 @@ function joinBucket(i) {
   }
 }
 
-const bucket_user_div = {};  // userid -> bucket user div
 const user_bucket_index = {};  // userid -> bucket index
 const bucket_divs = [];  // bucket index -> bucket div
 
@@ -588,7 +587,9 @@ function toggle_video() {
         publication.unpublish();
       });
       if (myVideoDiv) {
-        document.getElementById('remote-media-div').removeChild(myVideoDiv);
+        try {
+          participantDivs[myUserid].removeChild(myVideoDiv);
+        } catch {}
         myVideoDiv = null;
       }
     } else {
@@ -598,9 +599,9 @@ function toggle_video() {
       }).then(localVideoTrack => {
         twilio_room.localParticipant.publishTrack(localVideoTrack);
         myVideoDiv = localVideoTrack.attach();
-        document.getElementById('remote-media-div').insertAdjacentElement(
-          'afterbegin', myVideoDiv);
         myVideoDiv.style.transform = 'scale(-1, 1)';
+        ensureParticipantDiv(myUserid);
+        participantDivs[myUserid].appendChild(myVideoDiv);
       }).then(publication => {
         console.log('Successfully unmuted your video:', publication);
       });
@@ -786,14 +787,6 @@ function update_active_users(
   const mic_volume_inputs = [];
   const userids = new Set();
 
-  function removeFromBucket(userid) {
-    bucket_divs[user_bucket_index[userid]].removeChild(
-      bucket_user_div[userid]);
-    delete user_bucket_index[userid];
-    delete bucket_user_div[userid];
-  }
-
-  const bucketedUserids = new Set();
   for (var i = 0; i < user_summary.length; i++) {
     const offset_s = user_summary[i][0];
     const name = user_summary[i][1];
@@ -814,29 +807,30 @@ function update_active_users(
     mic_volume_inputs.push([name, userid, mic_volume, rms_volume, offset_s]);
     userids.add(userid);
 
-    // Only bucket the first 40 users, for performance.
     // Don't update user buckets when we are not looking at that screen.
-    if (i < 40 && window.middle.style.display != "none") {
-      bucketedUserids.add(userid);
-
+    if (window.middle.style.display != "none") {
       if (user_bucket_index[userid] != est_bucket) {
-        if (bucket_user_div[userid]) {
-          removeFromBucket(userid);
+        ensureParticipantDiv(userid);
+        if (user_bucket_index[userid] != null) {
+          bucket_divs[user_bucket_index[userid]].removeChild(
+            participantDivs[userid]);
         }
-
         user_bucket_index[userid] = est_bucket;
-        const bucket_div = document.createElement("div");
-        bucket_div.classList.add("bucketUser");
-        bucket_div.appendChild(document.createTextNode(name));
-        bucket_divs[est_bucket].appendChild(bucket_div);
-        bucket_user_div[userid] = bucket_div;
+        bucket_divs[est_bucket].appendChild(participantDivs[userid]);
+      }
+
+      const participantDiv = participantDivs[userid];
+      const displayName = userid == myUserid ? (name + " (me)") : name;
+      if (participantDiv && participantDiv.name != displayName) {
+        // First child is always participantInfo.
+        participantDiv.children[0].innerText = displayName;
+        participantDiv.name = displayName;
       }
     }
-  }
 
-  for (const userid in user_bucket_index) {
-    if (!bucketedUserids.has(userid)) {
-      removeFromBucket(userid);
+    for (const userid in participantDivs) {
+      participantDivs[userid].style.display =
+        userids.has(userid) ? "inline-block" : "none";
     }
   }
 
@@ -1052,12 +1046,26 @@ let in_aftersong = false;  // Are other people still singing?
 
 let twilio_room = null;
 
-const activeTrackDivs = {};
+const activeTrackDivs = {};  // name -> track div
+const participantDivs = {};  // identity -> tracks for participant
 let myVideoDiv = null;
 
 let twilio_tracks = null;
 let camera_devices = null;
 let chosen_camera_index = 0;
+
+function ensureParticipantDiv(userid) {
+  let div = participantDivs[userid];
+  if (!div) {
+    div = document.createElement("div");
+    div.classList.add("participant");
+    participantDivs[userid] = div;
+
+    const info = document.createElement("div");
+    info.classList.add("participantInfo");
+    div.appendChild(info);
+  }
+}
 
 async function connect_camera() {
   switch_app_state(APP_CHOOSE_CAMERA);
@@ -1124,11 +1132,12 @@ async function selected_camera(useCamera) {
   }
 
   if (useCamera) {
-    document.getElementById('remote-media-div').insertAdjacentElement(
-      'afterbegin', myVideoDiv);
-    myVideoDiv.style.transform = 'scale(-1, 1)';
     localStorage.setItem("camera_device_id",
                          camera_devices[chosen_camera_index].deviceId);
+    ensureParticipantDiv(myUserid);
+    participantDivs[myUserid].appendChild(myVideoDiv);
+    user_bucket_index[myUserid] = 0;
+    bucket_divs[0].appendChild(participantDivs[myUserid]);
   } else {
     videoToggleButton.style.display = "none";
     myVideoDiv = null;
@@ -1160,56 +1169,79 @@ function connect_twilio() {
     window.videoToggleButton.innerText =
       videoPaused ? "enable video" : "disable video";
 
-    function addTrack(track) {
-      console.log("adding track", track);
-      if (track.name in activeTrackDivs) {
-        console.log("skipping already present track", track);
-        return;
-      }
-      const trackDiv = track.attach();
-      activeTrackDivs[track.name] = trackDiv;
-      document.getElementById('remote-media-div').appendChild(trackDiv);
-    }
-
-    function removeTrack(track) {
-      console.log("removing track", track);
-      const trackDiv = activeTrackDivs[track.name];
-      if (trackDiv) {
-        delete activeTrackDivs[track.name];
-        document.getElementById('remote-media-div').removeChild(trackDiv);
-      }
-    }
-
-    function addPublicationOrTrack(publicationOrTrack) {
-      console.log("addPublicationOrTrack", publicationOrTrack);
-
-      if (publicationOrTrack.mediaStreamTrack) {
-        addTrack(publicationOrTrack);
-      } else {
-        const publication = publicationOrTrack;
-        if (publication.isSubscribed) {
-          addTrack(publication.track);
+    function addTrack(identity) {
+      return (track) => {
+        console.log("adding track", track);
+        if (track.name in activeTrackDivs) {
+          console.log("skipping already present track", track);
+          return;
         }
-        publication.on('subscribed', addTrack);
-        publication.on('unsubscribed', removeTrack);
-        }
+        const trackDiv = track.attach();
+        activeTrackDivs[track.name] = trackDiv;
+        participantDivs[identity].appendChild(trackDiv);
+      };
     }
 
-    function removePublicationOrTrack(publicationOrTrack) {
-      if (publicationOrTrack.mediaStreamTrack) {
-        removeTrack(publicationOrTrack);
-      }
+    function removeTrack(identity) {
+      return (track) => {
+        console.log("removing track", track);
+        const trackDiv = activeTrackDivs[track.name];
+        if (trackDiv) {
+          delete activeTrackDivs[track.name];
+          try {
+            participantDivs[identity].removeChild(trackDiv);
+          } catch {}
+        }
+      };
+    }
+
+    function addPublicationOrTrack(identity) {
+      return (publicationOrTrack) => {
+        if (publicationOrTrack.mediaStreamTrack) {
+          addTrack(identity)(publicationOrTrack);
+        } else {
+          const publication = publicationOrTrack;
+          if (publication.isSubscribed) {
+            addTrack(identity)(publication.track);
+          }
+          publication.on('subscribed', addTrack(identity));
+          publication.on('unsubscribed', removeTrack(identity));
+        }
+      };
+    }
+
+    function removePublicationOrTrack(identity) {
+      return (publicationOrTrack) => {
+        if (publicationOrTrack.mediaStreamTrack) {
+          removeTrack(identity)(publicationOrTrack);
+        }
+      };
     }
 
     function addParticipant(participant) {
-      participant.tracks.forEach(addPublicationOrTrack);
-      participant.on('trackSubscribed', addPublicationOrTrack);
-      participant.on('trackUnsubscribed', removePublicationOrTrack);
+      console.log("addParticipant", participant);
+
+      ensureParticipantDiv(participant.identity);
+
+      participant.tracks.forEach(
+        addPublicationOrTrack(participant.identity));
+      participant.on('trackSubscribed',
+                     addPublicationOrTrack(participant.identity));
+      participant.on('trackUnsubscribed',
+                     removePublicationOrTrack(participant.identity));
     }
 
     function removeParticipant(participant) {
       console.log("removeParticipant", participant);
-      participant.tracks.forEach(removeTrack);
+      participant.tracks.forEach(removeTrack(participant.identity));
+
+      const div = participantDivs[participant.identity];
+      if (div) {
+        if (user_bucket_index[participant.identity] != null) {
+          bucket_divs[user_bucket_index[participant.identity]].removeChild(div);
+        }
+        delete participantDivs[participant.identity];
+      }
     }
 
     room.on('participantConnected', addParticipant);
