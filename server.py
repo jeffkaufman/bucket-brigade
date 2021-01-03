@@ -494,7 +494,6 @@ def update_users(userid, username, server_clock, client_read_clock) -> None:
     delay_samples = server_clock - client_read_clock
     if userid not in users:
         users[userid] = User(userid, username, server_clock, delay_samples)
-        users[userid_lead].send("delay_seconds", state.first_bucket)
         if ENABLE_TWILIO:
             users[userid].allocate_twilio_token()
 
