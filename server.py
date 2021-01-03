@@ -49,6 +49,21 @@ except Exception:
 
 SERVER_STARTUP_TIME = int(time.time())
 
+ENABLE_TWILIO = True
+TWILIO_ROOM = "BucketBrigade"
+SECRETS_FNAME = "secrets.json"
+
+secrets = {}
+if os.path.exists(SECRETS_FNAME):
+    with open(SECRETS_FNAME) as inf:
+        secrets = json.loads(inf.read())
+else:
+    ENABLE_TWILIO = False
+
+if ENABLE_TWILIO:
+    from twilio.jwt.access_token import AccessToken
+    from twilio.jwt.access_token.grants import VideoGrant
+
 class State():
     def __init__(self):
         self.reset()
@@ -311,6 +326,18 @@ class User:
         self.send("bpr", state.bpr)
         self.send("tracks", tracks)
 
+    def allocate_twilio_token(self):
+        token = AccessToken(secrets["twilio"]["account_sid"],
+                            secrets["twilio"]["api_key"],
+                            secrets["twilio"]["api_secret"],
+                            identity=self.userid)
+
+        # Create a Video grant and add to token
+        video_grant = VideoGrant(room=TWILIO_ROOM)
+        token.add_grant(video_grant)
+
+        self.send("twilio_token", token.to_jwt())
+
     # XXX: Are we sure we do not need to clear any of the other state across reconnects???
     def flush(self) -> None:
         """Delete any state that shouldn't be persisted across reconnects"""
@@ -463,6 +490,8 @@ def update_users(userid, username, server_clock, client_read_clock) -> None:
     delay_samples = server_clock - client_read_clock
     if userid not in users:
         users[userid] = User(userid, username, server_clock, delay_samples)
+        if ENABLE_TWILIO:
+            users[userid].allocate_twilio_token()
 
     users[userid].last_heard_server_clock = server_clock
     users[userid].delay_samples = delay_samples

@@ -67,6 +67,9 @@
 #tutorial button {
   margin: 0.25em;
 }
+#chooseCamera {
+  display: none;
+}
 .headphoneAdvice,
 #q_headphones_present,
 #q_wired_headphones_available,
@@ -78,7 +81,7 @@
   display: none;
 }
 
-#startSingingCountdown {
+#startSingingCountdown, #stopSingingCountdown {
   display: none;
 }
 #countdown {
@@ -174,7 +177,9 @@ input.edited {
   border-radius: 0.25em;
   padding: 0.5em;
 }
-
+#remote-media-div {
+  margin: 1em;
+}
 #remainderWindow > * {
   margin: 1em;
 }
@@ -323,16 +328,38 @@ h1 {
   display: none;
 }
 
-#lagmute {
-  color: red;
+#lagmute, #spectatorMode {
+  display: none;
+  padding: 0.5em;
+}
+#noCameraFound {
   display: none;
 }
+.participant {
+  display: none;
+  background-color: white;
+  width: 160;
+  overflow: hidden;
+  min-height: 2em;
+  border-radius: 0.25em;
+  border: 1px solid #ccc;
+}
+.participantInfo {
+  margin: 0.25em;
+}
+.participant > video {
+  width: 160px;
+}
+
 </style>
 
 <link rel=stylesheet href=lyrics.css>
 <link rel="icon"
       type="image/png"
       href="https://www.jefftk.com/bucket-brigade-logo.png">
+
+<script src="//media.twiliocdn.com/sdk/js/video/releases/2.8.0/twilio-video.min.js"></script>
+
 </head>
 
 <div id=page>
@@ -343,6 +370,8 @@ h1 {
     <img src="https://www.jefftk.com/bucket-brigade-logo.png" width=64 height=64>
     <h1>Bucket Brigade</h1>
     </div>
+
+    <a href="no-video-temp/">Non-Video Version (temporary)</a>
 
     <a target="_blank" href="recordings/">Recent Recordings</a>
 
@@ -577,6 +606,15 @@ Google Calendar.
   </div>
   </div>
 
+<div id=chooseCamera>
+<div id=noCameraFound>No camera found</div>
+<div id=cameraPreview><span>loading...</span></div>
+<p>
+<button id=nextCamera>Switch camera</button>
+<button id=chosenCamera>Use this camera</button>
+<button id=noCamera>Continue without camera</button>
+</div>
+
 <div id=nameSelector>
 
 Enter your name and press enter: <input id=userName></input>
@@ -723,8 +761,11 @@ value=100>
 
 <div>
 
+<div id="remote-media-div">
+</div>
+
 <div id=chooseLeaderInstructions>
-Talk to each other in chat and figure out who's going to lead the next
+Talk to each other and figure out who's going to lead the next
 song.  They should click the "Lead a Song" button.
 </div>
 
@@ -777,7 +818,10 @@ User <i><span id=leaderName>...</span></i> is leading
   <div>
     <button disabled id=micToggleButton>mute mic</button>
     <button disabled id=speakerToggleButton>mute speaker</button>
-    <div id=lagmute>You've been muted due to lag</div>
+    <button disabled id=videoToggleButton>...</button>
+    <div id=lagmute>Due to lag, your singing is not included
+      <button id=unlagmute>Try Again</button></div>
+    <div id=spectatorMode>As a spectator, your singing is not included</div>
   </div>
 
   <div>

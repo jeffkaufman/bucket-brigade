@@ -1,3 +1,4 @@
 numpy==1.19.2
 opuslib==3.0.1
 SharedArray==3.2.1
+twilio==6.50.1
