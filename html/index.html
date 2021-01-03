@@ -786,43 +786,35 @@ value=100>
 <div class=warning id=lostConnectivity>Lost connectivity to the server. Trying to reconnect&hellip;</div>
 
 <div>
+  <div id=chooseLeaderInstructions>
+    Talk to each other and figure out who's going to lead the next
+    song.  They should click the "Lead a Song" button.
+  </div>
 
-<div id=chooseLeaderInstructions>
-Talk to each other and figure out who's going to lead the next
-song.  They should click the "Lead a Song" button.
-</div>
+   <div id=activeLeader>
+    User <i><span id=leaderName>...</span></i> is leading
+  </div>
 
-<div id=activeLeader>
-User <i><span id=leaderName>...</span></i> is leading
-</div>
-
-<fieldset id=songControls>
-<button id=takeLead>Lead a Song</button>
-<button id=jumpToEnd>Jump To End</button>
-<select id=backingTrack></select>
-</fieldset>
+  <fieldset id=songControls>
+    <button id=takeLead>Lead a Song</button>
+    <button id=jumpToEnd>Jump To End</button>
+    <select id=backingTrack></select>
+  </fieldset>
 </div>
 
 <div id=startSingingCountdown>
-
   Waiting for the song to get to us...
-
   <div id=startCountdown></div>
-
 </div>
 
 <div id=stopSingingCountdown>
-
   Waiting for the later users to finish singing...
-
   <div id=stopCountdown></div>
-
 </div>
 
-<div id=buckets>
-</div>
+<div id=buckets></div>
 
-</div>
+</div> <!-- remainderWindow -->
 
 </div>
 
