@@ -346,23 +346,12 @@ function persist_checkbox(checkboxId) {
 persist("userName");
 persist_checkbox("disableTutorial");
 persist_checkbox("disableLatencyMeasurement");
-
-//don't persist "disable auto gain" because it's an experimental feature
+// Don't persist "disable auto gain" because it's an experimental feature
 
 // Persisting select boxes is harder, so we do it manually for inSelect.
-
-function setMainAppVisibility() {
-  if (window.userName.value &&
-      app_state != APP_TUTORIAL &&
-      app_state != APP_CHOOSE_CAMERA) {
-    window.mainApp.style.display = "block";
-  }
-}
-
-setMainAppVisibility();
-window.userName.addEventListener("change", setMainAppVisibility);
-
 inSelect.addEventListener("change", in_select_change);
+
+window.userName.addEventListener("change", set_controls);
 
 async function enumerate_inputs() {
   var mic_enumerator = new bb.MicEnumerator();
@@ -440,6 +429,11 @@ function set_controls() {
     startButton.style.display = 'none';
   }
 
+  setVisibleIn(window.mainApp,
+               window.userName.value ?
+               allStatesExcept([APP_RUNNING]) :
+               allStatesExcept([APP_TUTORIAL, APP_CHOOSE_CAMERA]));
+
   setVisibleIn(window.inputSelector,
                allStatesExcept(ACTIVE_STATES.concat(
                  [APP_TUTORIAL, APP_CHOOSE_CAMERA])));
@@ -482,7 +476,6 @@ function set_controls() {
   window.estLatency.innerText = "...";
 
   window.backingTrack.display = "none";
-  setMainAppVisibility();
 }
 
 function in_select_change() {
