@@ -391,6 +391,7 @@ h1 {
   <span id=debugSettingsTab>Debug Settings</span>
   <span id=advancedSettingsTab>Advanced Settings</span>
   <span id=booktimeTab>Reserve</span>
+  <span id=aboutTab>About</span>
 </div>
 
 <div id=advancedSettings class=middlePane>
@@ -474,6 +475,34 @@ Google Calendar.
 </div>
 
 <iframe id=calendar src="https://calendar.google.com/calendar/u/0/embed?src=gsc268k1lu78lbvfbhphdr0cs4@group.calendar.google.com"></iframe>
+</div>
+</div>
+
+<div id=about class=middlePane>
+<div style="max-width: 40em">
+
+Bucket Brigade is a program for making music over the Internet. <a
+href="https://github.com/gwillen">Glenn</a>, <a
+href="https://www.jefftk.com">Jeff</a>, and <a
+href="https://github.com/gwillen/solstice-audio-test/graphs/contributors">others</a>
+develop and maintain it on a "best effort" basis.
+
+<p>
+
+It is free to use, but does cost about 25&cent;/person/hour to run.
+If you end up using it much, it would be nice if you would send us a
+small amount of money to cover server expenses.
+
+<p>
+
+The code is <a
+href="https://github.com/gwillen/solstice-audio-test/">open
+source</a>, and if you would be interested in running your own
+instance we'd be happy to help you get set up.  It is also possible to
+use as a library, and in that form it has handled an event with <a
+href="https://www.jefftk.com/p/secular-solstice-2020">over 200
+users</a>.
+
 </div>
 </div>
 
@@ -874,6 +903,7 @@ User <i><span id=leaderName>...</span></i> is leading
     window.debugSettingsTab,
     window.debugInfoTab,
     window.booktimeTab,
+    window.aboutTab,
     window.advancedSettingsTab,
   ];
 
@@ -896,6 +926,7 @@ User <i><span id=leaderName>...</span></i> is leading
    [window.debugSettings, window.debugSettingsTab],
    [window.debugInfo, window.debugInfoTab],
    [window.booktime, window.booktimeTab],
+   [window.about, window.aboutTab],
    [window.advancedSettings, window.advancedSettingsTab]].forEach(
     configureClickListener);
 
