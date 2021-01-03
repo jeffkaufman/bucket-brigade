@@ -35,23 +35,33 @@
   border: none;
 }
 #chatWindow {
-  margin-left: 1em;
-  margin-right: 1em;
+  height: 100%;
+  width: 15em;
+  float: right;
+  display: flex;
+  flex-direction: column;
 }
 #chatDisplay {
   overflow-y: scroll;
-  padding: 0.25em;
-  height: 15em;
-  background-color: rgba(0, 0, 0, 0.05);
+  flex-grow: 1;
+  /*  background-color: rgba(0, 0, 0, 0.03); */
+  border-left: 1px solid #aaa;
 }
-#chatPost {
-  width: 5em;
+#chatDisplay > * {
+  margin: 0.5em;
+}
+#chatForm {
+  margin: 0;
+}
+#chatForm > input {
+  display: block;
+  width: 100%;
 }
 .chatName {
   font-style: italic;
 }
 #chatEntry {
-  width: calc(100% - 5em);
+  width: 100%;
 }
 #lostConnectivity {
   display: none;
@@ -177,6 +187,11 @@ input.edited {
   border-radius: 0.25em;
   padding: 0.5em;
 }
+#remainderWindow {
+  height: 100%;
+  width: calc(100% - 17em);
+  float: left;
+}
 #remainderWindow > * {
   margin: 1em;
 }
@@ -219,6 +234,14 @@ body {
   flex-grow: 1;
   overflow-y: scroll;
 }
+
+#middle {
+  overflow-y: hidden;
+}
+#middle > * {
+  overflow-y: scroll;
+}
+
 
 #noAudioWorklet {
   display: block;
@@ -301,11 +324,7 @@ h1 {
   width: 100%;
   height: 100%;
   margin: 0;
-}
-
-#mainInterface > * {
-  display: flex;
-  flex-direction: column;
+  overflow-y: hidden;
 }
 
 #toplinks img {
@@ -773,12 +792,6 @@ value=100>
 
 </div>
 <div id=mainInterface>
-<div>
-
-<div id=chatWindow>
-  <div id=chatDisplay></div>
-  <form id=chatForm><input type="text" id=chatEntry></input><input type="submit" id=chatPost value="Post"></input></form>
-</div>
 
 <div id=remainderWindow>
 
@@ -815,6 +828,9 @@ value=100>
 
 </div> <!-- remainderWindow -->
 
+<div id=chatWindow>
+  <div id=chatDisplay></div>
+  <form id=chatForm><input type="text" id=chatEntry></input><input type="submit" id=chatPost value="Post"></input></form>
 </div>
 
 </div>
