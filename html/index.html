@@ -175,13 +175,34 @@ input.edited {
   flex-wrap: wrap;
 }
 .bucket {
+  flex-grow: 1;
   display: inline-block;
-  border: 1px solid black;
+  border: 1px solid #aaa;
   border-radius: 0.25em;
   margin: 0.5em;
-  padding: 0.5em;
   width: 10em;
   overflow: hidden;
+}
+.bucket > * {
+  margin : 0.5em;
+}
+.bucketTitle {
+  width: 100%;
+  border-radius: 0.25em 0.25em 0 0;
+  border-bottom: 1px solid #aaa;
+  margin: 0;
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+}
+.bucketTitle > button {
+  margin: 0.25em;
+  margin-right: 0.5em;
+}
+.bucketName {
+  font-weight: bold;
+  margin: 0.25em;
+  margin-left: 0.5em;
 }
 #roundsSettings {
   border: 1px solid black;
@@ -190,7 +211,7 @@ input.edited {
 }
 #remainderWindow {
   height: 100%;
-  width: calc(100% - 17em);
+  width: calc(100% - 15em);
   float: left;
   display: flex;
   flex-direction: column;

@@ -80,7 +80,7 @@ function prettyTime(ms) {
 
 function joinBucket(i) {
   return () => {
-    window.buckets.children[i].children[1].disabled = true;
+    window.buckets.children[i].children[0].children[1].disabled = true;
     audioOffset.value = first_bucket_s + DELAY_INTERVAL * i;
     audio_offset_change();
   }
@@ -93,15 +93,21 @@ for (var i = 0; i < N_BUCKETS; i++) {
   var bucket = document.createElement("div");
   bucket.classList.add("bucket");
 
-  var bucketName = document.createElement("h4");
+  var bucketTitle = document.createElement("div");
+  bucketTitle.classList.add("bucketTitle");
+
+  var bucketName = document.createElement("span");
+  bucketName.classList.add("bucketName");
   bucketName.appendChild(document.createTextNode(i+1))
-  bucket.appendChild(bucketName);
+  bucketTitle.appendChild(bucketName);
 
   var joinButton = document.createElement("button");
   joinButton.appendChild(document.createTextNode("join"));
   joinButton.addEventListener("click", joinBucket(i));
   joinButton.disabled = true;
-  bucket.appendChild(joinButton);
+  bucketTitle.appendChild(joinButton);
+
+  bucket.appendChild(bucketTitle);
 
   var bucketUsers = document.createElement("div");
   bucketUsers.classList.add("bucketUsers");
@@ -816,7 +822,7 @@ function update_active_users(
 
     if (userid == myUserid) {
       for (var j = 0 ; j < N_BUCKETS; j++) {
-        window.buckets.children[j].children[1].disabled =
+        window.buckets.children[j].children[0].children[1].disabled =
           (!in_song && !hasLeader) || est_bucket === j;
       }
     }
