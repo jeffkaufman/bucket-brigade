@@ -1085,6 +1085,7 @@ async function connect_camera() {
   switch_app_state(APP_CHOOSE_CAMERA);
   window.nextCamera.disabled = true;
   window.chosenCamera.disabled = true;
+  window.noCamera.disabled = true;
 
   camera_devices = await navigator.mediaDevices.enumerateDevices();
   camera_devices = camera_devices.filter((device) => device.kind == 'videoinput');
@@ -1119,6 +1120,11 @@ async function update_preview_camera() {
     audio: true,
     video: video_options
   });
+
+  // If we enabled this earlier, it would be possible for fast
+  // clicking users to continue before we have had a chance to remove
+  // the camera
+  window.noCamera.disabled = false;
 
   if (!have_permission) {
     camera_devices = await navigator.mediaDevices.enumerateDevices();
@@ -1159,6 +1165,9 @@ async function selected_camera(useCamera) {
   } else {
     videoToggleButton.style.display = "none";
     myVideoDiv = null;
+    for (const track of twilio_tracks) {
+      track.stop();
+    }
     twilio_tracks = await Twilio.Video.createLocalTracks({
       audio: true,
       video: false
