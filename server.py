@@ -336,7 +336,10 @@ class User:
         video_grant = VideoGrant(room=TWILIO_ROOM)
         token.add_grant(video_grant)
 
-        self.send("twilio_token", token.to_jwt())
+        jwt = token.to_jwt()
+        if type(jwt) == type(b""):
+            jwt = jwt.decode('utf8')
+        self.send("twilio_token", jwt)
 
     # XXX: Are we sure we do not need to clear any of the other state across reconnects???
     def flush(self) -> None:
