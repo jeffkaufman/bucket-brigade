@@ -783,10 +783,6 @@ def handle_special(query_params, server_clock, user=None, client_read_clock=None
 
         if user is not None:
             state.song_end_clock = user.last_write_clock
-            # TODO: Make a better interface for telling users that the song has ended.
-            insert_event("Song Ended @%s" % (
-                state.song_end_clock // SAMPLE_RATE),
-                         state.song_end_clock)
         else:
             state.song_end_clock = server_clock
 
