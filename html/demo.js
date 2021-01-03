@@ -239,18 +239,12 @@ function takeLeadClick() {
     singer_client.x_send_metadata("markStopSinging", true);
     window.takeLead.textContent = "Lead a Song";
     leadButtonState = "take-lead";
-    window.jumpToEnd.disabled = false;
   } else {
     throw new Error("unknown state " + leadButtonState);
   }
 }
 
 window.takeLead.addEventListener("click", takeLeadClick);
-
-window.jumpToEnd.addEventListener("click", () => {
-  audioOffset.value = 115;
-  audio_offset_change();
-});
 
 window.bpm.addEventListener("change", () => {
   const newBpm = parseInt(window.bpm.value);
@@ -796,13 +790,11 @@ function update_active_users(
       leadButtonState != "stop-singing") {
     window.takeLead.textContent = "Start Singing";
     leadButtonState = "start-singing";
-    window.jumpToEnd.disabled = true;
     window.backingTrack.style.display = "block";
     window.backingTrack.selectedIndex = 0;
   } else if (!imLeading && leadButtonState != "leadButtonState") {
     window.takeLead.textContent = "Lead a Song";
     leadButtonState = "take-lead";
-    window.jumpToEnd.disabled = false;
     window.backingTrack.style.display = "none";
   }
 
