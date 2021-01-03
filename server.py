@@ -111,10 +111,12 @@ STATUS_PRINT_INTERVAL_S = 10
 # Leave this much space between users. Ideally this would be very
 # short, but it needs to be long enough to cover "client total time
 # consumed" or else people won't all hear each other.
-DELAY_INTERVAL = 3  # 3s; keep in sync with demo.js:DELAY_INTERVAL
+DELAY_INTERVAL = 3  # 3s; keep in sync with demo.js:DELAY_INTERVAL and
+                    # index.html:audioOffset
 
 # How many links to use for the chain of users before starting to double up.
-LAYERING_DEPTH = 6  # keep in sync with demo.js:N_BUCKETS
+LAYERING_DEPTH = 6  # keep in sync with demo.js:N_BUCKETS and
+                    # index.html:audioOffset
 
 # If we have not heard from a user in N seconds, forget all about them.
 USER_LIFETIME_SAMPLES = SAMPLE_RATE * 60 * 60  # 1hr
@@ -492,6 +494,7 @@ def update_users(userid, username, server_clock, client_read_clock) -> None:
     delay_samples = server_clock - client_read_clock
     if userid not in users:
         users[userid] = User(userid, username, server_clock, delay_samples)
+        users[userid_lead].send("delay_seconds", state.first_bucket)
         if ENABLE_TWILIO:
             users[userid].allocate_twilio_token()
 
