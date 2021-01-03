@@ -782,9 +782,7 @@ function estimateBucket(offset_s, clamp=true) {
 }
 
 function update_active_users(
-  user_summary, server_sample_rate, leaderId, n_users) {
-  const hasLeader = !!leaderId;
-  const imLeading = hasLeader && myUserid == leaderId;
+  user_summary, server_sample_rate, hasLeader, imLeading, n_users) {
 
   if (imLeading && leadButtonState != "start-singing" &&
       leadButtonState != "stop-singing") {
@@ -793,7 +791,7 @@ function update_active_users(
     window.backingTrack.style.display = "inline-block";
     window.backingTrack.selectedIndex = 0;
   } else if (!imLeading && leadButtonState != "leadButtonState") {
-    window.takeLead.textContent = "Lead a Song";
+    window.takeLead.textContent = hasLeader ? "Seize Lead" : "Lead a Song";
     leadButtonState = "take-lead";
     window.backingTrack.style.display = "none";
   }
@@ -1341,73 +1339,90 @@ async function start_singing() {
       connect_twilio();
     }
 
-    in_song = song_start_clock && song_start_clock <= client_read_clock &&
-      (!song_end_clock || song_end_clock > client_read_clock);
+    if (user_summary.length) {
+      in_song = song_start_clock && song_start_clock <= client_read_clock &&
+        (!song_end_clock || song_end_clock > client_read_clock);
 
-    let leaderName = "";
-    for (var i = 0; i < user_summary.length; i++) {
-      if (user_summary[i][3] == metadata.leader) {
-        leaderName = user_summary[i][1];
-      }
-    }
-
-    if (leaderName) {
-      window.chooseLeaderInstructions.style.display = "none";
-      window.activeLeader.style.display = "block";
-      window.leaderName.innerText = leaderName;
-    } else {
-      window.chooseLeaderInstructions.style.display = "block";
-      window.activeLeader.style.display = "none";
-    }
-
-    update_active_users(user_summary, server_sample_rate, metadata.leader, n_connected_users);
-
-    // XXX: needs to be reimplemented in terms of alarms / marks
-    if (song_start_clock && song_start_clock > client_read_clock) {
-      window.startSingingCountdown.style.display = "block";
-      in_beforesong = true;
-      window.startCountdown.innerText = Math.round(
-        (song_start_clock - client_read_clock) / server_sample_rate) + "s";
-    } else {
-      window.startSingingCountdown.style.display = "none";
-      in_beforesong = false;
-
-      if (song_end_clock && song_end_clock < client_read_clock) {
-        // Figure out the clock that corresponds to the highest active
-        // bucket, but don't count users who have manually seat to a
-        // position past the last bucket.
-        let highest_bucket = 0;
-        let my_bucket = 0;
-        for (var i = 0; i < user_summary.length; i++) {
-          let est_bucket = estimateBucket(user_summary[i][0], /*clamp=*/ false);
-          if (est_bucket > highest_bucket && est_bucket < N_BUCKETS) {
-            highest_bucket = est_bucket;
-          }
-          if (user_summary[i][3] == myUserid) {
-            my_bucket = est_bucket;
-          }
+      let leaderName = "";
+      for (var i = 0; i < user_summary.length; i++) {
+        if (user_summary[i][3] == metadata.leader) {
+          leaderName = user_summary[i][1];
         }
+      }
 
-        const effective_end_clock = song_end_clock + (
-          (highest_bucket - my_bucket) * DELAY_INTERVAL * server_sample_rate);
-        if (effective_end_clock > client_read_clock) {
-          in_aftersong = true;
-          window.stopSingingCountdown.style.display = "block";
-          window.stopCountdown.innerText = Math.round(
-            (effective_end_clock - client_read_clock) / server_sample_rate) + "s";
+      const hasLeader = !!leaderName;
+      const imLeading = metadata.leader == myUserid
+
+      update_active_users(user_summary, server_sample_rate,
+                          hasLeader, imLeading, n_connected_users);
+
+      // XXX: needs to be reimplemented in terms of alarms / marks
+      if (song_start_clock && song_start_clock > client_read_clock) {
+        window.startSingingCountdown.style.display = "block";
+        in_beforesong = true;
+        window.startCountdown.innerText = Math.round(
+          (song_start_clock - client_read_clock) / server_sample_rate) + "s";
+      } else {
+        window.startSingingCountdown.style.display = "none";
+        in_beforesong = false;
+
+        if (song_end_clock && song_end_clock < client_read_clock) {
+          // Figure out the clock that corresponds to the highest active
+          // bucket, but don't count users who have manually seat to a
+          // position past the last bucket.
+          let highest_bucket = 0;
+          let my_bucket = 0;
+          for (var i = 0; i < user_summary.length; i++) {
+            let est_bucket = estimateBucket(user_summary[i][0], /*clamp=*/ false);
+            if (est_bucket > highest_bucket && est_bucket < N_BUCKETS) {
+              highest_bucket = est_bucket;
+            }
+            if (user_summary[i][3] == myUserid) {
+              my_bucket = est_bucket;
+            }
+          }
+
+          const effective_end_clock = song_end_clock + (
+            (highest_bucket - my_bucket) * DELAY_INTERVAL * server_sample_rate);
+          if (effective_end_clock > client_read_clock) {
+            in_aftersong = true;
+            window.stopSingingCountdown.style.display = "block";
+            window.stopCountdown.innerText = Math.round(
+              (effective_end_clock - client_read_clock) / server_sample_rate) + "s";
+          } else {
+            window.stopSingingCountdown.style.display = "none";
+            in_aftersong = false;
+          }
         } else {
           window.stopSingingCountdown.style.display = "none";
           in_aftersong = false;
         }
+      }
+
+      // Either in_song and in_aftersong could have changed above, so
+      // check whether we need to mute/unmute Twilio.
+      updateTwilioMute();
+
+      if (hasLeader || in_song || in_aftersong || in_beforesong) {
+        window.chooseLeaderInstructions.style.display = "none";
+        window.activeLeader.style.display = "inline-block";
+
+        if (in_aftersong) {
+          window.leaderStatus.innerText = "Later people are still singing";
+        } else if (in_beforesong || !hasLeader) {
+          window.leaderStatus.innerText = "Earlier people are singing";
+        } else if (in_song) {
+          window.leaderStatus.innerText = imLeading ?
+            "You have started" : leaderName + " has started";
+        } else {
+          window.leaderStatus.innerText = imLeading ?
+            "You are preparing to start" : leaderName + " is preparing to start";
+        }
       } else {
-        window.stopSingingCountdown.style.display = "none";
-        in_aftersong = false;
+        window.chooseLeaderInstructions.style.display = "inline-block";
+        window.activeLeader.style.display = "none";
       }
     }
-
-    // Either in_song and in_aftersong could have changed above, so
-    // check whether we need to mute/unmute Twilio.
-    updateTwilioMute();
 
     chats.forEach((msg) => receiveChatMessage(msg[0], msg[1]));
     if (tracks) {

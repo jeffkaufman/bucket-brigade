@@ -168,11 +168,22 @@ input.edited {
 #backingVolumeSlider {
   width: 30em;
 }
+#remainderWindow {
+  height: 100%;
+  width: calc(100% - 15em);
+  float: left;
+  display: flex;
+  flex-direction: column;
+}
+#remainderWindow > * {
+  margin: 1em;
+}
 #buckets {
   flex-grow: 1;
   display: flex;
   flex-direction: row;
   flex-wrap: wrap;
+  margin: 0.5em;
 }
 .bucket {
   flex-grow: 1;
@@ -208,16 +219,6 @@ input.edited {
   border: 1px solid black;
   border-radius: 0.25em;
   padding: 0.5em;
-}
-#remainderWindow {
-  height: 100%;
-  width: calc(100% - 15em);
-  float: left;
-  display: flex;
-  flex-direction: column;
-}
-#remainderWindow > * {
-  margin: 1em;
 }
 
 body {
@@ -389,6 +390,14 @@ h1 {
 }
 .participant > video {
   width: 160px;
+}
+#songControls {
+  display: inline-block;
+}
+#aboveBuckets {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
 }
 </style>
 
@@ -820,31 +829,34 @@ value=100>
 
 <div class=warning id=lostConnectivity>Lost connectivity to the server. Trying to reconnect&hellip;</div>
 
-<div>
-  <div id=chooseLeaderInstructions>
-    Talk to each other and figure out who's going to lead the next
-    song.  They should click the "Lead a Song" button.
+<div id=aboveBuckets>
+  <div>
+    <div id=chooseLeaderInstructions>
+      Talk to each other and figure out who's going to lead the next
+      song.
+    </div>
+
+    <div id=activeLeader>
+      <span id=leaderStatus>...</span>
+    </div>
+
+    <div id=songControls>
+      <button id=takeLead>Lead a Song</button>
+      <select id=backingTrack></select>
+    </div>
   </div>
 
-   <div id=activeLeader>
-    User <i><span id=leaderName>...</span></i> is leading
+  <div id=startSingingCountdown>
+    Waiting for the song to get to us...
+    <span id=startCountdown></span>
   </div>
 
-  <fieldset id=songControls>
-    <button id=takeLead>Lead a Song</button>
-    <select id=backingTrack></select>
-  </fieldset>
+  <div id=stopSingingCountdown>
+    Waiting for later users to finish singing...
+    <span id=stopCountdown></span>
+  </div>
 </div>
 
-<div id=startSingingCountdown>
-  Waiting for the song to get to us...
-  <div id=startCountdown></div>
-</div>
-
-<div id=stopSingingCountdown>
-  Waiting for the later users to finish singing...
-  <div id=stopCountdown></div>
-</div>
 
 <div id=buckets></div>
 
