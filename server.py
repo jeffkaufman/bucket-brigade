@@ -50,7 +50,6 @@ except Exception:
 SERVER_STARTUP_TIME = int(time.time())
 
 ENABLE_TWILIO = True
-TWILIO_ROOM = "BucketBrigade"
 SECRETS_FNAME = "secrets.json"
 
 secrets = {}
@@ -333,7 +332,7 @@ class User:
                             identity=self.userid)
 
         # Create a Video grant and add to token
-        video_grant = VideoGrant(room=TWILIO_ROOM)
+        video_grant = VideoGrant(room=secrets["twilio"]["room"])
         token.add_grant(video_grant)
 
         jwt = token.to_jwt()
