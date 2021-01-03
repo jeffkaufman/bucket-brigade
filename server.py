@@ -114,7 +114,7 @@ STATUS_PRINT_INTERVAL_S = 10
 DELAY_INTERVAL = 3  # 3s; keep in sync with demo.js:DELAY_INTERVAL
 
 # How many links to use for the chain of users before starting to double up.
-LAYERING_DEPTH = 7  # keep in sync with demo.js:N_BUCKETS
+LAYERING_DEPTH = 6  # keep in sync with demo.js:N_BUCKETS
 
 # If we have not heard from a user in N seconds, forget all about them.
 USER_LIFETIME_SAMPLES = SAMPLE_RATE * 60 * 60  # 1hr

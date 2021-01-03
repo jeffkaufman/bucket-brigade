@@ -14,7 +14,7 @@ const APP_CALIBRATING_VOLUME = "calibrating_volume";
 const APP_STOPPING = "stopping";
 const APP_RESTARTING = "restarting";
 
-const N_BUCKETS = 7; // Keep in sync with server.py:LAYERING_DEPTH
+const N_BUCKETS = 6; // Keep in sync with server.py:LAYERING_DEPTH
 const DELAY_INTERVAL = 3; // keep in sync with server.py:DELAY_INTERVAL
 
 
