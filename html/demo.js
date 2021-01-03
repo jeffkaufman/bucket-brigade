@@ -1083,6 +1083,8 @@ function ensureParticipantDiv(userid) {
 
 async function connect_camera() {
   switch_app_state(APP_CHOOSE_CAMERA);
+  window.nextCamera.disabled = true;
+  window.chosenCamera.disabled = true;
 
   camera_devices = await navigator.mediaDevices.enumerateDevices();
   camera_devices = camera_devices.filter((device) => device.kind == 'videoinput');
@@ -1132,6 +1134,8 @@ async function update_preview_camera() {
       }
       window.cameraPreview.appendChild(myVideoDiv);
       myVideoDiv.style.transform = 'scale(-1, 1)';
+      window.nextCamera.disabled = false;
+      window.chosenCamera.disabled = false;
       break;
     }
   }
