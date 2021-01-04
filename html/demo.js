@@ -351,8 +351,6 @@ persist_checkbox("disableLatencyMeasurement");
 // Persisting select boxes is harder, so we do it manually for inSelect.
 inSelect.addEventListener("change", in_select_change);
 
-window.userName.addEventListener("change", set_controls);
-
 async function enumerate_inputs() {
   var mic_enumerator = new bb.MicEnumerator();
   var mics = await mic_enumerator.mics();
@@ -429,15 +427,9 @@ function set_controls() {
     startButton.style.display = 'none';
   }
 
-  setVisibleIn(window.mainApp,
-               window.userName.value ?
-               allStatesExcept([APP_RUNNING]) :
-               allStatesExcept([APP_TUTORIAL, APP_CHOOSE_CAMERA]));
+  setVisibleIn(window.mainApp, allStatesExcept([APP_RUNNING]))
 
   setVisibleIn(window.inputSelector,
-               allStatesExcept(ACTIVE_STATES.concat(
-                 [APP_TUTORIAL, APP_CHOOSE_CAMERA])));
-  setVisibleIn(window.nameSelector,
                allStatesExcept(ACTIVE_STATES.concat(
                  [APP_TUTORIAL, APP_CHOOSE_CAMERA])));
   setEnabledIn(window.songControls, allStatesExcept([APP_RESTARTING]));
@@ -1587,14 +1579,24 @@ function hide_buttons_and_append_answer(element, answer) {
 function tutorial_answer(button) {
   const answer = button.innerText;
   const question = button.parentElement.id;
-  hide_buttons_and_append_answer(button.parentElement, button.innerText);
-  if (question === "q_singing_listening") {
+
+  if (question === "q_name") {
+    if (!window.userName.value) {
+      window.needName.style.display = "block";
+      return;
+    } else {
+      hide_buttons_and_append_answer(button.parentElement, window.userName.value);
+    }
+  } else {
+    hide_buttons_and_append_answer(button.parentElement, button.innerText);
+  }
+
+  if (question === "q_name") {
+    window.q_singing_listening.style.display = 'block';
+  } else if (question === "q_singing_listening") {
     if (answer == "Singing and Listening") {
       window.q_headphones_present.style.display = 'block';
     } else {
-      if (!window.userName.value) {
-        window.userName.value = "listener";
-      }
       start(/*spectatorMode=*/true);
     }
   } else if (question === "q_headphones_present") {

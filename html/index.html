@@ -79,6 +79,7 @@
   display: none;
 }
 .headphoneAdvice,
+#q_singing_listening,
 #q_headphones_present,
 #q_wired_headphones_available,
 #q_headphones_wired,
@@ -399,6 +400,10 @@ h1 {
   flex-direction: row;
   justify-content: space-between;
 }
+#needName {
+  display: none;
+  color: red;
+}
 </style>
 
 <link rel="icon"
@@ -631,11 +636,19 @@ users</a>.
   <div id=tutorial_questions>
     Welcome!  This is a program for singing with people over the
     Internet. <span id=eventWelcome></span>
+
     <p>
+    <br>
 
     Before we start, a few questions:
 
-<p>
+    <p>
+
+    <div id=q_name>
+      What's your name? <input id=userName></input>
+      <button>Enter</button>
+      <div id=needName>* we need to know what to call you</div>
+    </div>
 
     <div id=q_singing_listening>
       Are you planning on singing or just listening?
@@ -691,12 +704,6 @@ users</a>.
 <button id=noCamera>Continue without camera</button>
 <p>
 <div id=cameraPreview><span>loading...</span></div>
-</div>
-
-<div id=nameSelector>
-
-Enter your name and press enter: <input id=userName></input>
-
 </div>
 
 <div id=mainApp>
