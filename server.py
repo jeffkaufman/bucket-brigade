@@ -96,6 +96,7 @@ class State():
         self.last_status_ts = 0.0
 
         self.disable_auto_gain = False
+        self.disable_song_video = False
 
         if recorder:
             recorder.reset()
@@ -326,6 +327,8 @@ class User:
         self.send("repeats", state.repeats)
         self.send("bpr", state.bpr)
         self.send("tracks", tracks)
+        if state.disable_song_video:
+            self.send("disableSongVideo", state.disable_song_video)
 
     def allocate_twilio_token(self):
         token = AccessToken(secrets["twilio"]["account_sid"],
@@ -804,6 +807,11 @@ def handle_special(query_params, server_clock, user=None, client_read_clock=None
     disableAutoGain = query_params.get("disableAutoGain", None)
     if disableAutoGain:
         state.disable_auto_gain = disableAutoGain == "1"
+
+    disableSongVideo = query_params.get("disableSongVideo", None)
+    if disableSongVideo:
+        state.disable_song_video = disableSongVideo == "1"
+        sendall("disableSongVideo", state.disable_song_video)
 
     # If we are running under Ritual Engine, disable functionality that is  not
     #   required in that setting, and would be disruptive if triggered by

@@ -572,6 +572,7 @@ function updateTwilioMute() {
       }
     });
   }
+  update_video();
 }
 
 var speakerPaused = false;
@@ -584,38 +585,58 @@ function toggle_speaker() {
   }
 }
 
+var disableSongVideo = false;
 var videoPaused = false;
+var videoOn = false;
+
+function disable_video() {
+  if (!videoOn) return;
+  videoOn = false;
+
+  twilio_room.localParticipant.videoTracks.forEach(publication => {
+    publication.track.stop();
+    publication.unpublish();
+  });
+  if (myVideoDiv) {
+    try {
+      participantDivs[myUserid].removeChild(myVideoDiv);
+    } catch {}
+    myVideoDiv = null;
+  }
+}
+
+async function enable_video() {
+  if (videoOn) return;
+  videoOn = true;
+
+  const localVideoTrack = await Twilio.Video.createLocalVideoTrack({
+    deviceId: {exact: camera_devices[chosen_camera_index].deviceId},
+    width: 160
+  });
+  twilio_room.localParticipant.publishTrack(localVideoTrack);
+  myVideoDiv = localVideoTrack.attach();
+  myVideoDiv.style.transform = 'scale(-1, 1)';
+  ensureParticipantDiv(myUserid);
+  participantDivs[myUserid].appendChild(myVideoDiv);
+}
+
+function update_video() {
+  if (twilio_room) {
+    if (videoPaused || (disableSongVideo && (
+          in_beforesong || in_song || in_aftersong))) {
+      disable_video();
+    } else {
+      enable_video();
+    }
+  }
+}
+
 function toggle_video() {
   if (twilio_room) {
     videoPaused = !videoPaused;
     window.videoToggleButton.innerText =
       videoPaused ? "enable video" : "disable video";
-
-    if (videoPaused) {
-      twilio_room.localParticipant.videoTracks.forEach(publication => {
-        publication.track.stop();
-        publication.unpublish();
-      });
-      if (myVideoDiv) {
-        try {
-          participantDivs[myUserid].removeChild(myVideoDiv);
-        } catch {}
-        myVideoDiv = null;
-      }
-    } else {
-      Twilio.Video.createLocalVideoTrack({
-        deviceId: {exact: camera_devices[chosen_camera_index].deviceId},
-        width: 160
-      }).then(localVideoTrack => {
-        twilio_room.localParticipant.publishTrack(localVideoTrack);
-        myVideoDiv = localVideoTrack.attach();
-        myVideoDiv.style.transform = 'scale(-1, 1)';
-        ensureParticipantDiv(myUserid);
-        participantDivs[myUserid].appendChild(myVideoDiv);
-      }).then(publication => {
-        console.log('Successfully unmuted your video:', publication);
-      });
-    }
+    update_video();
   }
 }
 
@@ -1008,6 +1029,12 @@ function disable_auto_gain_change() {
   }
 }
 
+function disable_song_video_change() {
+  if (singer_client) {
+    singer_client.x_send_metadata("disableSongVideo", window.disableSongVideo.checked? 1: 0);
+  }
+}
+
 startButton.addEventListener("click", start_stop);
 window.micToggleButton.addEventListener("click", toggle_mic);
 window.speakerToggleButton.addEventListener("click", toggle_speaker);
@@ -1015,6 +1042,7 @@ window.videoToggleButton.addEventListener("click", toggle_video);
 clickVolumeSlider.addEventListener("change", click_volume_change);
 audioOffset.addEventListener("change", audio_offset_change);
 window.disableAutoGain.addEventListener("change", disable_auto_gain_change);
+window.disableSongVideo.addEventListener("change", disable_song_video_change);
 window.recalibrate.addEventListener("click", () => {
   window.sessionStorage.clear();
   window.location.reload();
@@ -1154,6 +1182,7 @@ async function selected_camera(useCamera) {
     participantDivs[myUserid].appendChild(myVideoDiv);
     user_bucket_index[myUserid] = 0;
     bucket_divs[0].appendChild(participantDivs[myUserid]);
+    videoOn = true;
   } else {
     videoToggleButton.style.display = "none";
     myVideoDiv = null;
@@ -1336,6 +1365,10 @@ async function start_singing() {
     var server_repeats = metadata["repeats"];
     var server_bpr = metadata["bpr"];
     var n_connected_users = metadata["n_connected_users"] || 0;
+    if (metadata["disableSongVideo"] != null){
+      disableSongVideo = metadata["disableSongVideo"];
+      update_video();
+    }
 
     first_bucket_s = metadata["first_bucket"] || first_bucket_s;
 
