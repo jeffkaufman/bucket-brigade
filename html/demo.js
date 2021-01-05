@@ -508,15 +508,25 @@ set_controls();
 // connected when they don't mean to, and keeps us from running up a
 // large Twilio bill.
 const INACTIVITY_TIMEOUT_S = 60*15;
+const INACTIVITY_GRACE_S = 60*1;
 let last_active_ts = Date.now();
+let showingTimeoutSoon = false;
 function resetInactivityTimer() {
   last_active_ts = Date.now();
+  if (showingTimeoutSoon) {
+    window.timeoutImminent.style.display = "none";
+    showingTimeoutSoon = false;
+  }
 }
 setInterval(() => {
   if (app_state != APP_TUTORIAL && app_state != APP_CHOOSE_CAMERA) {
     // App is at least partially running.
-    if (Date.now() - last_active_ts > INACTIVITY_TIMEOUT_S*1000) {
+    const inactive_time_s = (Date.now() - last_active_ts) / 1000;
+    if (inactive_time_s > INACTIVITY_TIMEOUT_S) {
       window.location.reload();
+    } else if (inactive_time_s > INACTIVITY_TIMEOUT_S - INACTIVITY_GRACE_S) {
+      window.timeoutImminent.style.display = "block";
+      showingTimeoutSoon = true;
     }
   }
 }, 30000 /* 30s */);
