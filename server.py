@@ -101,6 +101,19 @@ class State():
         if recorder:
             recorder.reset()
 
+def friendly_volume_to_scalar(volume):
+    if volume < 0.0000001:
+        return 0
+    # https://www.dr-lex.be/info-stuff/volumecontrols.html
+    return math.exp(6.908 * volume) / 1000
+
+def scalar_to_friendly_volume(scalar):
+    if scalar < 0.0001:
+        return 0
+    return math.log(scalar * 1000)/6.908
+
+LEADER_BOOST = friendly_volume_to_scalar(1.1)
+
 QUEUE_SECONDS = 120
 
 SAMPLE_RATE = 48000
@@ -717,17 +730,6 @@ def handle_json_post(in_json_raw, in_data):
         "x-audio-metadata": x_audio_metadata,
     }), out_data
 
-def friendly_volume_to_scalar(volume):
-    if volume < 0.0000001:
-        return 0
-    # https://www.dr-lex.be/info-stuff/volumecontrols.html
-    return math.exp(6.908 * volume) / 1000
-
-def scalar_to_friendly_volume(scalar):
-    if scalar < 0.0001:
-        return 0
-    return math.log(scalar * 1000)/6.908
-
 # Handle special operations that do not require a user (although they may
 #   optionally support one), but can be done server-to-server as well.
 def handle_special(query_params, server_clock, user=None, client_read_clock=None):
@@ -1063,6 +1065,8 @@ def handle_post(in_data, query_string, print_status, client_address=None) -> Tup
             user.last_write_clock = client_write_clock
 
         in_data *= user.scaled_mic_volume
+        if state.leader == user.userid:
+            in_data *= LEADER_BOOST
 
         # XXX: I'm not sure we consider this desirable for ritual engine?
         # Don't keep any input unless a song is in progress.
