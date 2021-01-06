@@ -328,6 +328,10 @@ class User:
         self.send("bpr", state.bpr)
         self.send("tracks", tracks)
         self.send("first_bucket", state.first_bucket)
+        self.send("globalVolume",
+                  scalar_to_friendly_volume(state.global_volume))
+        self.send("backingVolume",
+                  scalar_to_friendly_volume(state.backing_volume))
         if state.disable_song_video:
             self.send("disableSongVideo", state.disable_song_video)
         if state.song_start_clock:
@@ -719,16 +723,23 @@ def friendly_volume_to_scalar(volume):
     # https://www.dr-lex.be/info-stuff/volumecontrols.html
     return math.exp(6.908 * volume) / 1000
 
+def scalar_to_friendly_volume(scalar):
+    if scalar < 0.0001:
+        return 0
+    return math.log(scalar * 1000)/6.908
+
 # Handle special operations that do not require a user (although they may
 #   optionally support one), but can be done server-to-server as well.
 def handle_special(query_params, server_clock, user=None, client_read_clock=None):
     volume = query_params.get("volume", None)
     if volume:
         state.global_volume = friendly_volume_to_scalar(float(volume))
+        sendall("globalVolume", scalar_to_friendly_volume(state.global_volume))
 
     backing_volume = query_params.get("backing_volume", None)
     if backing_volume:
         state.backing_volume = friendly_volume_to_scalar(float(backing_volume))
+        sendall("backingVolume", scalar_to_friendly_volume(state.backing_volume))
 
     msg_chats = query_params.get("chat", None)
     if msg_chats:

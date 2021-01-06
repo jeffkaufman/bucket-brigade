@@ -1375,10 +1375,17 @@ async function start_singing() {
     var server_repeats = metadata["repeats"];
     var server_bpr = metadata["bpr"];
     var n_connected_users = metadata["n_connected_users"] || 0;
-    if (metadata["disableSongVideo"] != null){
+    if (metadata["disableSongVideo"] != null) {
       disableSongVideo = metadata["disableSongVideo"];
       update_video();
     }
+    if (metadata["globalVolume"] != null) {
+      window.globalVolumeControl.value = metadata["globalVolume"];
+    }
+    if (metadata["backingVolume"] != null) {
+      window.backingVolumeControl.value = metadata["backingVolume"];
+    }
+
 
     first_bucket_s = metadata["first_bucket"] || first_bucket_s;
 
