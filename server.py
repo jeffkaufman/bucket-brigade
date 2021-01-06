@@ -327,8 +327,13 @@ class User:
         self.send("repeats", state.repeats)
         self.send("bpr", state.bpr)
         self.send("tracks", tracks)
+        self.send("first_bucket", state.first_bucket)
         if state.disable_song_video:
             self.send("disableSongVideo", state.disable_song_video)
+        if state.song_start_clock:
+            self.send("song_start_clock", state.song_start_clock)
+        if state.song_end_clock:
+            self.send("song_end_clock", state.song_end_clock)
 
     def allocate_twilio_token(self):
         token = AccessToken(secrets["twilio"]["account_sid"],
