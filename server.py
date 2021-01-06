@@ -72,7 +72,7 @@ class State():
 
         self.last_request_clock = None
         self.last_cleared_clock = None
-        self.global_volume = 1.0
+        self.global_volume = 1.2
         self.backing_volume = 1.0
         self.song_end_clock = 0
         self.song_start_clock = 0
