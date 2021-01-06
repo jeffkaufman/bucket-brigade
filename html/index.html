@@ -181,10 +181,13 @@ input.edited {
 }
 #buckets {
   flex-grow: 1;
-  display: flex;
+  display: none;
   flex-direction: row;
   flex-wrap: wrap;
   margin: 0.5em;
+}
+#unbucketedUsers {
+  flex-grow: 1;
 }
 .bucket {
   flex-grow: 1;
@@ -883,6 +886,7 @@ Are you still here? If so, move the mouse or something.
 
 
 <div id=buckets></div>
+<div id=unbucketedUsers></div>
 
 </div> <!-- remainderWindow -->
 

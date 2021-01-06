@@ -86,7 +86,7 @@ function joinBucket(i) {
   }
 }
 
-const user_bucket_index = {};  // userid -> bucket index
+const user_bucket_index = {};  // userid -> bucket index (-1 means unbucketed)
 const bucket_divs = [];  // bucket index -> bucket div
 
 for (var i = 0; i < N_BUCKETS; i++) {
@@ -817,7 +817,7 @@ function estimateBucket(offset_s, clamp=true) {
 }
 
 function update_active_users(
-  user_summary, server_sample_rate, hasLeader, imLeading, n_users) {
+  user_summary, server_sample_rate, showBuckets, hasLeader, imLeading, n_users) {
 
   if (imLeading && leadButtonState != "start-singing" &&
       leadButtonState != "stop-singing") {
@@ -844,6 +844,9 @@ function update_active_users(
     const rms_volume = user_summary[i][4];
 
     let est_bucket = estimateBucket(offset_s);
+    if (!showBuckets) {
+      est_bucket = -1;
+    }
 
     if (userid == myUserid) {
       for (var j = 0 ; j < N_BUCKETS; j++) {
@@ -852,7 +855,6 @@ function update_active_users(
       }
     }
 
-
     mic_volume_inputs.push([name, userid, mic_volume, rms_volume, offset_s]);
     userids.add(userid);
 
@@ -860,12 +862,19 @@ function update_active_users(
     if (window.middle.style.display != "none") {
       if (user_bucket_index[userid] != est_bucket) {
         ensureParticipantDiv(userid);
-        if (user_bucket_index[userid] != null) {
+        if (user_bucket_index[userid] == -1) {
+          window.unbucketedUsers.removeChild(
+            participantDivs[userid]);
+        } else if (user_bucket_index[userid] != null) {
           bucket_divs[user_bucket_index[userid]].removeChild(
             participantDivs[userid]);
         }
         user_bucket_index[userid] = est_bucket;
-        bucket_divs[est_bucket].appendChild(participantDivs[userid]);
+        if (est_bucket == -1) {
+          window.unbucketedUsers.appendChild(participantDivs[userid]);
+        } else {
+          bucket_divs[est_bucket].appendChild(participantDivs[userid]);
+        }
       }
 
       const participantDiv = participantDivs[userid];
@@ -1307,7 +1316,9 @@ function connect_twilio() {
 
       const div = participantDivs[participant.identity];
       if (div) {
-        if (user_bucket_index[participant.identity] != null) {
+        if (user_bucket_index[participant.identity] == -1) {
+          window.unbucketedUsers.removeChild(div);
+        } else if (user_bucket_index[participant.identity] != null) {
           bucket_divs[user_bucket_index[participant.identity]].removeChild(div);
         }
         delete participantDivs[participant.identity];
@@ -1420,9 +1431,6 @@ async function start_singing() {
       const hasLeader = !!leaderName;
       const imLeading = metadata.leader == myUserid
 
-      update_active_users(user_summary, server_sample_rate,
-                          hasLeader, imLeading, n_connected_users);
-
       // XXX: needs to be reimplemented in terms of alarms / marks
       if (song_start_clock && song_start_clock > client_read_clock) {
         window.startSingingCountdown.style.display = "block";
@@ -1435,7 +1443,7 @@ async function start_singing() {
 
         if (song_end_clock && song_end_clock < client_read_clock) {
           // Figure out the clock that corresponds to the highest active
-          // bucket, but don't count users who have manually seat to a
+          // bucket, but don't count users who have manually seeked to a
           // position past the last bucket.
           let highest_bucket = 0;
           let my_bucket = 0;
@@ -1489,6 +1497,13 @@ async function start_singing() {
         window.chooseLeaderInstructions.style.display = "inline-block";
         window.activeLeader.style.display = "none";
       }
+
+      const showBuckets = hasLeader || in_beforesong || in_song || in_aftersong;
+      window.buckets.style.display = showBuckets ? "flex" : "none";
+      window.unbucketedUsers.style.display = showBuckets ? "none" : "block";
+
+      update_active_users(user_summary, server_sample_rate, showBuckets,
+                          hasLeader, imLeading, n_connected_users);
     }
 
     chats.forEach((msg) => receiveChatMessage(msg[0], msg[1]));
