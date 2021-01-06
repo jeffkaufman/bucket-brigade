@@ -200,10 +200,22 @@ function receiveChatMessage(username, message) {
   const name_element = document.createElement("span");
   name_element.className = "chatName";
   name_element.innerText = username;
-  const msg_body_element = document.createElement("span");
-  msg_body_element.innerText = ": " + message;
   msg.appendChild(name_element);
-  msg.appendChild(msg_body_element);
+
+  for (const message_component of (": " + message).replace(
+      /(https:[/][/][^ ]*)/g, "\0$1\0").split("\0")) {
+    let msg_body_element = null;
+    if (message_component.startsWith("https://")) {
+      msg_body_element = document.createElement("a");
+      msg_body_element.href = message_component;
+      msg_body_element.target = "_blank";
+    } else {
+      msg_body_element = document.createElement("span");
+    }
+    msg_body_element.innerText = message_component;
+    msg.appendChild(msg_body_element);
+  }
+
   window.chatDisplay.appendChild(msg);
   window.chatDisplay.scrollTop = window.chatDisplay.scrollHeight;
 }
