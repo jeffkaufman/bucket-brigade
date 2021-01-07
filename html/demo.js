@@ -1168,7 +1168,7 @@ async function update_preview_camera() {
   }
 
   twilio_tracks = await Twilio.Video.createLocalTracks({
-    audio: true,
+    audio: {deviceId: { exact: inSelect.value }},
     video: video_options
   });
 
