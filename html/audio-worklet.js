@@ -643,7 +643,9 @@ class Player extends AudioWorkletProcessor {
       }
       return;
     } else if (msg.type == "play_chime") {
-      this.chime_sample_index = 0;
+      if (this.chime_sample_index == null) {
+        this.chime_sample_index = 0;
+      }
       return;
     } else if (msg.type == "mic_pause_mode") {
       this.mic_pause_mode = msg.enabled;
