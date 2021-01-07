@@ -468,6 +468,12 @@ export class BucketBrigadeContext extends EventTarget {
     });
   }
 
+  play_chime() {
+    this.playerNode.port.postMessage({
+      "type": "play_chime"
+    });
+  }
+
   unsubscribe_and_stop_worklet() {
     if (!this.active_handler) {
       console.warn("Tried to unsubscribe worklet, but nothing was subscribed!");
@@ -913,6 +919,10 @@ export class SingerClient extends EventTarget {
     } else {
       this.telemetry_send_queue.push([key, value, append]);
     }
+  }
+
+  play_chime() {
+    this.ctx.play_chime();
   }
 
   handle_message(event) {

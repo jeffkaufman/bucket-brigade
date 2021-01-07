@@ -1299,6 +1299,9 @@ function connect_twilio() {
 
     function addParticipant(participant) {
       console.log("addParticipant", participant);
+      if (singer_client && !(in_song || in_aftersong || in_beforesong)) {
+        singer_client.play_chime();
+      }
 
       ensureParticipantDiv(participant.identity);
 

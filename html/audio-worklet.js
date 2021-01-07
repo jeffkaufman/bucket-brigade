@@ -541,6 +541,13 @@ class Player extends AudioWorkletProcessor {
       // List of  { time, cb }, sorted in time order so we can efficiently
       //   check for the next one to fire. See insert_time_callback.
       this.time_callbacks = [];
+
+      // sound effects
+      this.chime_sample_index = null;
+      this.chime_length = sampleRate / 4;
+      this.chime_volume = 0.05;
+      this.chime_frequency = 440;  // Hz
+      this.chime_raise = 2000;  // Hz
     })
   }
 
@@ -635,6 +642,9 @@ class Player extends AudioWorkletProcessor {
         this.volume_calibrator = null;
       }
       return;
+    } else if (msg.type == "play_chime") {
+      this.chime_sample_index = 0;
+      return;
     } else if (msg.type == "mic_pause_mode") {
       this.mic_pause_mode = msg.enabled;
       return;
@@ -695,6 +705,33 @@ class Player extends AudioWorkletProcessor {
     this.synthetic_source_counter++;
   }
 
+  decimal_sine(x) {  // 0 to 1 -> sine
+    return Math.sin(x*Math.PI*2);
+  }
+
+  maybe_write_chime(output) {
+    if (this.chime_sample_index == null) {
+      return;
+    }
+
+    for (var i = 0; i < output.length; i++) {
+      const raise_amount =
+            Math.abs(this.chime_length - this.chime_sample_index * 2) /
+            this.chime_length;
+      const pos = this.chime_sample_index *
+            (this.chime_frequency +
+             this.chime_raise * raise_amount) /
+            sampleRate;
+      output[i] += (this.chime_volume * this.decimal_sine(pos));
+
+      this.chime_sample_index++;
+      if (this.chime_sample_index >= this.chime_length) {
+        this.chime_sample_index = null;
+        return;
+      }
+    }
+  }
+
   process_normal(input, output) {
     //// console.debug("VERYSPAM", "process_normal:", input);
     if (this.synthetic_source == "CLICKS") {
@@ -707,6 +744,9 @@ class Player extends AudioWorkletProcessor {
     } else {
       // Normal input/output handling
       var play_chunk = this.play_buffer.read_into(output);
+
+      this.maybe_write_chime(output);
+
       // console.debug("VERYSPAM", "about to play chunk:", play_chunk);
 
       if (this.synthetic_source == "ECHO") {
