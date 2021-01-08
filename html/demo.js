@@ -86,6 +86,33 @@ function joinBucket(i) {
   }
 }
 
+function server_api_path() {
+  return new URL(serverPath.value, document.location).href;
+}
+
+function updateCurrentUsers() {
+  var xhr = new XMLHttpRequest();
+  xhr.open('POST', server_api_path() + "?action=status", true);
+  xhr.onreadystatechange = function () {
+    if (this.readyState === XMLHttpRequest.DONE && this.status === 200) {
+      const x_audio_metadata = JSON.parse(this.getResponseHeader(
+        "X-Audio-Metadata"));
+      let roomText = "The room is currently empty.";
+      if (x_audio_metadata.n_connected_users) {
+        if (x_audio_metadata.n_connected_users == 1) {
+          roomText = "There is currently 1 person in the room.";
+        } else {
+          roomText = "There are currently " + x_audio_metadata.n_connected_users +
+            " people in the room.";
+        }
+      }
+      window.currentUsers.innerText = roomText;
+    }
+  };
+  xhr.send();
+}
+updateCurrentUsers();
+
 const user_bucket_index = {};  // userid -> bucket index (-1 means unbucketed)
 const bucket_divs = [];  // bucket index -> bucket div
 
@@ -1337,7 +1364,7 @@ function connect_twilio() {
 }
 
 async function start_singing() {
-  var final_url = new URL(serverPath.value, document.location).href;
+  var final_url = server_api_path();
 
   singer_client = new bb.SingerClient({
     context: bucket_ctx,

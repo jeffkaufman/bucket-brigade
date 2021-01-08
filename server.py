@@ -36,6 +36,12 @@ N_IMAGINARY_USERS = 0  # for debugging user summary + mixing console performance
 
 SUPPORT_SERVER_CONTROL = False
 
+# The maximum number of users to allow to join.  This is enforced on a
+# best-effort basis by the client.  If many people are calibrating at
+# the same time this will be exceeded, because we only check before
+# calibration.
+MAX_USERS = 22  # XXX needs tuning
+
 try:
     # Grab these on startup, when they are very very likely to be the actual
     #   running version.
@@ -880,6 +886,13 @@ def handle_post(in_data, query_string, print_status, client_address=None) -> Tup
     if query_string:
         raw_params = urllib.parse.parse_qs(query_string, strict_parsing=True)
     query_params = clean_query_params(raw_params)
+
+    action = query_params.get("action", None)
+    if action == "status":
+        return np.zeros(0, np.uint8), json.dumps({
+            "n_connected_users": len(active_users()),
+            "max_users": MAX_USERS,
+        })
 
     userid = query_params.get("userid", None)
     if userid is not None:
