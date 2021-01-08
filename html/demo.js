@@ -3,6 +3,7 @@
 import * as bb from './app.js';
 
 const APP_TUTORIAL = "tutorial";
+const APP_ROOM_FULL = "roomfull";
 const APP_CHOOSE_CAMERA = "choose_camera";
 const APP_INITIALIZING = "initializing";
 const APP_STOPPED = "stopped";
@@ -97,6 +98,11 @@ function updateCurrentUsers() {
     if (this.readyState === XMLHttpRequest.DONE && this.status === 200) {
       const x_audio_metadata = JSON.parse(this.getResponseHeader(
         "X-Audio-Metadata"));
+
+      if (x_audio_metadata.n_connected_users >= x_audio_metadata.max_users) {
+        switch_app_state(APP_ROOM_FULL);
+      }
+
       let roomText = "The room is currently empty.";
       if (x_audio_metadata.n_connected_users) {
         if (x_audio_metadata.n_connected_users == 1) {
@@ -455,6 +461,8 @@ function set_controls() {
 
   setVisibleIn(startButton, allStatesExcept([APP_TUTORIAL, APP_CHOOSE_CAMERA]));
 
+  setVisibleIn(window.roomfull, [APP_ROOM_FULL]);
+
   setVisibleIn(window.tutorial, [APP_TUTORIAL]);
   setVisibleIn(window.chooseCamera, [APP_CHOOSE_CAMERA]);
 
@@ -558,7 +566,8 @@ function resetInactivityTimer() {
   }
 }
 setInterval(() => {
-  if (app_state != APP_TUTORIAL && app_state != APP_CHOOSE_CAMERA) {
+  if (app_state != APP_TUTORIAL && app_state != APP_CHOOSE_CAMERA &&
+      app_state != APP_ROOM_FULL) {
     // App is at least partially running.
     const inactive_time_s = (Date.now() - last_active_ts) / 1000;
     if (inactive_time_s > INACTIVITY_TIMEOUT_S) {

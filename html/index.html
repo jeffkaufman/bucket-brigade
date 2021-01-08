@@ -414,6 +414,9 @@ h1 {
   display: none;
   color: red;
 }
+#roomfull, #tutorial {
+  display: none;
+}
 </style>
 
 <link rel="icon"
@@ -645,6 +648,10 @@ users</a>.
 
 <div id=middle class=middlePane>
 
+<div id="roomfull">
+  We're sorry, the room is currently full.  Please try again later!
+</div>
+
 <div id=tutorial>
   <div id=tutorial_questions>
     Welcome!  This is a program for singing with people over the
@@ -707,7 +714,7 @@ users</a>.
     <p>
     <button class=dismiss_tutorial>Get Started</button>
   </div>
-  </div>
+</div>
 
 <div id=chooseCamera>
 Last step!  We just need to sort out cameras.
@@ -937,12 +944,12 @@ Are you still here? If so, move the mouse or something.
     window.noAudioWorklet.style.display = "none";
     window.middle.style.display = "block";
 
-   // We only need to check for Android, because no other mobile
-   // device supports audio worklet.
-   if (navigator.userAgent.match(/Android/i)) {
-     window.isMobile.style.display = "block";
-     window.middle.style.display = "none";
-   }
+    // We only need to check for Android, because no other mobile
+    // device supports audio worklet.
+    if (navigator.userAgent.match(/Android/i)) {
+      window.isMobile.style.display = "block";
+      window.middle.style.display = "none";
+    }
   }
 
   const middlePanes = [
