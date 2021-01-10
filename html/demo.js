@@ -1559,6 +1559,9 @@ async function start_singing() {
       last_server_bpr = server_bpr;
     }
     singer_client.x_send_metadata("user_summary", 1);
+    if (in_spectator_mode) {
+      singer_client.x_send_metadata("spectator", 1);
+    }
 
     if (delay_seconds) {
       if (delay_seconds > 0) {

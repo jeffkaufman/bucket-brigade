@@ -340,6 +340,8 @@ class User:
         self.client_address = None  # Last IP we saw them from
         self.client_telemetry = {}  # unstructured info from client
 
+        self.in_spectator_mode = False;
+
         self.mark_sent()
 
         self.send("bpm", state.bpm)
@@ -475,25 +477,37 @@ def assign_delays(userid_lead) -> None:
     if initial_position > 90:
         initial_position = 90
 
+    real_users = [user for user in active_users() if user not in imaginary_users]
+    leader = users[userid_lead]
+    spectators = [
+        user for user in real_users
+        if user.in_spectator_mode and user.userid != userid_lead]
+    followers = [
+        user for user in real_users
+        if not user.in_spectator_mode and user.userid != userid_lead]
+
+    # Only the leader goes in bucket #1
     state.first_bucket = initial_position + DELAY_INTERVAL
-    users[userid_lead].send("delay_seconds", state.first_bucket)
+    leader.send("delay_seconds", state.first_bucket)
     sendall("first_bucket", state.first_bucket)
 
-    positions = [initial_position + x*DELAY_INTERVAL
-                 for x in range(2, LAYERING_DEPTH)]
+    n_follow_buckets = max(min(LAYERING_DEPTH - 1, len(followers)), 1)
+    follow_positions = [
+        initial_position + (x+2)*DELAY_INTERVAL
+        for x in range(n_follow_buckets)]
+    state.max_position = follow_positions[-1]
 
-    # Randomly shuffle the remaining users, and assign them to positions. If we
-    # have more users then positions, then double up.
-    # TODO: perhaps we should prefer to double up from the end?
-    state.max_position = initial_position + DELAY_INTERVAL*2
+    # Spectators all go in the last bucket.
+    for spectator in spectators:
+        spectator.send("delay_seconds", state.max_position)
+
+    # Distribute followers randomly between the remaining buckets.
     for i, (_, user) in enumerate(sorted(
-            [(random.random(), user)
-             for user in active_users()
-             if user.userid != userid_lead and
-                user not in imaginary_users])):
-        position = positions[i % len(positions)]
-        user.send("delay_seconds", position)
-        state.max_position = max(position, state.max_position)
+            [(random.random(), follower)
+             for follower in followers])):
+        user.send("delay_seconds",
+                  follow_positions[(len(follow_positions) - 1 - i) %
+                                   len(follow_positions)])
 
 def update_users(userid, username, server_clock, client_read_clock) -> None:
     while len(imaginary_users) < N_IMAGINARY_USERS:
@@ -1008,6 +1022,8 @@ def handle_post(in_data, query_string, print_status, client_address=None) -> Tup
 
     if client_address is not None:
         user.client_address = client_address
+
+    user.in_spectator_mode = query_params.get("spectator", None)
 
     client_telemetry = query_params.get("client_telemetry", None)
     if client_telemetry:
