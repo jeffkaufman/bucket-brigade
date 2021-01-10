@@ -664,7 +664,7 @@ function disable_video() {
 }
 
 async function enable_video() {
-  if (videoOn) return;
+  if (videoOn || video_forced_off) return;
   videoOn = true;
 
   const localVideoTrack = await Twilio.Video.createLocalVideoTrack({
@@ -1234,6 +1234,7 @@ async function update_preview_camera() {
   }
 }
 
+let video_forced_off = false;
 async function selected_camera(useCamera) {
   // We don't want them clicking any buttons while we wait for Twilio to start.
   window.chooseCamera.style.display = "none";
@@ -1251,6 +1252,7 @@ async function selected_camera(useCamera) {
     bucket_divs[0].appendChild(participantDivs[myUserid]);
     videoOn = true;
   } else {
+    video_forced_off = true;
     videoToggleButton.style.display = "none";
     myVideoDiv = null;
     for (const track of twilio_tracks) {
