@@ -353,10 +353,6 @@ class User:
                   scalar_to_friendly_volume(state.backing_volume))
         if state.disable_song_video:
             self.send("disableSongVideo", state.disable_song_video)
-        if state.song_start_clock:
-            self.send("song_start_clock", state.song_start_clock)
-        if state.song_end_clock:
-            self.send("song_end_clock", state.song_end_clock)
 
     def allocate_twilio_token(self):
         token = AccessToken(secrets["twilio"]["account_sid"],
@@ -787,9 +783,6 @@ def handle_special(query_params, server_clock, user=None, client_read_clock=None
             state.song_start_clock = server_clock
         state.song_end_clock = 0
 
-        sendall("song_start_clock", state.song_start_clock)
-        sendall("song_end_clock", state.song_end_clock)
-
         state.metronome_on = False
         if state.bpm and state.bpr and state.repeats:
             state.requested_track = METRONOME
@@ -812,8 +805,6 @@ def handle_special(query_params, server_clock, user=None, client_read_clock=None
             state.song_end_clock = user.last_write_clock
         else:
             state.song_end_clock = server_clock
-
-        sendall("song_end_clock", state.song_end_clock)
 
     if query_params.get("clear_events", None):
         events.clear()
@@ -943,7 +934,6 @@ def handle_post(in_data, query_string, print_status, client_address=None) -> Tup
         if state.backing_track_index == len(state.backing_track):
             # the song has ended, mark it so
             state.song_end_clock = clear_index
-            sendall("song_end_clock", state.song_end_clock)
 
     if clear_samples > 0:
         if state.metronome_on:
@@ -972,6 +962,8 @@ def handle_post(in_data, query_string, print_status, client_address=None) -> Tup
         x_audio_metadata = {
             "server_clock": server_clock,
             "server_sample_rate": SAMPLE_RATE,
+            "song_end_clock": state.song_end_clock,
+            "song_start_clock": state.song_start_clock,
             "last_request_clock": state.last_request_clock,
             "n_connected_users": len(active_users()),
             "queue_size": QUEUE_LENGTH / FRAME_SIZE, # in 128-sample frames
@@ -1037,8 +1029,6 @@ def handle_post(in_data, query_string, print_status, client_address=None) -> Tup
         assign_delays(userid)
         state.song_start_clock = 0
         state.song_end_clock = 0
-        sendall("song_start_clock", state.song_start_clock)
-        sendall("song_end_clock", state.song_end_clock)
 
         state.metronome_on = False
         state.leader = userid
@@ -1149,6 +1139,8 @@ def handle_post(in_data, query_string, print_status, client_address=None) -> Tup
         "last_request_clock": saved_last_request_clock,
         "client_read_clock": client_read_clock,
         "client_write_clock": client_write_clock,
+        "song_end_clock": state.song_end_clock,
+        "song_start_clock": state.song_start_clock,
         "n_samples": n_samples,
         "n_connected_users": len(active_users()),
         "queue_size": QUEUE_LENGTH / FRAME_SIZE, # in 128-sample frames

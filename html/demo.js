@@ -1426,12 +1426,8 @@ async function start_singing() {
     var chats = metadata["chats"] || [];
     var delay_seconds = metadata["delay_seconds"];
     var server_sample_rate = metadata["server_sample_rate"];
-    if (metadata["song_start_clock"] != null) {
-      song_start_clock = metadata["song_start_clock"];
-    }
-    if (metadata["song_end_clock"] != null) {
-      song_end_clock = metadata["song_end_clock"];
-    }
+    song_start_clock = metadata["song_start_clock"];
+    song_end_clock = metadata["song_end_clock"];
     var client_read_clock = metadata["client_read_clock"];
     var server_bpm = metadata["bpm"];
     var server_repeats = metadata["repeats"];
