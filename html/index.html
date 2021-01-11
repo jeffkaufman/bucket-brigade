@@ -941,6 +941,8 @@ Are you still here? If so, move the mouse or something.
 </div>
 
 <script>
+  let showingWarningPane = true;
+
   if (window.AudioWorklet) {
     window.noAudioWorklet.style.display = "none";
     window.middle.style.display = "block";
@@ -950,62 +952,64 @@ Are you still here? If so, move the mouse or something.
     if (navigator.userAgent.match(/Android/i)) {
       window.isMobile.style.display = "block";
       window.middle.style.display = "none";
+    } else {
+      showingWarningPane = false;
     }
   }
 
-  const middlePanes = [
-    window.middle,
-    window.debugSettings,
-    window.debugInfo,
-    window.booktime,
-    window.about,
-    window.advancedSettings,
-    window.noAudioWorklet,
-    window.isMobile];
+  const middlePanes = {
+    "Main": window.middle,
+    "DebugSettings": window.debugSettings,
+    "DebugInfo": window.debugInfo,
+    "Reserve": window.booktime,
+    "About": window.about,
+    "AdvancedSettings": window.advancedSettings,
+    "UnsupportedBrowser": window.noAudioWorklet,
+    "UnsupportedDevice": window.isMobile,
+  };
 
-  const tabs = [
-    window.mainViewTab,
-    window.debugSettingsTab,
-    window.debugInfoTab,
-    window.booktimeTab,
-    window.aboutTab,
-    window.advancedSettingsTab,
-  ];
+  const tabs = {
+    "Main": window.mainViewTab,
+    "DebugSettings": window.debugSettingsTab,
+    "DebugInfo": window.debugInfoTab,
+    "Reserve": window.booktimeTab,
+    "About": window.aboutTab,
+    "AdvancedSettings": window.advancedSettingsTab,
+  };
 
-  function configureClickListener(arg) {
-    const [div, tab, dismiss] = arg;
-        tab.addEventListener(
-        "click", () => {
-          for (const middlePane of middlePanes) {
-            middlePane.style.display = "none";
-          }
-          for (const tab of tabs) {
-            tab.classList.remove("activeTab");
-          }
-          div.style.display = "block";
-          tab.classList.add("activeTab");
-        });
+  for (const [paneName, paneTab] of Object.entries(tabs)) {
+    paneTab.addEventListener("click", () => {
+      showPane(paneName);
+    });
   }
-
-  [[window.middle, window.mainViewTab],
-   [window.debugSettings, window.debugSettingsTab],
-   [window.debugInfo, window.debugInfoTab],
-   [window.booktime, window.booktimeTab],
-   [window.about, window.aboutTab],
-   [window.advancedSettings, window.advancedSettingsTab]].forEach(
-    configureClickListener);
 
   for (dismiss of [window.dismissNoAudioWorklet, window.dismissIsMobile]) {
     dismiss.addEventListener(
       "click", () => {
-         for (const middlePane of middlePanes) {
-            middlePane.style.display = "none";
-         }
-         window.middle.style.display = "block";
-         window.mainViewTab.classList.add("activeTab");
-       });
+        showPane("Main");
+      });
   }
 
+  function showPane(paneName) {
+    for (const [otherPaneName, otherPaneDiv] of Object.entries(middlePanes)) {
+      otherPaneDiv.style.display = "none";
+    }
+    for (const [otherPanelName, otherPanelTab] of Object.entries(tabs)) {
+      otherPanelTab.classList.remove("activeTab");
+    }
+    middlePanes[paneName].style.display = "block";
+    if (tabs[paneName]) {
+      tabs[paneName].classList.add("activeTab");
+    }
+    window.location.hash = (paneName === "Main" ? "" : paneName);
+  }
+
+  if (window.location.hash && !showingWarningPane) {
+    const paneName = window.location.hash.substring(1);
+    if (paneName in tabs) {
+      showPane(paneName);
+    }
+  }
 </script>
 
 <script type="module" src="./demo.js"></script>
