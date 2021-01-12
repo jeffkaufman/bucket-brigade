@@ -858,6 +858,11 @@ export class SingerClient extends EventTarget {
     });
   }
 
+  updateUserName(newUserName) {
+    this.username = newUserName;
+    this.connection.updateUserName(newUserName);
+  }
+
   get speakerMuted() {
     return this.speakerMuted_;
   }
@@ -1186,6 +1191,10 @@ export class SingerClientConnection {
     this.decoder.reset();
 
     this.running = true;
+  }
+
+  updateUserName(newUserName) {
+    this.username = newUserName;
   }
 
   async start_singing() {

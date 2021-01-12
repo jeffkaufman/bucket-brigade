@@ -540,6 +540,7 @@ def update_users(userid, username, server_clock, client_read_clock) -> None:
 
     users[userid].last_heard_server_clock = server_clock
     users[userid].delay_samples = delay_samples
+    users[userid].name = username
 
 def clean_users(server_clock) -> None:
     to_delete = []

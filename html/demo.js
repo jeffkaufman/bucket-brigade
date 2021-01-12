@@ -1759,6 +1759,18 @@ window.headerExpandCollapse.addEventListener("click", () => {
   window.headerExpandCollapse.innerHTML = headerCollapsed ? "&darr;" : "&uarr;";
 });
 
+window.changeNameButton.addEventListener("click", () => {
+  window.userName.value = window.changeName.value;
+  localStorage.setItem("userName", window.userName.value);
+  if (singer_client) {
+    singer_client.updateUserName(window.userName.value);
+  }
+});
+window.userName.addEventListener("change", () => {
+  window.changeName.value = window.userName.value;
+});
+window.changeName.value = window.userName.value;
+
 document.querySelectorAll("#tutorial_questions button").forEach(
   (button) => button.addEventListener("click", () => tutorial_answer(button)));
 
