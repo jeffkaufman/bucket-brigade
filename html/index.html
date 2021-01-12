@@ -299,9 +299,15 @@ body {
   flex-grow: 1;
 }
 
+#tabrow {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  background-color: rgb(186, 226, 227);
+}
+
 #tabbar {
   display: flex;
-  background-color: rgb(186, 226, 227);
   align-items: baseline;
 }
 
@@ -450,6 +456,7 @@ h1 {
   <div id=currentEvent>loading...</div>
 </div>
 
+<div id=tabrow>
 <div id=tabbar>
   <span class=activeTab id=mainViewTab>Home</span>
   <span id=debugInfoTab>Debug Info</span>
@@ -457,6 +464,9 @@ h1 {
   <span id=advancedSettingsTab>Advanced Settings</span>
   <span id=booktimeTab>Reserve</span>
   <span id=aboutTab>About</span>
+</div>
+
+<button id="headerExpandCollapse">&uarr;</button>
 </div>
 
 <div id=advancedSettings class=middlePane>

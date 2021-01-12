@@ -1752,6 +1752,13 @@ window.noCamera.addEventListener("click", () => {
   selected_camera(false);
 });
 
+let headerCollapsed = false;
+window.headerExpandCollapse.addEventListener("click", () => {
+  headerCollapsed = !headerCollapsed;
+  window.topbar.style.display = headerCollapsed ? "none" : "block";
+  window.headerExpandCollapse.innerHTML = headerCollapsed ? "&darr;" : "&uarr;";
+});
+
 document.querySelectorAll("#tutorial_questions button").forEach(
   (button) => button.addEventListener("click", () => tutorial_answer(button)));
 
