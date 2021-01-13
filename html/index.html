@@ -15,11 +15,11 @@
   display: none;
 }
 #estQuality {
-  background: #eee;
+  border: 1px solid #aaa;
   border-radius: 1em;
-  padding: 5em;
+  padding: 1em;
   margin: 1em;
-  width: calc(100vw - 4em);
+  width: calc(100vw - 8em);
   box-sizing: border-box;
 }
 #est25to75 {
@@ -264,9 +264,6 @@ body {
   overflow-y: scroll;
 }
 
-#middle {
-  overflow-y: hidden;
-}
 #middle > * {
   overflow-y: scroll;
 }
@@ -809,17 +806,6 @@ Mic producing any audio. Is your input device set correctly?
 
   <div id=estQuality>
     <center>
-    <span id=estSamples>...</span><br>
-    #beeps detected
-
-    <span id=estLatency>...</span><br>
-    latency<br>
-    <br>
-
-    <span id=est25to75>...</span><br>
-    variance<br>
-    <br>
-
   <div id=latencyCalibrationFailed>
 
 Unable to calibrate latency. Please make sure that the microphone is
@@ -837,6 +823,15 @@ know exactly how much client-side latency you have.
 
   </div>
 
+    <span id=estSamples>...</span><br>
+    #beeps detected
+
+    <span id=estLatency>...</span><br>
+    latency<br>
+    <br>
+
+    <span id=est25to75>...</span><br>
+    variance
     </center>
   </div>
 

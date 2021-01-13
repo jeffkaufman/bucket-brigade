@@ -474,6 +474,8 @@ function set_controls() {
     startButton.style.display = 'none';
   }
 
+  window.middle.style.overflowY = app_state == APP_RUNNING ? "hidden" : "scroll";
+
   setVisibleIn(window.mainApp, allStatesExcept([APP_RUNNING]))
 
   setVisibleIn(window.inputSelector,
