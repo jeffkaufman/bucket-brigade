@@ -1626,6 +1626,7 @@ async function initialize() {
 }
 
 function do_latency_calibration() {
+  var this_calibration_running = true;
   switch_app_state(APP_CALIBRATING_LATENCY);
   latency_calibrator = new bb.LatencyCalibrator({
     context: bucket_ctx,
@@ -1656,8 +1657,19 @@ function do_latency_calibration() {
       } else {
         switch_app_state(APP_CALIBRATING_LATENCY_CONTINUE);
       }
+      var this_calibration_running = false;
     }
   });
+
+  // If we've been running for 20 seconds, and still haven't figured
+  // it out, give up.
+  setTimeout(() => {
+    if (this_calibration_running && latency_calibrator) {
+      this_calibration_running = false;
+      latency_calibrator.close();
+      switch_app_state(APP_CALIBRATING_LATENCY_CONTINUE);
+    }
+  }, 20*1000);
 }
 
 async function start(spectatorMode=false) {
