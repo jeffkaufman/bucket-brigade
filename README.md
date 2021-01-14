@@ -75,7 +75,7 @@ trade-offs.  This project is almost entirely limited by CPU, for
 encoding and decoding audio, which means there's no reason to get an
 instance with large amounts of memory.
 
-If you want to support up to about 40 users, any single core server
+If you want to support up to about 60 users, any single core server
 should be fine.  The public instance is running on Amazon Lightsail,
 With their smallest server (512 MB RAM, 1 vCPU, 20 GB SSD,
 $3.50/month).
@@ -127,7 +127,7 @@ sudo python3 -mpip install -r requirements.txt
 
 ### Simple Configuration
 
-Handles up to ~40 users.
+Handles up to ~60users.
 
 In /etc/systemd/system/ create `uwsgi-echo-01.service` as:
 
@@ -158,7 +158,7 @@ location /api {
 
 ### Sharded Configuration
 
-Handles up to ~1000 users, at ~40/core.  The instructions below assume
+Handles up to ~1000 users, at ~60/core.  The instructions below assume
 you are using a 12 core machine: one core for nginx, one core for
 bucket brigade, and ten cores for the shards.
 

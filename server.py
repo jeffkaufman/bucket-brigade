@@ -40,7 +40,10 @@ SUPPORT_SERVER_CONTROL = False
 # best-effort basis by the client.  If many people are calibrating at
 # the same time this will be exceeded, because we only check before
 # calibration.
-MAX_USERS = 22  # XXX needs tuning
+#
+# In stress testing, the server seems to do fine with 61 users, but
+# the video call might change that (stress test includes no video).
+MAX_USERS = 35 # XXX needs tuning
 
 try:
     # Grab these on startup, when they are very very likely to be the actual
