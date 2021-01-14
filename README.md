@@ -67,50 +67,77 @@ This should look like:
     Precision      : 16-bit
     Sample Encoding: 16-bit Signed Integer PCM
 
-## uWSGI Server Setup
+## Running an Instance
 
-### Nginx
+If you want to run an instance, you need a server.  There are many
+companies that offer Virtual Private Servers (VPSes), with different
+trade-offs.  This project is almost entirely limited by CPU, for
+encoding and decoding audio, which means there's no reason to get an
+instance with large amounts of memory.
+
+If you want to support up to about 40 users, any single core server
+should be fine.  The public instance is running on Amazon Lightsail,
+With their smallest server (512 MB RAM, 1 vCPU, 20 GB SSD,
+$3.50/month).
+
+It is possible to support much larger numbers of users, but you'll
+need a lot of cores.  If you're interested in doing this, you will
+probably also need to customize the UI, since one video call for 100s
+of users is not going to work.  See
+https://github.com/dspeyer/ritualEngine for an axample of this kind of
+customization.
+
+## Configuring a Server
+
+These instructions are verified for a fresh Ubuntu 20.04 LTS install.
+
+### Install Dependencies
+```
+sudo apt update
+sudo apt upgrade
+sudo apt install python3-distutils uuid-dev libcap-dev libpcre3-dev \
+                 nginx python3-pip emacs letsencrypt opus-tools \
+                 python3-certbot-nginx
+sudo python3 -mpip install uwsgi
+mkdir ~/src
+cd ~/src && git clone https://github.com/gwillen/solstice-audio-test.git
+sudo usermod -a -G www-data ubuntu
+sudo chgrp www-data /home/ubuntu/src/solstice-audio-test
+chmod g+rwxs /home/ubuntu/src/solstice-audio-test
+cd ~/src/solstice-audio-test && sudo python3 -mpip install -r requirements.txt
+mkdir ~/src/solstice-audio-test/recordings
+# also populate ~/src/solstice-audio-test/secrets.json
+```
+
+If you get:
 
 ```
-location /api {
-   include uwsgi_params;
-   uwsgi_pass 127.0.0.1:7095;
-}
+./src/shared_array_create.c:24:10: fatal error: numpy/arrayobject.h: No such file or directory
+ 24 | #include <numpy/arrayobject.h>
+    |          ^~~~~~~~~~~~~~~~~~~~~
+compilation terminated.
 ```
 
-### uWSGI
-
-#### Installing
-
-Dependencies:
+This means that pip tried to install SharedArray before numpy.  Fix it with:
 
 ```
-$ sudo apt install python3.6 python3.6-dev python3-distutils uwsgi uwsgi-src \
-                   uuid-dev libcap-dev libpcre3-dev
+sudo python3 -mpip uninstall SharedArray
+sudo python3 -mpip install -r requirements.txt
 ```
 
-Build the python 3.6 UWSGI plug-in:
+### Simple Configuration
 
-```
-$ PYTHON=python3.6 uwsgi --build-plugin "/usr/src/uwsgi/plugins/python python36"
-```
+Handles up to ~40 users.
 
-[Alternate quick install & run (still need to serve the static files separate as above):
-
-`pip3 install uwsgi`  (This automatically builds in the python plugin)
-`uwsgi --http :8081 --wsgi-file server_wrapper.py`  (run the bare python server without nginx)]
-OR: `uwsgi --http :8081 --wsgi-file server_wrapper.py --threads 4` (alpha)
-
-#### Config
-
-Create `/etc/systemd/system/uwsgi-echo.service` with:
+In /etc/systemd/system/ create `uwsgi-echo-01.service` as:
 
 ```
 [Unit]
 Description=uWSGI echo
 
 [Service]
-ExecStart=/usr/local/bin/uwsgi --plugin python36 --disable-logging --processes=1 --socket :7095 --wsgi-file /root/src/solstice-audio-test/server_wrapper.py --logto /var/log/uwsgi-echo.log
+WorkingDirectory=/home/ubuntu/src/solstice-audio-test
+ExecStart=/usr/local/bin/uwsgi --socket :7101 --wsgi-file /home/ubuntu/src/solstice-audio-test/server_wrapper.py --logto /var/log/uwsgi-echo-01.log
 Restart=always
 KillSignal=SIGQUIT
 Type=notify
@@ -120,59 +147,135 @@ NotifyAccess=all
 WantedBy=multi-user.target
 ```
 
-Then run, and re-run any time you edit the `.service` file:
+In /etc/nginx/sites-available/default add:
 
 ```
-$ systemctl daemon-reload
+location /api {
+   include uwsgi_params;
+   uwsgi_pass 127.0.0.1:7101;
+}
 ```
 
-#### Updating
+### Sharded Configuration
 
-Anytime you deploy you need to restart the daemon:
+Handles up to ~1000 users, at ~40/core.  The instructions below assume
+you are using a 12 core machine: one core for nginx, one core for
+bucket brigade, and ten cores for the shards.
+
+In /etc/systemd/system/ create ten files as `uwsgi-echo-01.service`
+through `uwsgi-echo-10.service`:
 
 ```
-$ service uwsgi-echo restart
+[Unit]
+Description=uWSGI echo
+
+[Service]
+WorkingDirectory=/home/ubuntu/src/solstice-audio-test
+ExecStart=/usr/local/bin/uwsgi --socket :7101 --wsgi-file /home/ubuntu/src/solstice-audio-test/server_wrapper.py --logto /var/log/uwsgi-echo-01.log --declare-option 'segment=$1' --segment=echo01
+Restart=always
+KillSignal=SIGQUIT
+Type=notify
+NotifyAccess=all
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target
 ```
 
-#### Logs
-
-```
-$ tail -f /var/log/uwsgi-echo.log
-```
-
-### Shared Memory Operation
-
-#### uWSGI
-
-Set up multiple services (`/etc/systemd/system/uwsgi-echo-01.service`,
-`echo-02`, ...) each with a unique socket (`socket :7101`, `socket
-:7102`, ...), log (`--logto /var/log/uwsgi-echo-01.log`,
-`uwsgi-echo-02.log`), and segment (`--declare-option 'segment=$1'
---segment=echo01`, `echo02`, ...).
-
-#### Nginx
-
-Configure nginx to shard requests to these uwsgi sockets by userid.
-This is probably going to require moving the user ID into the pass so
-nginx can match on it.
-
-#### ShmServer
-
-Create `/etc/systemd/system/echo-shm.service` with:
+In /etc/systemd/system/ create one file as `echo-shm.service`:
 
 ```
 [Unit]
 Description=Echo Shared Memory Server
 
 [Service]
-ExecStart=/usr/bin/python3 /root/src/solstice-audio-test/shm.py echo01 echo02 (etc...)
+Type=simple
+WorkingDirectory=/home/ubuntu/src/solstice-audio-test
+ExecStart=/usr/bin/python3 /home/ubuntu/src/solstice-audio-test/shm.py echo01 echo02 echo03 echo04 echo05 echo06 echo07 echo08 echo09 echo10
 Restart=always
 KillSignal=SIGQUIT
-Type=simple
 NotifyAccess=all
+Environment=PYTHONUNBUFFERED=1
 
 [Install]
 WantedBy=multi-user.target
+```
+
+In /etc/nginx/sites-available/default add:
+
+```
+location /api/01 {
+  include uwsgi_params;
+  uwsgi_pass 127.0.0.1:7101;
+}
+location /api/02 {
+  include uwsgi_params;
+  uwsgi_pass 127.0.0.1:7102;
+}
+...
+location /api/10 {
+  include uwsgi_params;
+  uwsgi_pass 127.0.0.1:7110;
+}
+
+location /api {
+  error_page 418 = @shardone;
+  error_page 419 = @shardtwo;
+  ...
+  error_page 427 = @shardten;
+
+  if ( $arg_userid ~ "^1" ) { return 418; }
+  if ( $arg_userid ~ "^2" ) { return 419; }
+  ...
+  if ( $arg_userid ~ "^0" ) { return 427; }
+  return 418;
+}
+
+location @shardone {
+  include uwsgi_params;
+  uwsgi_pass 127.0.0.1:7101;
+}
+location @shardtwo {
+  include uwsgi_params;
+  uwsgi_pass 127.0.0.1:7102;
+}
+...
+location @shardten {
+  include uwsgi_params;
+  uwsgi_pass 127.0.0.1:7110;
+}
+```
+
+## Deploying
+
+Any time you modify your service files you'll need to run:
+
+    sudo systemctl daemon-reload
+
+Anytime you have a new code to run on the server, run either:
+
+```
+# Simple
+cd ~/src/solstice-audio-test && git pull && sudo systemctl restart uwsgi-echo-01
+
+# Sharded
+cd ~/src/solstice-audio-test && git pull && sudo systemctl restart uwsgi-echo-01 uwsgi-echo-02 uwsgi-echo-03 uwsgi-echo-04 uwsgi-echo-05 uwsgi-echo-06 uwsgi-echo-07 uwsgi-echo-08 uwsgi-echo-09 uwsgi-echo-10 echo-shm
+```
+
+### Logs
+
+#### Simple
+```
+tail -f /var/log/uwsgi-echo-01.log
+```
+
+#### Sharded
+```
+tail -f /var/log/uwsgi-echo-01.log
+tail -f /var/log/uwsgi-echo-02.log
+...
+tail -f /var/log/uwsgi-echo-10.log
+journalctl -u echo-shm.service -n 1000
 ```
 
 ## Profiling
