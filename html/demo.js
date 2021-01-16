@@ -201,7 +201,7 @@ function update_calendar() {
           "Otherwise, please come back later.";
       } else if (upcomingEvent) {
         window.currentEvent.innerText = "Next Event: \"" + upcomingEvent.summary +
-          "\" in " + prettyTime(upcomingEvent.futureMs);
+          "\" in " + prettyTime(upcomingEvent.futureMs) + ".";
         if (upcomingEvent.futureMs < 60*60*1000) {
           window.eventWelcome.innerText =
             "There are no events right now, but in " +
