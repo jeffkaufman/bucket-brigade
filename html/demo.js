@@ -325,12 +325,13 @@ window.latencyCalibrationRetry.addEventListener("click", () => {
 });
 
 let in_spectator_mode = false;
+let disable_leading = false;
 function enableSpectatorMode() {
   // This forcibly mutes us, ignoring the mute button.
   // This is ONLY safe to do at the VERY beginning of things, before we send
   //   any real audio anywhere.
   bucket_ctx.send_ignore_input(true);  // XXX: private
-  window.takeLead.disabled = true;
+  disable_leading = true;
   in_spectator_mode = true;
   window.spectatorMode.style.display = "block";
 
@@ -592,14 +593,14 @@ let in_lagmute_mode = false;
 function dismissLagmute() {
   in_lagmute_mode = false;
   window.lagmute.style.display = "none";
-  window.takeLead.disabled = false;
+  disable_leading = false;
   singer_client.micMuted = micPaused;
 }
 
 function enterLagmute() {
   in_lagmute_mode = true;
   window.lagmute.style.display = "block";
-  window.takeLead.disabled = true;
+  disable_leading = true;
   singer_client.micMuted = micPaused;
 }
 
@@ -617,7 +618,7 @@ function toggle_mic() {
 
 function updateBucketBrigadeMute() {
   if (!in_spectator_mode && !in_lagmute_mode) {
-    window.takeLead.disabled = micPaused;
+    disable_leading = micPaused;
     singer_client.micMuted = micPaused;
   }
 }
@@ -625,7 +626,7 @@ function updateBucketBrigadeMute() {
 function updateTwilioMute() {
   if (twilio_room) {
     twilio_room.localParticipant.audioTracks.forEach(publication => {
-      if (micPaused || in_beforesong || in_song || in_aftersong) {
+      if (micPaused || song_active()) {
         publication.track.disable();
       } else {
         publication.track.enable();
@@ -682,8 +683,7 @@ async function enable_video() {
 
 function update_video() {
   if (twilio_room) {
-    if (videoPaused || (disableSongVideo && (
-          in_beforesong || in_song || in_aftersong))) {
+    if (videoPaused || (disableSongVideo && song_active())) {
       disable_video();
     } else {
       enable_video();
@@ -857,16 +857,23 @@ function estimateBucket(offset_s, clamp=true) {
 function update_active_users(
   user_summary, server_sample_rate, showBuckets, hasLeader, imLeading, n_users) {
 
+  window.takeLead.disabled = disable_leading;
   if (imLeading && leadButtonState != "start-singing" &&
       leadButtonState != "stop-singing") {
     window.takeLead.textContent = "Start Singing";
     leadButtonState = "start-singing";
     window.backingTrack.style.display = "inline-block";
     window.backingTrack.selectedIndex = 0;
-  } else if (!imLeading && leadButtonState != "leadButtonState") {
-    window.takeLead.textContent = hasLeader ? "Seize Lead" : "Lead a Song";
-    leadButtonState = "take-lead";
+  } else if (!imLeading) {
     window.backingTrack.style.display = "none";
+    if (hasLeader && song_active()) {
+      window.takeLead.textContent = "Halt Song";
+      leadButtonState = "stop-singing"
+      window.takeLead.disabled = false;
+    } else {
+      window.takeLead.textContent = hasLeader ? "Seize Lead" : "Lead a Song";
+      leadButtonState = "take-lead";
+    }
   }
 
   window.total_users_connected.innerText = n_users;
@@ -1147,6 +1154,10 @@ let in_beforesong = false;  // Have other people started singing?
 let in_song = false;  // Is our current position in a song?
 let in_aftersong = false;  // Are other people still singing?
 
+function song_active() {
+  return in_beforesong || in_song || in_aftersong;
+}
+
 let twilio_room = null;
 
 const activeTrackDivs = {};  // name -> track div
@@ -1339,7 +1350,7 @@ function connect_twilio() {
 
     function addParticipant(participant) {
       console.log("addParticipant", participant);
-      if (singer_client && !(in_song || in_aftersong || in_beforesong)) {
+      if (singer_client && !song_active()) {
         singer_client.play_chime();
       }
 
@@ -1457,6 +1468,10 @@ async function start_singing() {
     }
 
     if (user_summary.length) {
+      console.log(
+        "song_start_clock", song_start_clock,
+        "client_read_clock", client_read_clock,
+        "song_end_clock", song_end_clock);
       in_song = song_start_clock && song_start_clock <= client_read_clock &&
         (!song_end_clock || song_end_clock > client_read_clock);
 
@@ -1517,7 +1532,12 @@ async function start_singing() {
       // check whether we need to mute/unmute Twilio.
       updateTwilioMute();
 
-      if (hasLeader || in_song || in_aftersong || in_beforesong) {
+      console.log("hasLeader", hasLeader, "song_active", song_active(),
+                  "in_beforesong", in_beforesong,
+                  "in_song", in_song,
+                  "in_aftersong", in_aftersong);
+
+      if (hasLeader || song_active()) {
         window.chooseLeaderInstructions.style.display = "none";
         window.activeLeader.style.display = "inline-block";
 
@@ -1537,7 +1557,7 @@ async function start_singing() {
         window.activeLeader.style.display = "none";
       }
 
-      const showBuckets = hasLeader || in_beforesong || in_song || in_aftersong;
+      const showBuckets = hasLeader || song_active();
       window.buckets.style.display = showBuckets ? "flex" : "none";
       window.unbucketedUsers.style.display = showBuckets ? "none" : "block";
 

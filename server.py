@@ -817,12 +817,19 @@ def handle_special(query_params, server_clock, user=None, client_read_clock=None
         # stop the backing track from playing, if it's still going
         state.backing_track_index = len(state.backing_track)
         state.metronome_on = False
-        state.leader = None
 
         if user is not None:
-            state.song_end_clock = user.last_write_clock
+            if user.userid == state.leader:
+                state.song_end_clock = user.last_write_clock
+            else:
+                 # halt singing, end it immediately
+                state.song_end_clock = 1
+                state.song_start_clock = 1
         else:
             state.song_end_clock = server_clock
+
+        state.leader = None
+
 
     if query_params.get("clear_events", None):
         events.clear()
