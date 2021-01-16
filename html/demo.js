@@ -197,7 +197,8 @@ function update_calendar() {
       });
 
       if (currentEvent) {
-        window.currentEvent.innerText = "Current Event: " + currentEvent.summary;
+        window.currentEvent.innerText =
+          "Current Event: " + currentEvent.summary + ".";
         window.eventWelcome.innerText =
           "Right now " + currentEvent.organizer + " is running \"" +
           currentEvent.summary + "\".  If you were invited to attend, great! " +
@@ -213,7 +214,7 @@ function update_calendar() {
             upcomingEvent.summary + "\".";
         }
       } else {
-        window.currentEvent.innerText = "No Events Scheduled";
+        window.currentEvent.innerText = "No Events Scheduled.";
       }
     });
 }
