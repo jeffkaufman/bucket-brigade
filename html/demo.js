@@ -91,6 +91,18 @@ function server_api_path() {
   return new URL(serverPath.value, document.location).href;
 }
 
+function updateCurrentUsersText(n) {
+  let roomText = "The room is currently empty.";
+  if (n) {
+    if (n == 1) {
+      roomText = "There is currently 1 person in the room.";
+    } else {
+      roomText = "There are currently " + n + " people in the room.";
+    }
+  }
+  window.currentUsers.innerText = roomText;
+}
+
 function updateCurrentUsers() {
   var xhr = new XMLHttpRequest();
   xhr.open('POST', server_api_path() + "?action=status", true);
@@ -103,16 +115,7 @@ function updateCurrentUsers() {
         switch_app_state(APP_ROOM_FULL);
       }
 
-      let roomText = "The room is currently empty.";
-      if (x_audio_metadata.n_connected_users) {
-        if (x_audio_metadata.n_connected_users == 1) {
-          roomText = "There is currently 1 person in the room.";
-        } else {
-          roomText = "There are currently " + x_audio_metadata.n_connected_users +
-            " people in the room.";
-        }
-      }
-      window.currentUsers.innerText = roomText;
+      updateCurrentUsersText(x_audio_metadata.n_connected_users);
     }
   };
   xhr.send();
@@ -876,7 +879,7 @@ function update_active_users(
     }
   }
 
-  window.total_users_connected.innerText = n_users;
+  updateCurrentUsersText(n_users);
 
   const mic_volume_inputs = [];
   const userids = new Set();
