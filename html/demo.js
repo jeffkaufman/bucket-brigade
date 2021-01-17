@@ -284,6 +284,7 @@ function takeLeadClick() {
     window.takeLead.textContent = "Stop Singing";
     singer_client.x_send_metadata("markStartSinging", true);
     leadButtonState = "stop-singing";
+    window.backingTrack.style.display = "none";
   } else if (leadButtonState == "stop-singing") {
     singer_client.x_send_metadata("markStopSinging", true);
     window.takeLead.textContent = "Lead a Song";
@@ -486,7 +487,6 @@ function set_controls() {
   setVisibleIn(window.inputSelector,
                allStatesExcept(ACTIVE_STATES.concat(
                  [APP_TUTORIAL, APP_CHOOSE_CAMERA])));
-  setEnabledIn(window.songControls, allStatesExcept([APP_RESTARTING]));
   setEnabledIn(window.chatPost, allStatesExcept([APP_RESTARTING]));
   setEnabledIn(audioOffset, allStatesExcept([APP_RESTARTING]));
 
@@ -1471,6 +1471,9 @@ async function start_singing() {
       connect_twilio();
     }
 
+    let startSingingCountdown = null;
+    let stopSingingCountdown = null;
+
     if (user_summary.length) {
       console.log(
         "song_start_clock", song_start_clock,
@@ -1491,12 +1494,10 @@ async function start_singing() {
 
       // XXX: needs to be reimplemented in terms of alarms / marks
       if (song_start_clock && song_start_clock > client_read_clock) {
-        window.startSingingCountdown.style.display = "block";
         in_beforesong = true;
-        window.startCountdown.innerText = Math.round(
-          (song_start_clock - client_read_clock) / server_sample_rate) + "s";
+        startSingingCountdown = Math.round(
+          (song_start_clock - client_read_clock) / server_sample_rate);
       } else {
-        window.startSingingCountdown.style.display = "none";
         in_beforesong = false;
 
         if (song_end_clock && song_end_clock < client_read_clock) {
@@ -1519,16 +1520,13 @@ async function start_singing() {
             (highest_bucket - my_bucket) * DELAY_INTERVAL * server_sample_rate);
           if (effective_end_clock > client_read_clock) {
             in_aftersong = true;
-            window.stopSingingCountdown.style.display = "block";
-            window.stopCountdown.innerText = Math.round(
-              (effective_end_clock - client_read_clock) / server_sample_rate) + "s";
+            stopSingingCountdown = Math.round(
+              (effective_end_clock - client_read_clock) / server_sample_rate);
           } else {
-            window.stopSingingCountdown.style.display = "none";
-            in_aftersong = false;
+             in_aftersong = false;
           }
         } else {
-          window.stopSingingCountdown.style.display = "none";
-          in_aftersong = false;
+           in_aftersong = false;
         }
       }
 
@@ -1541,24 +1539,32 @@ async function start_singing() {
                   "in_song", in_song,
                   "in_aftersong", in_aftersong);
 
-      if (hasLeader || song_active()) {
-        window.chooseLeaderInstructions.style.display = "none";
-        window.activeLeader.style.display = "inline-block";
-
-        if (in_aftersong) {
-          window.leaderStatus.innerText = "Later people are still singing";
-        } else if (in_beforesong || !hasLeader) {
-          window.leaderStatus.innerText = "Earlier people are singing";
-        } else if (in_song) {
-          window.leaderStatus.innerText = imLeading ?
-            "You have started" : leaderName + " has started";
+      if (stopSingingCountdown != null) {
+        window.runningStatus.innerText =
+          "Waiting for later buckets to finish: " + stopSingingCountdown + "s.";
+      } else if (startSingingCountdown != null) {
+        window.runningStatus.innerText =
+          "Waiting for the song to reach this bucket: " +
+          startSingingCountdown + "s.";
+      } else if (imLeading) {
+        if (in_song) {
+          window.runningStatus.innerText = "Press 'stop singing' when done.";
         } else {
-          window.leaderStatus.innerText = imLeading ?
-            "You are preparing to start" : leaderName + " is preparing to start";
+          window.runningStatus.innerText =
+            "Press 'start singing' when ready to begin.";
         }
+      } else if (hasLeader) {
+        if (in_song) {
+          window.runningStatus.innerText = leaderName + " has started.";
+        } else {
+          window.runningStatus.innerText = leaderName + " is preparing to start.";
+        }
+      } else if (song_active()) {
+        window.runningStatus.innerText =
+          "The song has ended for some buckets, but not your bucket yet.";
       } else {
-        window.chooseLeaderInstructions.style.display = "inline-block";
-        window.activeLeader.style.display = "none";
+        window.runningStatus.innerText =
+          "Talk to each other and figure out who's going to lead the next song.";
       }
 
       const showBuckets = hasLeader || song_active();

@@ -31,9 +31,6 @@
 #activeUsers {
   margin-left: 1em;
 }
-#songControls {
-  border: none;
-}
 #chatWindow {
   height: 100%;
   width: 15em;
@@ -89,17 +86,6 @@
 #final_detach_wireless,
 #final_no_headphones{
   display: none;
-}
-
-#startSingingCountdown, #stopSingingCountdown {
-  display: none;
-}
-#countdown {
-  background: #eee;
-  border-radius: 1em;
-  padding: 1em;
-  margin: 1em;
-  display: inline-block;
 }
 
 #volumeCalibration {
@@ -224,6 +210,11 @@ input.edited {
   border-radius: 0.25em;
   padding: 0.5em;
 }
+#runningStatus {
+  display: inline-block;
+}
+
+
 
 body {
   margin: 0;
@@ -379,7 +370,11 @@ h1 {
   display: none;
 }
 
-#lagmute, #spectatorMode {
+#lagmute {
+  display: none;
+}
+
+#spectatorMode {
   display: none;
   padding: 0.5em;
 }
@@ -401,14 +396,7 @@ h1 {
 .participant > video {
   width: 160px;
 }
-#songControls {
-  display: inline-block;
-}
-#aboveBuckets {
-  display: flex;
-  flex-direction: row;
-  justify-content: space-between;
-}
+
 #needName {
   display: none;
   color: red;
@@ -887,29 +875,14 @@ Are you still here? If so, move the mouse or something.
 
 <div id=aboveBuckets>
   <div>
-    <div id=chooseLeaderInstructions>
-      Talk to each other and figure out who's going to lead the next
-      song.
-    </div>
-
-    <div id=activeLeader>
-      <span id=leaderStatus>...</span>
-    </div>
-
-    <div id=songControls>
-      <button id=takeLead>Lead a Song</button>
-      <select id=backingTrack></select>
-    </div>
+    <button id=takeLead>Lead a Song</button>
+    <select id=backingTrack></select>
+    <div id=runningStatus></div>
   </div>
 
-  <div id=startSingingCountdown>
-    Waiting for the song to get to us...
-    <span id=startCountdown></span>
-  </div>
-
-  <div id=stopSingingCountdown>
-    Waiting for later users to finish singing...
-    <span id=stopCountdown></span>
+  <div id=lagmute>
+    <span>Due to lag, your singing is not included</span>
+    <button id=unlagmute>Try Again</button>
   </div>
 </div>
 
@@ -932,8 +905,6 @@ Are you still here? If so, move the mouse or something.
     <button disabled id=micToggleButton>mute mic</button>
     <button disabled id=speakerToggleButton>mute speaker</button>
     <button disabled id=videoToggleButton>...</button>
-    <div id=lagmute>Due to lag, your singing is not included
-      <button id=unlagmute>Try Again</button></div>
     <div id=spectatorMode>As a spectator, your singing is not included</div>
   </div>
 
