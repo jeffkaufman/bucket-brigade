@@ -266,6 +266,7 @@ class Recorder:
             w("<html>")
             w("<title>Recordings</title>")
             w("<h1>Recordings</h1>")
+            w("All times (and dates!) are in UTC.")
             w("<ul>")
             for fname in reversed(sorted(os.listdir(RECORDINGS_DIR))):
                 if not fname.endswith(".wav"):
