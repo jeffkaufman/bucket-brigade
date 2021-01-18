@@ -915,6 +915,16 @@ export class SingerClient extends EventTarget {
     }
   }
 
+  send_kv(key, value) {
+    if (this.connection && this.hasConnectivity) {
+      this.connection.set_json_kv(key, value);
+    } else {
+      console.error(
+        "set_json_kv should never be sent before connection, dropping:",
+        key, value);
+    }
+  }
+
   send_telemetry(key, value, append) {
     // We're disabling this for now.
     return;
@@ -1224,6 +1234,10 @@ export class SingerClientConnection {
     } else {
       this.metadata_to_send[key] = value;
     }
+  }
+
+  set_json_kv(key, value) {
+    this.server_connection.set_json_kv(key, value);
   }
 
   send_telemetry(key, value, append) {

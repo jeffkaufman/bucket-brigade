@@ -120,7 +120,16 @@ def handle_post(userid, n_samples, in_data_raw,
         dec = opuslib.Decoder(server.SAMPLE_RATE, CHANNELS)
         users[userid] = enc, dec
 
-    in_data = np.frombuffer(in_data_raw, dtype=np.uint8)
+    post_body = np.frombuffer(in_data_raw, dtype=np.uint8)
+    parsed_params = urllib.parse.parse_qs(query_string, strict_parsing=True)
+    json_len, = parsed_params.get("json_len", [None])
+    if json_len:
+        json_len = int(json_len)
+        json_kvs = json.loads(post_body[:json_len].tobytes().decode('utf8'))
+        in_data = post_body[json_len:]
+    else:
+        in_data = post_body
+        json_kvs = {}
 
     # If the user does not send us any data, we will treat it as silence of length n_samples. This is useful if they are just starting up.
     client_no_data = len(in_data)==0
@@ -148,7 +157,8 @@ def handle_post(userid, n_samples, in_data_raw,
     query_string += '&rms_volume=%s'%rms_volume
 
     data, x_audio_metadata = handle_json_post(
-        in_data, query_string, print_status, client_address=client_address)
+        in_data, query_string, json_kvs, print_status,
+        client_address=client_address)
 
     # Divide data into user_summary and raw audio data
     n_users_in_summary, = struct.unpack(">H", data[:2])
@@ -175,13 +185,14 @@ def handle_post(userid, n_samples, in_data_raw,
 
     return data.tobytes(), x_audio_metadata
 
-def handle_json_post(in_data, query_string, print_status, client_address=None):
-    in_json = {
+def handle_json_post(in_data, query_string, json_kvs, print_status,
+                     client_address=None):
+    json_kvs.update({
         "query_string": query_string,
         "print_status": print_status,
         "client_address": client_address,
-    }
-    out_json_raw, out_data = backend.handle_post(json.dumps(in_json), in_data)
+    })
+    out_json_raw, out_data = backend.handle_post(json.dumps(json_kvs), in_data)
 
     out_json = json.loads(out_json_raw)
 

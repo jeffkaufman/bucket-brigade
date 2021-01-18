@@ -48,6 +48,7 @@ export class ServerConnection extends ServerConnectionBase {
     this.write_clock = null;
     this.userid = userid;
     this.send_metadata = {};
+    this.json_kvs = {}
     this.running = false;
     this.receive_cb = receive_cb;
     this.failure_cb = failure_cb;
@@ -83,6 +84,10 @@ export class ServerConnection extends ServerConnectionBase {
     this.send_metadata = send_metadata;
   }
 
+  set_json_kv(key, value) {
+    this.json_kvs[key] = value;
+  }
+
   send(chunk) {
     if (!this.running) {
       console.warn("Not sending to server because not running");
@@ -110,7 +115,12 @@ export class ServerConnection extends ServerConnectionBase {
     var saved_read_clock = this.read_clock;
     var saved_write_clock = this.write_clock;
 
-    samples_to_server(chunk_data, this.target_url, {
+    let json_kvs_str = JSON.stringify(this.json_kvs);
+    if (json_kvs_str === "{}") {
+      json_kvs_str = null;
+    }
+    this.json_kvs = {};
+    samples_to_server(chunk_data, this.target_url, json_kvs_str, {
       read_clock: this.read_clock,
       write_clock: this.write_clock,
       n_samples: chunk.length,
@@ -333,10 +343,23 @@ export async function query_server_clock(target_url) {
 }
 
 var xhrs_inflight = 0;
-export async function samples_to_server(outdata, target_url, send_metadata) {
-  console.debug("samples_to_server send_metadata:", send_metadata);
+export async function samples_to_server(
+     outdata, target_url, json_kvs_str, send_metadata) {
+  console.debug("samples_to_server send_metadata:", send_metadata,
+                "json_kvs_str", json_kvs_str);
   if (outdata === null) {
     outdata = new Uint8Array();
+  }
+
+  if (json_kvs_str) {
+    const json_kvs_bytes = (new TextEncoder()).encode(json_kvs_str);
+    send_metadata.json_len = json_kvs_bytes.length;
+
+    const combined_outdata =
+          new Uint8Array(json_kvs_bytes.length + outdata.length);
+    combined_outdata.set(json_kvs_bytes);
+    combined_outdata.set(outdata, json_kvs_bytes.length);
+    outdata = combined_outdata;
   }
 
   return new Promise((resolve, reject) => {
