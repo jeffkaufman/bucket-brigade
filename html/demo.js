@@ -285,6 +285,7 @@ function takeLeadClick() {
     singer_client.x_send_metadata("markStartSinging", true);
     leadButtonState = "stop-singing";
     window.backingTrack.style.display = "none";
+    window.provideLyrics.style.display = "none";
   } else if (leadButtonState == "stop-singing") {
     singer_client.x_send_metadata("markStopSinging", true);
     window.takeLead.textContent = "Lead a Song";
@@ -295,6 +296,25 @@ function takeLeadClick() {
 }
 
 window.takeLead.addEventListener("click", takeLeadClick);
+
+window.provideLyrics.addEventListener("click", () => {
+  window.lyricsEntry.style.display = "block";
+});
+
+window.lyricsEntryCancel.addEventListener("click", () => {
+  window.lyricsEntry.style.display = "none";
+  window.lyricsTooLong.style.display = "none";
+});
+
+window.lyricsEntryOk.addEventListener("click", () => {
+  if (window.lyricsEntryBox.value.length > 2500) {
+    window.lyricsTooLong.style.display = "block";
+  } else {
+    window.lyricsEntry.style.display = "none";
+    window.lyricsTooLong.style.display = "none";
+    singer_client.x_send_metadata("lyrics", window.lyricsEntryBox.value);
+  }
+});
 
 window.bpm.addEventListener("change", () => {
   const newBpm = parseInt(window.bpm.value);
@@ -522,6 +542,7 @@ function set_controls() {
   window.estLatency.innerText = "...";
 
   window.backingTrack.display = "none";
+  window.provideLyrics.style.display = "none";
 }
 
 function in_select_change() {
@@ -868,8 +889,10 @@ function update_active_users(
     leadButtonState = "start-singing";
     window.backingTrack.style.display = "inline-block";
     window.backingTrack.selectedIndex = 0;
+    window.provideLyrics.style.display = "inline-block";
   } else if (!imLeading) {
     window.backingTrack.style.display = "none";
+    window.provideLyrics.style.display = "none";
     if (hasLeader && song_active()) {
       window.takeLead.textContent = "Halt Song";
       leadButtonState = "stop-singing"
