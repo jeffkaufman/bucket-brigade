@@ -473,6 +473,7 @@ def run_backing_track() -> None:
 def assign_delays(userid_lead) -> None:
     initial_position = 0
 
+    repeat_length_s = None
     if state.bpr and state.bpm and state.repeats:
         beat_length_s = 60 / state.bpm
         repeat_length_s = beat_length_s * state.bpr
@@ -495,7 +496,20 @@ def assign_delays(userid_lead) -> None:
     leader.send("delay_seconds", state.first_bucket)
     sendall("first_bucket", state.first_bucket)
 
-    n_follow_buckets = max(min(LAYERING_DEPTH - 1, len(followers)), 1)
+    max_follow_buckets = LAYERING_DEPTH - 1
+    print("max_follow_buckets: %s" % max_follow_buckets)
+    if repeat_length_s:
+        print("repeat_length_s: %s" % repeat_length_s)
+        layers_audible_to_leader = repeat_length_s // DELAY_INTERVAL
+        print("layers_audible_to_leader: %s" % layers_audible_to_leader)
+        if layers_audible_to_leader < 1:
+            layers_audible_to_leader = 1
+        max_follow_buckets = min(max_follow_buckets, layers_audible_to_leader)
+        print("max_follow_buckets: %s" % max_follow_buckets)
+
+    n_follow_buckets = int(max(min(max_follow_buckets, len(followers)), 1))
+    print("n_follow_buckets: %s" % n_follow_buckets)
+
     follow_positions = [
         initial_position + (x+2)*DELAY_INTERVAL
         for x in range(n_follow_buckets)]
