@@ -1079,6 +1079,8 @@ def handle_post(in_json, in_data) -> Tuple[Any, str]:
 
         state.metronome_on = False
         state.leader = userid
+        state.lyrics = ""
+        sendall("lyrics", "")
         clear_whole_buffer()
 
     # Handle all operations that do not require a userid
