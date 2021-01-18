@@ -107,6 +107,8 @@ class State():
         self.disable_auto_gain = False
         self.disable_song_video = False
 
+        self.lyrics = ""
+
         if recorder:
             recorder.reset()
 
@@ -359,6 +361,8 @@ class User:
                   scalar_to_friendly_volume(state.backing_volume))
         if state.disable_song_video:
             self.send("disableSongVideo", state.disable_song_video)
+        if state.lyrics:
+            self.send("lyrics", state.lyrics)
 
     def allocate_twilio_token(self):
         token = AccessToken(secrets["twilio"]["account_sid"],
@@ -755,11 +759,7 @@ def handle_json_post(in_json_raw, in_data):
         else:
             return json.dumps({"error": "unknown request " + in_json["request"]}), np.zeros(0)
 
-    query_string = in_json["query_string"]
-    client_address = in_json.get("client_address", None)
-
-    out_data, x_audio_metadata = handle_post(
-        in_data, query_string, print_status=True, client_address=client_address)
+    out_data, x_audio_metadata = handle_post(in_json, in_data)
 
     return json.dumps({
         "x-audio-metadata": x_audio_metadata,
@@ -909,11 +909,12 @@ def extract_params(params, keys):
 def get_events_to_send() -> Any:
     return [{"evid": i[0], "clock": i[1]} for i in events.items()]
 
-def handle_post(in_data, query_string, print_status, client_address=None) -> Tuple[Any, str]:
+def handle_post(in_json, in_data) -> Tuple[Any, str]:
     in_data = in_data.view(dtype=np.float32)
 
     raw_params = {}
     # For some reason urllib can't handle the query_string being empty
+    query_string = in_json["query_string"]
     if query_string:
         raw_params = urllib.parse.parse_qs(query_string, strict_parsing=True)
     query_params = clean_query_params(raw_params)
@@ -1046,8 +1047,8 @@ def handle_post(in_data, query_string, print_status, client_address=None) -> Tup
     update_users(userid, username, server_clock, client_read_clock)
     user = users[userid]
 
-    if client_address is not None:
-        user.client_address = client_address
+    if "client_address" in in_json:
+        user.client_address = in_json["client_address"]
 
     user.in_spectator_mode = query_params.get("spectator", None)
 
@@ -1063,6 +1064,10 @@ def handle_post(in_data, query_string, print_status, client_address=None) -> Tup
     if user_backing_volume:
         user.backing_volume = friendly_volume_to_scalar(
             float(user_backing_volume))
+
+    if "lyrics" in in_json:
+        state.lyrics = in_json["lyrics"]
+        sendall("lyrics", state.lyrics)
 
     # If we are running under Ritual Engine, disable functionality that is  not
     #   required in that setting, and would be disruptive if triggered by
@@ -1194,7 +1199,7 @@ def handle_post(in_data, query_string, print_status, client_address=None) -> Tup
     x_audio_metadata.update(user.to_send)
     user.mark_sent()
 
-    if print_status:
+    if in_json.get("print_status", False):
         maybe_print_status()
 
     bin_summary = binary_user_summary(user_summary(requested_user_summary))

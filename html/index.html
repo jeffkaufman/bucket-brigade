@@ -93,6 +93,7 @@
 }
 
 #backingTrack { display: none; }
+#provideLyrics { display: none; }
 
 #crash {
   display: none;
@@ -411,7 +412,42 @@ h1 {
 #aboveBuckets > * {
   margin-bottom: 1em;
 }
+
+#lyricsEntry {
+  position: absolute;
+  top: 1em;
+  left: 1em;
+  border-radius: 0.5em;
+  border: 1px solid #aaa;
+  width: calc(100vw - 2em);
+  height: calc(100vh - 2em);
+  background: rgb(224, 242, 242);
+  z-index: 2;
+  display: none;
+}
+#lyricsEntryBox {
+  width: calc(100% - 2em);
+  height: calc(100% - 4em);
+  margin: 1em;
+}
+#lyricsEntryBottom {
+  display: flex;
+  flex-direction: row;
+  justify-content: flex-end;
+  margin-right: 1em;
+}
+#lyricsTooLong {
+  color: red;
+  display: none;
+  margin-right: 1em;
+}
+#lyricsDisplay {
+  width: 100%;
+  height: 40vh;
+  display: none;
+}
 </style>
+
 
 <link rel="icon"
       type="image/png"
@@ -420,6 +456,15 @@ h1 {
 <script src="//media.twiliocdn.com/sdk/js/video/releases/2.8.0/twilio-video.min.js"></script>
 
 </head>
+
+<div id=lyricsEntry>
+<textarea id=lyricsEntryBox></textarea>
+<div id=lyricsEntryBottom>
+<div id=lyricsTooLong>Sorry, too many lyrics</div>
+<button id=lyricsEntryOk>OK</button>
+<button id=lyricsEntryCancel>Cancel</button>
+</div>
+</div>
 
 <div id=page>
 
@@ -879,6 +924,7 @@ Are you still here? If so, move the mouse or something.
 <div id=aboveBuckets>
   <div>
     <button id=takeLead>Lead a Song</button>
+    <button id=provideLyrics>Provide Lyrics</button>
     <select id=backingTrack></select>
     <div id=runningStatus></div>
   </div>
@@ -904,6 +950,9 @@ Are you still here? If so, move the mouse or something.
 
   </div>
 
+  <textarea id=lyricsDisplay>
+  Lyrics Go Here
+  </textarea>
 </div>
 
 
