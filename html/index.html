@@ -213,9 +213,9 @@ input.edited {
 #runningStatus {
   display: inline-block;
 }
-
-
-
+#bucketingGuide {
+  display: none;
+}
 body {
   margin: 0;
 }
@@ -407,6 +407,9 @@ h1 {
 }
 #roomfull, #tutorial {
   display: none;
+}
+#aboveBuckets > * {
+  margin-bottom: 1em;
 }
 </style>
 
@@ -884,6 +887,23 @@ Are you still here? If so, move the mouse or something.
     <span>Due to lag, your singing is not included</span>
     <button id=unlagmute>Try Again</button>
   </div>
+
+  <div id=bucketingGuide>
+
+    Each person is in a bucket. You can hear the people in earlier
+    buckets, and you can be heard by the people in later buckets. You
+    can't hear other people in your own bucket.  You can move between
+    buckets by pressing the "join" button in the upper right.
+
+    <p>
+
+    If you are a strong singer or know the song well you might choose
+    an earlier bucket, while if you are less confident you might
+    choose a later one.  Similarly, if you are in a noisy environment
+    or are not wearing headphones, you might also choose a later one.
+
+  </div>
+
 </div>
 
 

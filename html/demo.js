@@ -1571,6 +1571,10 @@ async function start_singing() {
       window.buckets.style.display = showBuckets ? "flex" : "none";
       window.unbucketedUsers.style.display = showBuckets ? "none" : "block";
 
+      const showBucketingGuide = hasLeader && !song_active();
+      window.bucketingGuide.style.display =
+        showBucketingGuide ? "block" : "none";
+
       update_active_users(user_summary, server_sample_rate, showBuckets,
                           hasLeader, imLeading, n_connected_users);
     }
