@@ -1502,10 +1502,6 @@ async function start_singing() {
     let stopSingingCountdown = null;
 
     if (user_summary.length) {
-      console.log(
-        "song_start_clock", song_start_clock,
-        "client_read_clock", client_read_clock,
-        "song_end_clock", song_end_clock);
       in_song = song_start_clock && song_start_clock <= client_read_clock &&
         (!song_end_clock || song_end_clock > client_read_clock);
 
@@ -1560,11 +1556,6 @@ async function start_singing() {
       // Either in_song and in_aftersong could have changed above, so
       // check whether we need to mute/unmute Twilio.
       updateTwilioMute();
-
-      console.log("hasLeader", hasLeader, "song_active", song_active(),
-                  "in_beforesong", in_beforesong,
-                  "in_song", in_song,
-                  "in_aftersong", in_aftersong);
 
       if (stopSingingCountdown != null) {
         window.runningStatus.innerText =
