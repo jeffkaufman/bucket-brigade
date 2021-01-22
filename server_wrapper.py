@@ -84,28 +84,11 @@ def unpack_multi(data) -> List[Any]:
         result.append(packet)
     return result
 
-def handle_json_post(in_data, query_string, print_status):
-    in_json = {
-        "query_string": query_string,
-        "print_status": print_status,
-    }
-    out_json_raw, out_data = backend.handle_post(json.dumps(in_json), in_data)
-
-    out_json = json.loads(out_json_raw)
-
-    if "error" in out_json:
-        inner_bt = ""
-        if "inner_bt" in out_json:
-            inner_bt = "\nBackend error details: " + out_json["inner_bt"]
-        raise Exception(out_json["error"] + inner_bt)
-
-    return out_data, out_json["x-audio-metadata"]
-
 def calculate_volume(in_data):
     return np.sqrt(np.mean(in_data**2))
 
 def handle_post_special(query_string, print_status=True):
-    data, x_audio_metadata = handle_json_post(np.zeros(0), query_string, print_status)
+    data, x_audio_metadata = handle_json_post(np.zeros(0), query_string, {}, print_status)
     return data.tobytes(), x_audio_metadata
 
 def handle_post(userid, n_samples, in_data_raw,
