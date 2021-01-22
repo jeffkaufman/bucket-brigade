@@ -932,24 +932,31 @@ function update_active_users(
 
     // Don't update user buckets when we are not looking at that screen.
     if (window.middle.style.display != "none") {
+      ensureParticipantDiv(userid);
+      const participantDiv = participantDivs[userid];
+
       if (user_bucket_index[userid] != est_bucket) {
-        ensureParticipantDiv(userid);
+        let currentParentDiv = null;
         if (user_bucket_index[userid] == -1) {
-          window.unbucketedUsers.removeChild(
-            participantDivs[userid]);
+          currentParentDiv = window.unbucketedUsers;
         } else if (user_bucket_index[userid] != null) {
-          bucket_divs[user_bucket_index[userid]].removeChild(
-            participantDivs[userid]);
+          currentParentDiv = bucket_divs[user_bucket_index[userid]];
         }
+
+        if (currentParentDiv) {
+          try {
+            currentParentDiv.removeChild(participantDiv);
+          } catch {}
+        }
+
         user_bucket_index[userid] = est_bucket;
         if (est_bucket == -1) {
-          window.unbucketedUsers.appendChild(participantDivs[userid]);
+          window.unbucketedUsers.appendChild(participantDiv);
         } else {
-          bucket_divs[est_bucket].appendChild(participantDivs[userid]);
+          bucket_divs[est_bucket].appendChild(participantDiv);
         }
       }
 
-      const participantDiv = participantDivs[userid];
       const displayName = userid == myUserid ? (name + " (me)") : name;
       if (participantDiv && participantDiv.name != displayName) {
         // First child is always participantInfo.
@@ -1335,6 +1342,7 @@ function connect_twilio() {
         }
         const trackDiv = track.attach();
         activeTrackDivs[track.name] = trackDiv;
+        console.log("Appending track for", identity);
         participantDivs[identity].appendChild(trackDiv);
       };
     }
@@ -1502,10 +1510,6 @@ async function start_singing() {
     let stopSingingCountdown = null;
 
     if (user_summary.length) {
-      console.log(
-        "song_start_clock", song_start_clock,
-        "client_read_clock", client_read_clock,
-        "song_end_clock", song_end_clock);
       in_song = song_start_clock && song_start_clock <= client_read_clock &&
         (!song_end_clock || song_end_clock > client_read_clock);
 
@@ -1560,11 +1564,6 @@ async function start_singing() {
       // Either in_song and in_aftersong could have changed above, so
       // check whether we need to mute/unmute Twilio.
       updateTwilioMute();
-
-      console.log("hasLeader", hasLeader, "song_active", song_active(),
-                  "in_beforesong", in_beforesong,
-                  "in_song", in_song,
-                  "in_aftersong", in_aftersong);
 
       if (stopSingingCountdown != null) {
         window.runningStatus.innerText =
