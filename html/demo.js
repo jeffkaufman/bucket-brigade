@@ -155,82 +155,108 @@ for (var i = 0; i < N_BUCKETS; i++) {
   window.buckets.appendChild(bucket);
 }
 
+let cachedCalendarEvents = [];
+let lastCalendarUpdate = null;
+async function fetch_calendar_if_needed() {
+  if (lastCalendarUpdate && Date.now() - lastCalendarUpdate < 10*60*1000) {
+    return;
+  }
+  const response = await fetch('https://www.googleapis.com/calendar/v3/calendars/gsc268k1lu78lbvfbhphdr0cs4@group.calendar.google.com/events?key=AIzaSyCDAG5mJmnmi9EaR5SujP70x8kLKOau4Is');
+  const data = await response.json();
+  console.log(data);
 
-function update_calendar() {
-  fetch('https://www.googleapis.com/calendar/v3/calendars/gsc268k1lu78lbvfbhphdr0cs4@group.calendar.google.com/events?key=AIzaSyCDAG5mJmnmi9EaR5SujP70x8kLKOau4Is')
-    .then(response => response.json())
-    .then(data => {
-      let currentEvent = null;
-      let upcomingEvent = null;
-      const now = Date.now();
+  if (!data.items) {
+    // TODO: Save the error code?
+    console.warn("No data from Google Calendar");
+    cachedCalendarEvents = [];
+    return;
+  }
 
-      if ( ! data.items ) {
-        // TODO: Save the error code?
-        console.warn("No data from Google Calendar");
-        window.currentEvent.innerText = "(Unable to communicate with Google Calendar.)";
-        return;
-      }
+  cachedCalendarEvents = data.items.filter(
+      item => item.status === "confirmed").map(item => {
+    return {
+      start: Date.parse(item.start.dateTime),
+      end: Date.parse(item.end.dateTime),
+      organizer: item.organizer.displayName || item.organizer.email,
+      summary: item.summary,
+      description: item.description,
+    };
+  });
+  lastCalendarUpdate = Date.now();
+}
 
-      data.items.forEach(item => {
-        // If an event is currently happening we want to check whether
-        // that's what people are here for. Similarly, if an event is
-        // going to be starting soon we should give people a heads up.
-        if (item.status === "confirmed") {
-          const msUntilStart = Date.parse(item.start.dateTime) - now;
-          const msUntilEnd = Date.parse(item.end.dateTime) - now;
-          const organizer = item.organizer.displayName || item.organizer.email;
-          console.log(item.summary + " [" + msUntilStart + ":" + msUntilEnd + "]");
-          if (msUntilStart <= 5*60*1000 /* 5min before event */
-              && msUntilEnd > 0) {
-            currentEvent = {
-              summary: item.summary,
-              remainingMs: msUntilEnd,
-              organizer: organizer,
-              description: item.description,
-            };
-          } else if (msUntilStart > 0) {
-            if (!upcomingEvent || upcomingEvent.futureMs > msUntilStart) {
-              upcomingEvent = {
-                summary: item.summary,
-                futureMs: msUntilStart,
-                organizer: organizer,
-              }
-            }
-          }
+async function update_calendar() {
+  await fetch_calendar_if_needed();
+
+  if (!lastCalendarUpdate) {
+    window.currentEvent.innerText = "(Unable to communicate with Google Calendar.)";
+    return;
+  }
+
+  let currentEvent = null;
+  let upcomingEvent = null;
+  const now = Date.now();
+
+  cachedCalendarEvents.forEach(item => {
+    // If an event is currently happening we want to check whether
+    // that's what people are here for. Similarly, if an event is
+    // going to be starting soon we should give people a heads up.
+
+    const msUntilStart = item.start - now;
+    const msUntilEnd = item.end- now;
+
+    if (msUntilStart <= 5*60*1000 /* 5min before event */
+        && msUntilEnd > 0) {
+      currentEvent = {
+        summary: item.summary,
+        remainingMs: msUntilEnd,
+        organizer: item.organizer,
+        description: item.description,
+      };
+    } else if (msUntilStart > 0) {
+      if (!upcomingEvent || upcomingEvent.futureMs > msUntilStart) {
+        upcomingEvent = {
+          summary: item.summary,
+          futureMs: msUntilStart,
+          organizer: item.organizer,
         }
-      });
+      }
+    }
 
-      if (currentEvent) {
-        window.currentEvent.innerText =
-          "Current Event: " + currentEvent.summary + ".";
+    expectedPasswordHash = null;
+    if (currentEvent) {
+      window.currentEvent.innerText =
+        "Current Event: " + currentEvent.summary + ".";
+      window.eventWelcome.innerText =
+        "Right now " + currentEvent.organizer + " is running \"" +
+        currentEvent.summary + "\".  If you were invited to attend, great! " +
+        "Otherwise, please come back later.";
+
+      if (currentEvent.description) {
+        const passwordHashMatch =
+              currentEvent.description.match(/pw:([0-9a-f]{64})/);
+        if (passwordHashMatch) {
+          expectedPasswordHash = passwordHashMatch[1];
+        }
+      }
+    } else if (upcomingEvent) {
+      window.currentEvent.innerText = "Next Event: \"" + upcomingEvent.summary +
+        "\" in " + prettyTime(upcomingEvent.futureMs) + ".";
+      if (upcomingEvent.futureMs < 60*60*1000) {
         window.eventWelcome.innerText =
-          "Right now " + currentEvent.organizer + " is running \"" +
-          currentEvent.summary + "\".  If you were invited to attend, great! " +
-          "Otherwise, please come back later.";
-
-        if (currentEvent.description) {
-          const passwordHashMatch =
-                currentEvent.description.match(/pw:([0-9a-f]{64})/);
-          if (passwordHashMatch) {
-            expectedPasswordHash = passwordHashMatch[1];
-          }
-        }
-      } else if (upcomingEvent) {
-        window.currentEvent.innerText = "Next Event: \"" + upcomingEvent.summary +
-          "\" in " + prettyTime(upcomingEvent.futureMs) + ".";
-        if (upcomingEvent.futureMs < 60*60*1000) {
-          window.eventWelcome.innerText =
-            "There are no events right now, but in " +
-            prettyTime(upcomingEvent.futureMs) + " " +
-            upcomingEvent.organizer + " is running \"" +
-            upcomingEvent.summary + "\".";
-        }
-      } else {
-        window.currentEvent.innerText = "No Events Scheduled.";
+          "There are no events right now, but in " +
+          prettyTime(upcomingEvent.futureMs) + " " +
+          upcomingEvent.organizer + " is running \"" +
+          upcomingEvent.summary + "\".";
       }
-    });
+    } else {
+      window.currentEvent.innerText = "No Events Scheduled.";
+    }
+  });
 }
 update_calendar();
+// Update the display once a minute, refetching as needed.
+window.setInterval(update_calendar, 60000);
 
 function testEventGo() {
   if (!singer_client) {
