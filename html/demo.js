@@ -125,6 +125,8 @@ updateCurrentUsers();
 const user_bucket_index = {};  // userid -> bucket index (-1 means unbucketed)
 const bucket_divs = [];  // bucket index -> bucket div
 
+let expectedPasswordHash = null;
+
 for (var i = 0; i < N_BUCKETS; i++) {
   var bucket = document.createElement("div");
   bucket.classList.add("bucket");
@@ -184,6 +186,7 @@ function update_calendar() {
               summary: item.summary,
               remainingMs: msUntilEnd,
               organizer: organizer,
+              description: item.description,
             };
           } else if (msUntilStart > 0) {
             if (!upcomingEvent || upcomingEvent.futureMs > msUntilStart) {
@@ -204,6 +207,14 @@ function update_calendar() {
           "Right now " + currentEvent.organizer + " is running \"" +
           currentEvent.summary + "\".  If you were invited to attend, great! " +
           "Otherwise, please come back later.";
+
+        if (currentEvent.description) {
+          const passwordHashMatch =
+                currentEvent.description.match(/pw:([0-9a-f]{64})/);
+          if (passwordHashMatch) {
+            expectedPasswordHash = passwordHashMatch[1];
+          }
+        }
       } else if (upcomingEvent) {
         window.currentEvent.innerText = "Next Event: \"" + upcomingEvent.summary +
           "\" in " + prettyTime(upcomingEvent.futureMs) + ".";
@@ -614,6 +625,24 @@ document.addEventListener("mousemove", resetInactivityTimer);
 document.addEventListener("mousedown", resetInactivityTimer);
 document.addEventListener("keydown", resetInactivityTimer);
 document.addEventListener("keypress", resetInactivityTimer);
+
+async function saltAndHash(message) {
+  // Example code from https://developer.mozilla.org/en-US/docs/Web/API/SubtleCrypto/digest
+  const msgUint8 = new TextEncoder().encode("bucket_brigade_" + message);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', msgUint8);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  return hashHex;
+}
+
+window.reservePassword.addEventListener('input', () => {
+  console.log(window.reservePassword.value);
+  saltAndHash(window.reservePassword.value).then((hashHex) => {
+    window.reservePasswordInstructions.style.display = "inline-block";
+    console.log(hashHex);
+    window.reserveEncodedPassword.innerText = 'pw:' + hashHex;
+  });
+});
 
 let in_lagmute_mode = false;
 function dismissLagmute() {
@@ -1764,7 +1793,7 @@ function hide_buttons_and_append_answer(element, answer) {
   element.appendChild(b);
 };
 
-function tutorial_answer(button) {
+async function tutorial_answer(button) {
   const answer = button.innerText;
   const question = button.parentElement.id;
 
@@ -1775,11 +1804,29 @@ function tutorial_answer(button) {
     } else {
       hide_buttons_and_append_answer(button.parentElement, window.userName.value);
     }
+  } else if (question === "q_password") {
+    // This is not intended to keep out a serious attacker. We would
+    // have to handle passwords on the server for that.
+    const providedPasswordHash = await saltAndHash(window.enteredPassword.value);
+    if (providedPasswordHash != expectedPasswordHash) {
+      window.wrongPassword.style.display = "block";
+      return;
+    } else {
+      hide_buttons_and_append_answer(
+        button.parentElement,
+        Array.from(window.enteredPassword.value).map(() => "*").join(""));
+    }
   } else {
     hide_buttons_and_append_answer(button.parentElement, button.innerText);
   }
 
   if (question === "q_name") {
+    if (expectedPasswordHash) {
+      window.q_password.style.display = 'block';
+    } else {
+      window.q_singing_listening.style.display = 'block';
+    }
+  } else if (question === "q_password") {
     window.q_singing_listening.style.display = 'block';
   } else if (question === "q_singing_listening") {
     if (answer == "Singing and Listening") {
