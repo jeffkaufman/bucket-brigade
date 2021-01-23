@@ -178,7 +178,8 @@ function update_calendar() {
           const msUntilEnd = Date.parse(item.end.dateTime) - now;
           const organizer = item.organizer.displayName || item.organizer.email;
           console.log(item.summary + " [" + msUntilStart + ":" + msUntilEnd + "]");
-          if (msUntilStart <= 0 && msUntilEnd > 0) {
+          if (msUntilStart <= 5*60*1000 /* 5min before event */
+              && msUntilEnd > 0) {
             currentEvent = {
               summary: item.summary,
               remainingMs: msUntilEnd,
