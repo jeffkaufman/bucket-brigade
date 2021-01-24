@@ -136,6 +136,24 @@ sudo python3 -mpip uninstall SharedArray
 sudo python3 -mpip install -r requirements.txt
 ```
 
+### Twilio Setup
+
+While the singing component does not require any external integration,
+the video call component to support the default interface
+does. You will need to sign up for a Twilio account, and then fill out
+`~/src/solstice-audio-test/secrets.json` as:
+
+```
+{
+  "twilio": {
+     "account_sid": "...",
+     "api_key": "...",
+     "api_secret": "...",
+     "room": "You can name your room anything"
+  }
+}
+```
+
 ### Simple Configuration
 
 Handles up to ~60users.
@@ -164,24 +182,6 @@ In /etc/nginx/sites-available/default add:
 location /api {
    include uwsgi_params;
    uwsgi_pass 127.0.0.1:7101;
-}
-```
-
-### Twilio Setup
-
-While the singing component does not require any external integration,
-the video call component to support the default interface
-does. You will need to sign up for a Twilio account, and then fill out
-`~/src/solstice-audio-test/secrets.json` as:
-
-```
-{
-  "twilio": {
-     "account_sid": "...",
-     "api_key": "...",
-     "api_secret": "...",
-     "room": "You can name your room anything"
-  }
 }
 ```
 
