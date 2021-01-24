@@ -116,6 +116,10 @@ function updateCurrentUsers() {
       }
 
       updateCurrentUsersText(x_audio_metadata.n_connected_users);
+
+      if (x_audio_metadata.instance_name) {
+        window.instanceName.innerText = x_audio_metadata.instance_name;
+      }
     }
   };
   xhr.send();

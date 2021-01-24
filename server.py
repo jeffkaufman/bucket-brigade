@@ -921,10 +921,13 @@ def handle_post(in_json, in_data) -> Tuple[Any, str]:
 
     action = query_params.get("action", None)
     if action == "status":
-        return np.zeros(0, np.uint8), json.dumps({
+        rsp = {
             "n_connected_users": len(active_users()),
             "max_users": MAX_USERS,
-        })
+        }
+        if "instance_name" in secrets:
+            rsp["instance_name"] = secrets["instance_name"]
+        return np.zeros(0, np.uint8), json.dumps(rsp)
 
     userid = query_params.get("userid", None)
     if userid is not None:
