@@ -571,7 +571,7 @@ function set_controls() {
   setEnabledIn(window.audioOffset, [APP_RUNNING]);
   setEnabledIn(window.backingVolumeSlider, [APP_RUNNING]);
 
-  setVisibleIn(window.mainInterface, [APP_RUNNING, APP_RESTARTING]);
+  setVisibleIn(window.mainInterface, [APP_RUNNING, APP_RESTARTING], "grid");
 
   setVisibleIn(window.noAudioInputInstructions, []);
 

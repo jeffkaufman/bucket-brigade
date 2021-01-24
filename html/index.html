@@ -32,9 +32,7 @@
   margin-left: 1em;
 }
 #chatWindow {
-  height: 100%;
   width: 15em;
-  float: right;
   display: flex;
   flex-direction: column;
 }
@@ -61,8 +59,6 @@
 }
 #lostConnectivity {
   display: none;
-  position: absolute;
-  background-color: white;
 }
 #noAudioInputInstructions {
   display: none;
@@ -157,9 +153,7 @@ input.edited {
   width: 30em;
 }
 #remainderWindow {
-  height: 100%;
-  width: calc(100% - 15em);
-  float: left;
+  flex-grow: 1;
   display: flex;
   flex-direction: column;
   overflow-y: scroll;
@@ -218,6 +212,7 @@ input.edited {
 #bucketingGuide {
   display: none;
 }
+
 body {
   margin: 0;
 }
@@ -351,6 +346,15 @@ h1 {
   height: 100%;
   margin: 0;
   overflow-y: hidden;
+  align-items: stretch;
+  display: grid;
+  grid-template-rows: min-content auto
+}
+
+#bucketsAndChat {
+  display: flex;
+  flex-direction: row;
+  overflow-y: hidden;
 }
 
 #toplinks img {
@@ -408,13 +412,15 @@ h1 {
 }
 #timeoutImminent {
   display: none;
-  color: red;
 }
 #roomfull, #tutorial {
   display: none;
 }
 #aboveBuckets > * {
   margin-bottom: 1em;
+}
+#acrossTop {
+  padding: 1em;
 }
 
 #lyricsEntry {
@@ -991,15 +997,15 @@ value=100>
 </div>
 <div id=mainInterface>
 
-<div id=remainderWindow>
+<div id=acrossTop>
+  <div class=warning id=lostConnectivity>
+    Lost connectivity to the server. Trying to reconnect&hellip;
+  </div>
 
-<div class=warning id=lostConnectivity>Lost connectivity to the server. Trying to reconnect&hellip;</div>
+  <div class=warning id=timeoutImminent>
+    Are you still here? If so, move the mouse or something.
+  </div>
 
-<div id=timeoutImminent>
-Are you still here? If so, move the mouse or something.
-</div>
-
-<div id=aboveBuckets>
   <div>
     <button id=takeLead>Lead a Song</button>
     <button id=provideLyrics>Provide Lyrics</button>
@@ -1011,7 +1017,13 @@ Are you still here? If so, move the mouse or something.
     <span>Due to lag, your singing is not included</span>
     <button id=unlagmute>Try Again</button>
   </div>
+</div>
 
+<div id=bucketsAndChat>
+
+<div id=remainderWindow>
+
+<div id=aboveBuckets>
   <div id=bucketingGuide>
 
     Each person is in a bucket. You can hear the people in earlier
@@ -1034,6 +1046,7 @@ Are you still here? If so, move the mouse or something.
 </div>
 
 
+
 <div id=buckets></div>
 <div id=unbucketedUsers></div>
 
@@ -1043,6 +1056,8 @@ Are you still here? If so, move the mouse or something.
   <div id=chatDisplay></div>
   <form id=chatForm><input type="text" id=chatEntry></input><input type="submit" id=chatPost value="Post"></input></form>
 </div>
+
+</div> <!-- bucketsAndChat -->
 
 </div>
 </div>
