@@ -979,7 +979,7 @@ function update_active_users(
     if (userid == myUserid) {
       for (var j = 0 ; j < N_BUCKETS; j++) {
         window.buckets.children[j].children[0].children[1].disabled =
-          (!in_song && !hasLeader) || est_bucket === j;
+          est_bucket === j;
       }
     }
 
