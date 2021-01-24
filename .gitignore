@@ -134,3 +134,4 @@ dmypy.json
 # Bucket-brigade-specific files
 html/recordings
 !html/recordings/.keep
+html/local-style.css

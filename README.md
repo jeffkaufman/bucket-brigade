@@ -154,6 +154,22 @@ does. You will need to sign up for a Twilio account, and then fill out
 }
 ```
 
+### Theming
+
+You can change the colors as you like, by creating
+`~/src/solstice-audio-test/local-style.css` with something like:
+
+```
+:root {
+  --theme-light: rgb(255, 247, 248);
+  --theme-medium: rgb(255, 227, 229);
+  --theme-dark: rgb(252, 169, 179);
+}
+```
+
+If there are other changes you would like to make, PRs to make the
+styling easier to override are welcome.
+
 ### Simple Configuration
 
 Handles up to ~60users.

@@ -4,6 +4,11 @@
 <meta content="utf-8" http-equiv="encoding">
 <title>Bucket Brigade</title>
 <style>
+:root {
+  --theme-light: rgb(224, 242, 242);
+  --theme-medium: rgb(186, 226, 227);
+  --theme-dark: rgb(145, 209, 210);
+}
 .warning {
   border: 1px dashed red;
   border-radius: 0.25em;
@@ -221,7 +226,7 @@ body {
   width: 100%;
   height: 100%;
   overflow: hidden;
-  background-color: rgb(224, 242, 242);
+  background-color: var(--theme-light);
   display: flex;
   flex-direction: column;
   justify-content: flex-start;
@@ -229,7 +234,7 @@ body {
 
 #topbar {
   width: 100%;
-  background-color: rgb(186, 226, 227);
+  background-color: var(--theme-medium);
   padding-bottom: 0.5em;
 }
 
@@ -288,7 +293,7 @@ body {
   display: flex;
   flex-direction: row;
   justify-content: space-between;
-  background-color: rgb(186, 226, 227);
+  background-color: var(--theme-medium);
 }
 
 #tabbar {
@@ -299,7 +304,7 @@ body {
 #tabbar > * {
   padding: 0.5em;
   padding-bottom: 0.35em;
-  background-color: rgb(145, 209, 210);
+  background-color: var(--theme-dark);
   border-radius: 0.5em 0.5em 0 0;
   border: 1px solid #aaa;
   border-bottom: 0;
@@ -307,12 +312,12 @@ body {
 }
 
 #tabbar > .activeTab {
-  background-color: rgb(224, 242, 242);
+  background-color: var(--theme-light);
 }
 
 #controlbar {
   display: flex;
-  background-color: rgb(186, 226, 227);
+  background-color: var(--theme-medium);
   border-top: 1px solid black;
   align-items: baseline;
 }
@@ -431,7 +436,7 @@ h1 {
   border: 1px solid #aaa;
   width: calc(100vw - 2em);
   height: calc(100vh - 2em);
-  background: rgb(224, 242, 242);
+  background: var(--theme-light);
   z-index: 2;
   display: none;
 }
@@ -463,7 +468,7 @@ h1 {
   font-style: italic;
 }
 </style>
-
+<link rel="stylesheet" href="local-style.css"></link>
 
 <link rel="icon"
       type="image/png"
