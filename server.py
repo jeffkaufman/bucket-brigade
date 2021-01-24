@@ -806,7 +806,7 @@ def handle_special(query_params, server_clock, user=None, client_read_clock=None
         state.requested_track = requested_track
 
     if query_params.get("mark_start_singing", None):
-        # Always clear events at the start of a new song.
+        clear_whole_buffer()
         events.clear()
 
         # XXX: There is some confusion over exactly where the start marker should go, but it should be a value that we are guaranteed to have, so the song doesn't fail to start. (So not the write clock.)
@@ -1074,14 +1074,9 @@ def handle_post(in_json, in_data) -> Tuple[Any, str]:
     #   accident.
     if query_params.get("request_lead", None) and not state.server_controlled:
         assign_delays(userid)
-        state.song_start_clock = 0
-        state.song_end_clock = 0
-
-        state.metronome_on = False
         state.leader = userid
         state.lyrics = ""
         sendall("lyrics", "")
-        clear_whole_buffer()
 
     # Handle all operations that do not require a userid
     handle_special(query_params, server_clock, user, client_read_clock)
