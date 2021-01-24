@@ -1372,10 +1372,29 @@ window.nextCamera.addEventListener("click", () => {
   update_preview_camera();
 });
 
+let highlightedParticipantIdentity = null;
+function highlightParticipantDiv(identity) {
+  console.log("highlightParticipantDiv", highlightedParticipantIdentity, "->",
+              identity);
+  if (identity === highlightedParticipantIdentity) {
+    return;
+  }
+  Object.keys(participantDivs).forEach(participantIdentity => {
+    const participantDiv = participantDivs[participantIdentity];
+    if (identity == participantIdentity) {
+      participantDiv.classList.add("dominant-speaker");
+    } else {
+      participantDiv.classList.remove("dominant-speaker");
+    }
+  });
+  highlightedParticipantIdentity = identity;
+}
+
 function connect_twilio() {
   Twilio.Video.connect(twilio_token, {
     tracks: twilio_tracks,
-    name: 'BucketBrigade'
+    name: 'BucketBrigade',
+    dominantSpeaker: true,
   }).then(room => {
     console.log(`Successfully joined a Room: ${room}`);
     twilio_room = room;
@@ -1461,6 +1480,10 @@ function connect_twilio() {
         delete participantDivs[participant.identity];
       }
     }
+
+    room.on('dominantSpeakerChanged', participant => {
+      highlightParticipantDiv(participant.identity);
+    });
 
     room.on('participantConnected', addParticipant);
     room.on('participantDisconnected', removeParticipant);
@@ -1612,6 +1635,10 @@ async function start_singing() {
       // Either in_song and in_aftersong could have changed above, so
       // check whether we need to mute/unmute Twilio.
       updateTwilioMute();
+
+      if (song_active()) {
+        highlightParticipantDiv(null);
+      }
 
       if (stopSingingCountdown != null) {
         window.runningStatus.innerText =
