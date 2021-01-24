@@ -665,10 +665,8 @@ async function saltAndHash(message) {
 }
 
 window.reservePassword.addEventListener('input', () => {
-  console.log(window.reservePassword.value);
   saltAndHash(window.reservePassword.value).then((hashHex) => {
     window.reservePasswordInstructions.style.display = "inline-block";
-    console.log(hashHex);
     window.reserveEncodedPassword.innerText = 'pw:' + hashHex;
   });
 });
@@ -1377,8 +1375,6 @@ window.nextCamera.addEventListener("click", () => {
 
 let highlightedParticipantIdentity = null;
 function highlightParticipantDiv(identity) {
-  console.log("highlightParticipantDiv", highlightedParticipantIdentity, "->",
-              identity);
   if (identity === highlightedParticipantIdentity) {
     return;
   }
