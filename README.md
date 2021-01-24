@@ -170,7 +170,7 @@ location /api {
 ### Twilio Setup
 
 While the singing component does not require any external integration,
-and the video call component to support the default interface
+the video call component to support the default interface
 does. You will need to sign up for a Twilio account, and then fill out
 `~/src/solstice-audio-test/secrets.json` as:
 
