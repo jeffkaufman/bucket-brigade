@@ -7,12 +7,23 @@ Bucket-brigade singing implementation
 (These are "orthodox python way" instructions. If you skip the
 "virtualenv venv" and the ". venv/bin/activate", you will install the
 dependencies in your global Python environment. This is probably
-fine.)  ``` git clone
-https://github.com/gwillen/solstice-audio-test.git cd
-solstice-audio-test virtualenv venv # optional . venv/bin/activate #
-optional pip install -r requirements.txt ``` If you're on a Mac, you
-will need to install the Opus C library: ``` brew install opus-tools
-``` Now, you will need two separate terminals (or screen/tmux sessions
+fine.)
+
+```
+git clone https://github.com/gwillen/solstice-audio-test.git
+cd solstice-audio-test
+virtualenv venv # optional
+. venv/bin/activate # optional
+pip install -r requirements.txt
+```
+
+If you're on a Mac, you will need to install the Opus C library:
+
+```
+brew install opus-tools
+```
+
+Now, you will need two separate terminals (or screen/tmux sessions
 or similar.)
 
 Serve the static files:
