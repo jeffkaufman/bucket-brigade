@@ -167,7 +167,6 @@ async function fetch_calendar_if_needed() {
   }
   const response = await fetch('https://www.googleapis.com/calendar/v3/calendars/gsc268k1lu78lbvfbhphdr0cs4@group.calendar.google.com/events?key=AIzaSyCDAG5mJmnmi9EaR5SujP70x8kLKOau4Is');
   const data = await response.json();
-  console.log(data);
 
   if (!data.items) {
     // TODO: Save the error code?
