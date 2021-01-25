@@ -317,14 +317,20 @@ def do_POST(environ, start_response) -> None:
         print("Request raised exception!\nParams:", query_string, "\n", traceback.format_exc(), file=sys.stderr)
         return die500(start_response, e)
 
+    combined_data = x_audio_metadata.encode('utf-8') + data
+
+    simple_x_audio_metadata = json.dumps({
+        "metadata_len": len(x_audio_metadata)
+    })
+
     start_response(
         '200 OK',
         [("Access-Control-Allow-Origin", "*"),
          ("Access-Control-Max-Age", "86400"),
          ("Access-Control-Expose-Headers", "X-Audio-Metadata"),
-         ("X-Audio-Metadata", x_audio_metadata),
+         ("X-Audio-Metadata", simple_x_audio_metadata),
          ("Content-Type", "application/octet-stream")])
-    return data,
+    return combined_data,
 
 def application(environ, start_response):
     global backend

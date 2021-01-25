@@ -457,16 +457,22 @@ function handle_xhr_result(xhr, resolve, reject) {
   --xhrs_inflight;
 
   if (xhr.status == 200) {
-    var metadata = JSON.parse(xhr.getResponseHeader("X-Audio-Metadata"));
+    let metadata = JSON.parse(xhr.getResponseHeader("X-Audio-Metadata"));
+    let data = xhr.response;
+
+    const metadata_len = metadata.metadata_len;
+    if (metadata_len) {
+      metadata = JSON.parse(new TextDecoder('utf8').decode(
+        data.slice(0, metadata_len)));
+      data = data.slice(metadata_len);
+    }
+
     if (LOG_ULTRA_VERBOSE) {
       console.debug("SPAM", "metadata:", metadata);
       console.debug("SPAM", "Got XHR response w/ ID:", xhr.debug_id, "result:", xhr.response, " -- still in flight:", xhrs_inflight);
     }
 
-    return resolve({
-      metadata: metadata,
-      data: xhr.response
-    });
+    return resolve({metadata, data});
   } else {
     console.error("XHR failed w/ ID:", xhr.debug_id, "stopping:", xhr, " -- still in flight:", xhrs_inflight);
     var metadata_raw = xhr.getResponseHeader("X-Audio-Metadata");

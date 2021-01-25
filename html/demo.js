@@ -108,8 +108,7 @@ function updateCurrentUsers() {
   xhr.open('POST', server_api_path() + "?action=status", true);
   xhr.onreadystatechange = function () {
     if (this.readyState === XMLHttpRequest.DONE && this.status === 200) {
-      const x_audio_metadata = JSON.parse(this.getResponseHeader(
-        "X-Audio-Metadata"));
+      const x_audio_metadata = JSON.parse(this.response);
 
       if (x_audio_metadata.n_connected_users >= x_audio_metadata.max_users) {
         switch_app_state(APP_ROOM_FULL);
@@ -348,7 +347,7 @@ window.lyricsEntryCancel.addEventListener("click", () => {
 });
 
 window.lyricsEntryOk.addEventListener("click", () => {
-  if (window.lyricsEntryBox.value.length > 2500) {
+  if (window.lyricsEntryBox.value.length > 8500) {
     window.lyricsTooLong.style.display = "block";
   } else {
     window.lyricsEntry.style.display = "none";
