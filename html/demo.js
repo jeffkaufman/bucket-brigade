@@ -88,7 +88,11 @@ function joinBucket(i) {
 }
 
 function server_api_path() {
-  return new URL(serverPath.value, document.location).href;
+  return new URL(apiPath.value, document.location).href;
+}
+
+function server_upload_path() {
+  return new URL(uploadPath.value, document.location).href;
 }
 
 function updateCurrentUsersText(n) {
@@ -320,12 +324,19 @@ function takeLeadClick() {
   if (leadButtonState == "take-lead") {
     singer_client.x_send_metadata("requestedLeadPosition", true);
     // Action doesn't take effect until server confirms.
+    window.backingTrackUploader.style.display = "none";
+    window.backingTrackUploadOk.style.display = "none";
+    window.backingTrackUploadError.style.display = "none";
   } else if (leadButtonState == "start-singing") {
     window.takeLead.textContent = "Stop Singing";
     singer_client.x_send_metadata("markStartSinging", true);
     leadButtonState = "stop-singing";
     window.backingTrack.style.display = "none";
     window.provideLyrics.style.display = "none";
+    window.uploadBackingTrack.style.display = "none";
+    window.backingTrackUploader.style.display = "none";
+    window.backingTrackUploadOk.style.display = "none";
+    window.backingTrackUploadError.style.display = "none";
   } else if (leadButtonState == "stop-singing") {
     singer_client.x_send_metadata("markStopSinging", true);
     window.takeLead.textContent = "Lead a Song";
@@ -336,6 +347,44 @@ function takeLeadClick() {
 }
 
 window.takeLead.addEventListener("click", takeLeadClick);
+
+window.uploadBackingTrack.addEventListener("click", () => {
+  window.backingTrackUploader.style.display = "inline-block";
+  window.uploadBackingTrack.style.display = "none";
+  window.backingTrack.style.display = "none";
+  window.backingTrackUploadOk.style.display = "none";
+  window.backingTrackUploadError.style.display = "none";
+});
+
+window.backingTrackUploader.addEventListener("change", () => {
+  if (!window.backingTrackUploader.files.length) {
+    return;
+  }
+
+  window.uploadSpinner.style.display = "flex";
+  const reader = new FileReader();
+  reader.onload = () => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', server_upload_path(), true);
+    xhr.onreadystatechange = function () {
+      if (this.readyState === XMLHttpRequest.DONE) {
+        window.uploadSpinner.style.display = "none";
+        window.uploadBackingTrack.style.display = "inline-block";
+        window.backingTrackUploader.style.display = "none";
+        window.backingTrackUploader.value = null;
+        if (this.status === 200) {
+          window.backingTrackUploadOk.style.display = "inline-block";
+          singer_client.x_send_metadata("backingTrack", "User Upload");
+        } else {
+          window.backingTrackUploadError.style.display = "inline-block";
+
+        }
+      }
+    };
+    xhr.send(reader.result);
+  };
+  reader.readAsArrayBuffer(window.backingTrackUploader.files[0]);
+});
 
 window.provideLyrics.addEventListener("click", () => {
   window.lyricsEntry.style.display = "block";
@@ -583,6 +632,10 @@ function set_controls() {
 
   window.backingTrack.display = "none";
   window.provideLyrics.style.display = "none";
+  window.uploadBackingTrack.style.display = "none";
+  window.backingTrackUploader.style.display = "none";
+  window.backingTrackUploadOk.style.display = "none";
+  window.backingTrackUploadError.style.display = "none";
 }
 
 function in_select_change() {
@@ -946,9 +999,11 @@ function update_active_users(
     window.backingTrack.style.display = "inline-block";
     window.backingTrack.selectedIndex = 0;
     window.provideLyrics.style.display = "inline-block";
+    window.uploadBackingTrack.style.display = "inline-block";
   } else if (!imLeading) {
     window.backingTrack.style.display = "none";
     window.provideLyrics.style.display = "none";
+    window.uploadBackingTrack.style.display = "none";
     if (hasLeader && song_active()) {
       window.takeLead.textContent = "Halt Song";
       leadButtonState = "stop-singing"
@@ -1752,8 +1807,9 @@ async function initialize() {
   enumerate_inputs();
 
   if (document.location.hostname == "localhost") {
-    // Better default for debugging.
-    serverPath.value = "http://localhost:8081/"
+    // Better defaults for debugging.
+    window.apiPath.value = "http://localhost:8081/"
+    window.uploadPath.value = "http://localhost:8082/"
   }
 
   app_initialized = true;

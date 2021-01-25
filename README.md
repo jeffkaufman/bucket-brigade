@@ -195,6 +195,7 @@ In /etc/nginx/sites-available/default add:
 location /upload {
    include uwsgi_params;
    uwsgi_pass 127.0.0.1:7201;
+   client_max_body_size 16M;
 }
 ```
 

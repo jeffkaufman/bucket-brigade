@@ -1441,7 +1441,7 @@ export class LatencyCalibrator extends EventTarget {
 }
 
 export function init_events() {
-  let target_url = serverPath.value + "reset_events";
+  let target_url = window.apiPath.value + "reset_events";
   let xhr = new XMLHttpRequest();
   xhr.open("POST", target_url, true);
   xhr.send();

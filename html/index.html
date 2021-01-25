@@ -96,6 +96,21 @@
 
 #backingTrack { display: none; }
 #provideLyrics { display: none; }
+#uploadBackingTrack { display: none; }
+#backingTrackUploader { display: none; }
+#backingTrackUploadOk { display: none; }
+#backingTrackUploadError { display: none; }
+
+#uploadSpinner {
+  position: absolute;
+  z-index: 3;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(255, 255, 255, 0.8);
+  display: none;
+  justify-content: center;
+  align-items: center;
+}
 
 #crash {
   display: none;
@@ -478,6 +493,10 @@ h1 {
 
 </head>
 
+<div id=uploadSpinner>
+  <div>uploading...</div>
+</div>
+
 <div id=lyricsEntry>
 <textarea id=lyricsEntryBox
  placeholder="Paste lyrics here, then press 'OK'."></textarea>
@@ -549,8 +568,11 @@ Beats Per Repeat (for rounds): <input type=text id=bpr></input>
     Disable latency measurement:
     <input type="checkbox" id="disableLatencyMeasurement">
   <p>
-    Server path:
-    <input type=text id=serverPath value="/api">
+    API path:
+    <input type=text id=apiPath value="/api">
+  <p>
+    Upload path:
+    <input type=text id=uploadPath value="/upload">
   <p>
     Loopback mode:
     <select id=loopbackMode>
@@ -1042,6 +1064,10 @@ value=100>
   <div>
     <button id=takeLead>Lead a Song</button>
     <button id=provideLyrics>Provide Lyrics</button>
+    <button id=uploadBackingTrack>Upload Backing Track</button>
+    <input type=file id=backingTrackUploader></input>
+    <span id=backingTrackUploadOk>Track Uploaded</span>
+    <span id=backingTrackUploadError class=warning>Track Upload Failed</span>
     <select id=backingTrack></select>
     <div id=runningStatus></div>
   </div>
