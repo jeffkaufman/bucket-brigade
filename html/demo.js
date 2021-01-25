@@ -361,9 +361,22 @@ window.backingTrackUploader.addEventListener("change", () => {
     return;
   }
 
+  if (!window.backingTrackUploader.value.endsWith(".mp3")) {
+    window.backingTrackUploadError.innerText = "Only mp3 files are supported.";
+    window.backingTrackUploadError.style.display = "inline-block";
+    return;
+  }
+
   window.uploadSpinner.style.display = "flex";
   const reader = new FileReader();
   reader.onload = () => {
+    if (reader.result.byteLength > 16*1000*1000) {
+      window.backingTrackUploadError.innerText = "Only files under 16MB are supported.";
+      window.backingTrackUploadError.style.display = "inline-block";
+      window.uploadSpinner.style.display = "none";
+      return;
+    }
+
     const xhr = new XMLHttpRequest();
     xhr.open('POST', server_upload_path(), true);
     xhr.onreadystatechange = function () {
@@ -377,7 +390,7 @@ window.backingTrackUploader.addEventListener("change", () => {
           singer_client.x_send_metadata("backingTrack", "User Upload");
         } else {
           window.backingTrackUploadError.style.display = "inline-block";
-
+          window.backingTrackUploadError.innerText = "Server rejected track.";
         }
       }
     };
