@@ -828,8 +828,8 @@ def handle_special(query_params, server_clock, user=None, client_read_clock=None
             # These must be separate from song_start/end_clock, because they
             #   are used for video sync and must be EXACTLY at the moment the
             #   backing track starts/ends, not merely close.
-            insert_event("backingTrackStart", server_clock)
-            insert_event("backingTrackEnd", server_clock + len(state.backing_track))
+            #insert_event("backingTrackStart", server_clock)
+            #insert_event("backingTrackEnd", server_clock + len(state.backing_track))
 
 
     if query_params.get("mark_stop_singing", None):
