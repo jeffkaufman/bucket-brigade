@@ -5,7 +5,7 @@ import json
 import urllib.parse
 import numpy as np  # type:ignore
 import opuslib  # type:ignore
-import traceback
+import util
 import time
 import struct
 
@@ -252,22 +252,6 @@ def do_GET(environ, start_response) -> None:
     # If we give a 0-byte response, Chrome Dev Tools gives a misleading error (see https://stackoverflow.com/questions/57477805/why-do-i-get-fetch-failed-loading-when-it-actually-worked)
     return b'ok',
 
-def die500(start_response, e):
-    # This is slightly sketchy: this assumes we are currently in the middle
-    #   of an exception handler for the exception e (which happens to be
-    #   true.)
-    trb = traceback.format_exc().encode("utf-8")
-    start_response('500 Internal Server Error', [
-        ('Content-Type', 'text/plain'),
-        ("Access-Control-Allow-Origin", "*"),
-        ("Access-Control-Max-Age", "86400"),
-        ("Access-Control-Expose-Headers", "X-Audio-Metadata"),
-        ("X-Audio-Metadata", json.dumps({
-            "kill_client": True,
-            "message": str(e)
-        }))])
-    return trb,
-
 # POST requests absolutely must have a numeric user_id for all requests which
 #   make it as far as handle_post; such requests must be associated with a user
 #   or there's nothing we can do with them, and they will fail.
@@ -315,7 +299,7 @@ def do_POST(environ, start_response) -> None:
             del users[userid]
         # Log it
         print("Request raised exception!\nParams:", query_string, "\n", traceback.format_exc(), file=sys.stderr)
-        return die500(start_response, e)
+        return util.die500(start_response, e)
 
     combined_data = x_audio_metadata.encode('utf-8') + data
 

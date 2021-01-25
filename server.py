@@ -167,7 +167,7 @@ def clear_whole_buffer():
 # For volume scaling.
 N_PHANTOM_PEOPLE = 2
 
-AUDIO_DIR = os.path.join(os.path.dirname(__file__), "audio")
+
 RECORDINGS_DIRNAME = "recordings"
 RECORDINGS_DIR = os.path.join(
     os.path.dirname(__file__), "html", RECORDINGS_DIRNAME)
@@ -302,7 +302,7 @@ METRONOME = "metronome -- set BPM under Advanced Settings"
 
 tracks = []
 def populate_tracks() -> None:
-    for track in sorted(os.listdir(AUDIO_DIR)):
+    for track in sorted(os.listdir(util.AUDIO_DIR)):
         if track != "README":
             tracks.append(track)
     tracks.append(METRONOME)

@@ -66,9 +66,7 @@ localhost. The app isn't currently set up for that, but it could be.
 
 Backing tracks are 16-bit 1-channel 48k wav files.  You can make one with:
 
-    $ lame --decode input.mp3 intermediate-a.wav && \
-      sox intermediate-a.wav intermediate-b.wav remix 1 && \
-      sox intermediate-b.wav -r 48000 output.wav
+    $ sox input.mp3 -r 48000 output.wav remix 1
 
 This should look like:
 
@@ -108,7 +106,7 @@ sudo apt update
 sudo apt upgrade
 sudo apt install python3-distutils uuid-dev libcap-dev libpcre3-dev \
                  nginx python3-pip emacs letsencrypt opus-tools \
-                 python3-certbot-nginx
+                 python3-certbot-nginx sox libsox-fmt-mp3
 sudo python3 -mpip install uwsgi
 mkdir ~/src
 cd ~/src && git clone https://github.com/gwillen/solstice-audio-test.git
