@@ -189,6 +189,15 @@ NotifyAccess=all
 WantedBy=multi-user.target
 ```
 
+In /etc/nginx/sites-available/default add:
+
+```
+location /upload {
+   include uwsgi_params;
+   uwsgi_pass 127.0.0.1:7201;
+}
+```
+
 ### Simple Configuration
 
 Handles up to ~60users.
