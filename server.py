@@ -459,7 +459,7 @@ def run_backing_track() -> None:
         state.metronome_on = True
         backfill_metronome()
     elif state.requested_track in tracks:
-        with wave.open(os.path.join(AUDIO_DIR, state.requested_track)) as inf:
+        with wave.open(os.path.join(util.AUDIO_DIR, state.requested_track)) as inf:
             if inf.getnchannels() != 1:
                 raise Exception(
                     "wrong number of channels on %s" % state.requested_track)
