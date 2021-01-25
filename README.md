@@ -168,11 +168,32 @@ You can change the colors as you like, by creating
 If there are other changes you would like to make, PRs to make the
 styling easier to override are welcome.
 
+### Uploader Configuration
+
+To support people uploading backing tracks, in `/etc/systemd/system/`
+create `echo-uploader.service` as:
+
+```
+[Unit]
+Description=uWSGI echo uploader
+
+[Service]
+WorkingDirectory=/home/ubuntu/src/solstice-audio-test
+ExecStart=/usr/local/bin/uwsgi --socket :7201 --wsgi-file /home/ubuntu/src/solstice-audio-test/upload.py --logto /var/log/echo-uploader.log
+Restart=always
+KillSignal=SIGQUIT
+Type=notify
+NotifyAccess=all
+
+[Install]
+WantedBy=multi-user.target
+```
+
 ### Simple Configuration
 
 Handles up to ~60users.
 
-In /etc/systemd/system/ create `uwsgi-echo-01.service` as:
+In `/etc/systemd/system/` create `uwsgi-echo-01.service` as:
 
 ```
 [Unit]
