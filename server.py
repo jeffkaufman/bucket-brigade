@@ -17,8 +17,12 @@ import datetime
 import struct
 import subprocess
 import copy
+import sys
 
 from typing import Any, Dict, List, Tuple, Iterable
+
+sys.path.append(os.path.dirname(__file__)) # for finding our files
+import util
 
 logging.basicConfig(filename='server.log',level=logging.DEBUG)
 

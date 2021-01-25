@@ -5,7 +5,6 @@ import json
 import urllib.parse
 import numpy as np  # type:ignore
 import opuslib  # type:ignore
-import util
 import time
 import struct
 
@@ -17,9 +16,10 @@ except Exception:
 
 import SharedArray  # pip install SharedArray
 
-sys.path.append(os.path.dirname(__file__)) # for finding server
+sys.path.append(os.path.dirname(__file__)) # for finding our files
 import server
 import shm
+import util
 
 from typing import Any, Dict, List, Tuple
 
