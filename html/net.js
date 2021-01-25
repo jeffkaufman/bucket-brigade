@@ -333,6 +333,7 @@ export async function query_server_clock(target_url) {
     server_sample_offset = metadata["server_clock"] - request_time_samples;
     // Note: In the presence of network jitter, our message can get to the server either before or after the target server moment. This means that if our target server moment is "now", our actual requested moment could end up in the future. Someone on one side or the other has to deal with this. But in general if we are requesting "now" it means we do not expect to get audio data at all, so it should be okay for us to never ask for audio data in the case (and it should be ok for the server to give us zeros for "future" data, since we should never have asked, but that's what _would_ be there.)
   */
+  // Ref: https://github.com/gwillen/solstice-audio-test/issues/38
   var server_latency_ms = (Date.now() - request_time_ms) / 2.0;  // Wrong, see above
   var metadata = JSON.parse(fetch_result.headers.get("X-Audio-Metadata"));
   console.debug("query_server_clock got metadata:", metadata);
