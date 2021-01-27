@@ -604,7 +604,7 @@ export class BucketBrigadeContext extends EventTarget {
     var AudioContext = window.AudioContext || window.webkitAudioContext;
     this.audioCtx = new AudioContext({latencyHint: 'playback'});
     //sampleRate.value = this.audioCtx.sampleRate;
-    console.debug("Audio Context:", this.audioCtx);
+    console.log("Audio Context:", this.audioCtx);
 
     // XXX: this all gets kind of gross with 44100, nothing divides nicely.
     // XXX: this should really be on the clients, not the context?

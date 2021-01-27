@@ -1880,6 +1880,10 @@ function do_latency_calibration() {
 
 async function start(spectatorMode=false) {
   var micStream = await bb.openMic(inSelect.value);
+  try {
+    console.log("Reported input latency (s):",
+                micStream.getTracks()[0].getSettings().latency);
+  } catch {}
 
   bucket_ctx = new bb.BucketBrigadeContext({
     micStream,
