@@ -3,8 +3,9 @@ import tempfile
 import subprocess
 import traceback
 import sys
+import urllib.parse
 
-def decode_and_save(in_data_raw):
+def decode_and_save_backing_track(in_data_raw):
   with tempfile.NamedTemporaryFile() as tmp_upload:
     tmp_upload.write(in_data_raw)
     tmp_upload.flush()
@@ -13,8 +14,13 @@ def decode_and_save(in_data_raw):
       "sox",
       "-t", "mp3", tmp_upload.name,
       "-r", "48000",
-      "-t", "wav", util.UPLOAD_FNAME,
+      "-t", "wav", util.BACKING_TRACK_UPLOAD_FNAME,
       "remix", "1"])
+
+def save_image(in_data_raw):
+  with open(util.IMAGE_UPLOAD_FNAME, "wb") as outf:
+    outf.write(in_data_raw)
+    outf.flush()
 
 def application(environ, start_response):
   try:
@@ -28,10 +34,16 @@ def application(environ, start_response):
     else:
       query_params = {}
 
-      decode_and_save(in_data_raw)
+    uploadType, = query_params.get("type", [None])
+    if uploadType == "backingTrack":
+      decode_and_save_backing_track(in_data_raw)
+    elif uploadType == "image":
+      save_image(in_data_raw)
+    else:
+      raise Exception("unknown uploadType %s" % uploadType)
 
-      start_response('200 OK', [("Content-Type", "text/plain")])
-      return b"ok",
+    start_response('200 OK', [("Content-Type", "text/plain")])
+    return b"ok",
   except Exception as e:
     print("ERROR:", query_string, "\n", traceback.\
           format_exc(), file=sys.stderr)

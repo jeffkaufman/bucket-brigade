@@ -3,7 +3,9 @@ import traceback
 import json
 
 AUDIO_DIR = os.path.join(os.path.dirname(__file__), "audio")
-UPLOAD_FNAME = os.path.join(AUDIO_DIR, "User Upload")
+BACKING_TRACK_UPLOAD_FNAME = os.path.join(AUDIO_DIR, "User Upload")
+IMAGE_UPLOAD_FNAME = os.path.join(
+    os.path.dirname(__file__), "html", "user-upload-image")
 
 def die500(start_response, e):
     # This is slightly sketchy: this assumes we are currently in the middle

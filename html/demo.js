@@ -333,6 +333,10 @@ function takeLeadClick() {
     leadButtonState = "stop-singing";
     window.backingTrack.style.display = "none";
     window.provideLyrics.style.display = "none";
+    window.uploadImage.style.display = "none";
+    window.imageUploader.style.display = "none";
+    window.imageUploadOk.style.display = "none";
+    window.imageUploadError.style.display = "none";
     window.uploadBackingTrack.style.display = "none";
     window.backingTrackUploader.style.display = "none";
     window.backingTrackUploadOk.style.display = "none";
@@ -378,7 +382,7 @@ window.backingTrackUploader.addEventListener("change", () => {
     }
 
     const xhr = new XMLHttpRequest();
-    xhr.open('POST', server_upload_path(), true);
+    xhr.open('POST', server_upload_path() + "?type=backingTrack", true);
     xhr.onreadystatechange = function () {
       if (this.readyState === XMLHttpRequest.DONE) {
         window.uploadSpinner.style.display = "none";
@@ -397,6 +401,50 @@ window.backingTrackUploader.addEventListener("change", () => {
     xhr.send(reader.result);
   };
   reader.readAsArrayBuffer(window.backingTrackUploader.files[0]);
+});
+
+window.uploadImage.addEventListener("click", () => {
+  window.imageUploader.style.display = "inline-block";
+  window.uploadImage.style.display = "none";
+  window.imageUploadOk.style.display = "none";
+  window.imageUploadError.style.display = "none";
+});
+
+window.imageUploader.addEventListener("change", () => {
+  if (!window.imageUploader.files.length) {
+    return;
+  }
+
+  window.uploadSpinner.style.display = "flex";
+  const reader = new FileReader();
+  reader.onload = () => {
+    if (reader.result.byteLength > 16*1000*1000) {
+      window.imageUploadError.innerText = "Only files under 16MB are supported.";
+      window.imageUploadError.style.display = "inline-block";
+      window.uploadSpinner.style.display = "none";
+      return;
+    }
+
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', server_upload_path() + "?type=image", true);
+    xhr.onreadystatechange = function () {
+      if (this.readyState === XMLHttpRequest.DONE) {
+        window.uploadSpinner.style.display = "none";
+        window.uploadImage.style.display = "inline-block";
+        window.imageUploader.style.display = "none";
+        window.imageUploader.value = null;
+        if (this.status === 200) {
+          window.imageUploadOk.style.display = "inline-block";
+          singer_client.x_send_metadata("image", "upload");
+        } else {
+          window.imageUploadError.style.display = "inline-block";
+          window.imageUploadError.innerText = "Server rejected image.";
+        }
+      }
+    };
+    xhr.send(reader.result);
+  };
+  reader.readAsArrayBuffer(window.imageUploader.files[0]);
 });
 
 window.provideLyrics.addEventListener("click", () => {
@@ -645,6 +693,10 @@ function set_controls() {
 
   window.backingTrack.display = "none";
   window.provideLyrics.style.display = "none";
+  window.uploadImage.style.display = "none";
+  window.imageUploader.style.display = "none";
+  window.imageUploadOk.style.display = "none";
+  window.imageUploadError.style.display = "none";
   window.uploadBackingTrack.style.display = "none";
   window.backingTrackUploader.style.display = "none";
   window.backingTrackUploadOk.style.display = "none";
@@ -1012,10 +1064,12 @@ function update_active_users(
     window.backingTrack.style.display = "inline-block";
     window.backingTrack.selectedIndex = 0;
     window.provideLyrics.style.display = "inline-block";
+    window.uploadImage.style.display = "inline-block";
     window.uploadBackingTrack.style.display = "inline-block";
   } else if (!imLeading) {
     window.backingTrack.style.display = "none";
     window.provideLyrics.style.display = "none";
+    window.uploadImage.style.display = "none";
     window.uploadBackingTrack.style.display = "none";
     if (hasLeader && song_active()) {
       window.takeLead.textContent = "Halt Song";
@@ -1641,6 +1695,13 @@ async function start_singing() {
     if (metadata["lyrics"]) {
       window.lyricsDisplay.value = metadata["lyrics"];
       window.lyricsDisplay.style.display = "block";
+      window.imageDisplay.style.display = "none";
+    }
+
+    if (metadata["image"]) {
+      window.imageDisplayImg.src = "user-upload-image?" + metadata["image"];
+      window.imageDisplay.style.display = "block";
+      window.lyricsDisplay.style.display = "none";
     }
 
     let startSingingCountdown = null;
@@ -1740,6 +1801,7 @@ async function start_singing() {
 
       if (!showBuckets) {
         window.lyricsDisplay.style.display = "none";
+        window.imageDisplay.style.display = "none";
       }
 
       const showBucketingGuide = hasLeader && !song_active();

@@ -18,6 +18,7 @@ import struct
 import subprocess
 import copy
 import sys
+import string
 
 from typing import Any, Dict, List, Tuple, Iterable
 
@@ -112,6 +113,7 @@ class State():
         self.disable_song_video = False
 
         self.lyrics = ""
+        self.image = None
 
         if recorder:
             recorder.reset()
@@ -367,6 +369,8 @@ class User:
             self.send("disableSongVideo", state.disable_song_video)
         if state.lyrics:
             self.send("lyrics", state.lyrics)
+        if state.image:
+            self.send("image", state.image)
 
     def allocate_twilio_token(self):
         token = AccessToken(secrets["twilio"]["account_sid"],
@@ -1076,12 +1080,18 @@ def handle_post(in_json, in_data) -> Tuple[Any, str]:
         state.lyrics = in_json["lyrics"]
         sendall("lyrics", state.lyrics)
 
+    if query_params.get("image", None):
+        state.image = ''.join(random.choices(string.ascii_uppercase, k=10))
+        sendall("image", state.image)
+
     # If we are running under Ritual Engine, disable functionality that is  not
     #   required in that setting, and would be disruptive if triggered by
     #   accident.
     if query_params.get("request_lead", None) and not state.server_controlled:
         assign_delays(userid)
         state.leader = userid
+        state.image = ""
+        sendall("image", "")
         state.lyrics = ""
         sendall("lyrics", "")
 

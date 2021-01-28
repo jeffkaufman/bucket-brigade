@@ -96,6 +96,10 @@
 
 #backingTrack { display: none; }
 #provideLyrics { display: none; }
+#uploadImage { display: none; }
+#imageUploader { display: none; }
+#imageUploadOk { display: none; }
+#imageUploadError { display: none; }
 #uploadBackingTrack { display: none; }
 #backingTrackUploader { display: none; }
 #backingTrackUploadOk { display: none; }
@@ -1064,6 +1068,10 @@ value=100>
   <div>
     <button id=takeLead>Lead a Song</button>
     <button id=provideLyrics>Provide Lyrics</button>
+    <button id=uploadImage>Upload Image</button>
+    <input type=file id=imageUploader accept=".png,.jpg,.jpeg"></input>
+    <span id=imageUploadOk>Image Uploaded.</span>
+    <span id=imageUploadError class=warning>Image Upload Failed.</span>
     <button id=uploadBackingTrack>Upload Backing Track</button>
     <input type=file id=backingTrackUploader accept=".mp3"></input>
     <span id=backingTrackUploadOk>Track Uploaded.</span>
@@ -1102,6 +1110,10 @@ value=100>
   <textarea id=lyricsDisplay>
   Lyrics Go Here
   </textarea>
+
+  <div id=imageDisplay>
+    <img id=imageDisplayImg>
+  </div>
 </div>
 
 
