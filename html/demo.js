@@ -1061,7 +1061,7 @@ function update_active_users(
       leadButtonState != "stop-singing") {
     window.takeLead.textContent = "Start Singing";
     leadButtonState = "start-singing";
-    window.backingTrack.style.display = "inline-block";
+    //window.backingTrack.style.display = "inline-block";
     window.backingTrack.selectedIndex = 0;
     window.provideLyrics.style.display = "inline-block";
     window.uploadImage.style.display = "inline-block";
