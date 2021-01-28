@@ -135,3 +135,4 @@ dmypy.json
 html/recordings
 !html/recordings/.keep
 html/local-style.css
+html/user-upload-image
