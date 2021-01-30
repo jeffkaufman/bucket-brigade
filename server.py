@@ -33,7 +33,8 @@ logging.basicConfig(filename='server.log',level=logging.DEBUG)
 #  4   mic_volume: float32,
 #  4   rms_volume: float32
 #  2   delay: uint16
-BINARY_USER_CONFIG_FORMAT = struct.Struct(">Q32sffH")
+#  1   muted: boolean
+BINARY_USER_CONFIG_FORMAT = struct.Struct(">Q32sffH?")
 
 FRAME_SIZE = 128
 
@@ -353,6 +354,7 @@ class User:
         self.client_telemetry = {}  # unstructured info from client
 
         self.in_spectator_mode = False;
+        self.muted = False;
 
         self.mark_sent()
 
@@ -619,7 +621,8 @@ def user_summary(requested_user_summary) -> List[Any]:
             user.name,
             user.mic_volume,
             user.userid,
-            user.rms_volume))
+            user.rms_volume,
+            user.muted))
     summary.sort()
     return summary
 
@@ -638,7 +641,7 @@ def binary_user_summary(summary):
     compact by only sending names if they have changed.
     """
     binary_summaries = [struct.pack(">H", len(summary))]
-    for delay, name, mic_volume, userid, rms_volume in summary:
+    for delay, name, mic_volume, userid, rms_volume, muted in summary:
         # delay is encoded as a uint16
         if delay < 0:
             delay = 0
@@ -650,7 +653,8 @@ def binary_user_summary(summary):
                 name.encode('utf8'),
                 mic_volume,
                 rms_volume,
-                delay))
+                delay,
+                muted))
     resp = np.frombuffer(b"".join(binary_summaries), dtype=np.uint8)
 
     if len(resp) != summary_length(len(summary)):
@@ -1062,6 +1066,7 @@ def handle_post(in_json, in_data) -> Tuple[Any, str]:
         user.client_address = in_json["client_address"]
 
     user.in_spectator_mode = query_params.get("spectator", None)
+    user.muted = query_params.get("muted", None) == "1"
 
     client_telemetry = query_params.get("client_telemetry", None)
     if client_telemetry:
@@ -1229,7 +1234,7 @@ def maybe_print_status() -> None:
     print("-"*70)
 
     for delay, name, mic_volume, userid, \
-         rms_volume in user_summary(requested_user_summary=True):
+         rms_volume, muted in user_summary(requested_user_summary=True):
         print ("%s %s vol=%.2f rms=%.5f" % (
             str(delay).rjust(3),
             name.rjust(30),

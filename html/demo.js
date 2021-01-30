@@ -1092,6 +1092,7 @@ function update_active_users(
     const mic_volume = user_summary[i][2];
     const userid = user_summary[i][3];
     const rms_volume = user_summary[i][4];
+    const muted = user_summary[i][5];
 
     let est_bucket = estimateBucket(offset_s);
     if (!showBuckets) {
@@ -1129,6 +1130,14 @@ function update_active_users(
 
       const participantDiv = participantDivs[userid];
       const displayName = userid == myUserid ? (name + " (me)") : name;
+      if (participantDiv) {
+        if (muted) {
+          participantDiv.classList.add("muted");
+        } else {
+          participantDiv.classList.remove("muted");
+        }
+      }
+
       if (participantDiv && participantDiv.name != displayName) {
         // First child is always participantInfo.
         participantDiv.children[0].innerText = displayName;
@@ -1828,6 +1837,9 @@ async function start_singing() {
     if (server_bpr != null) {
       window.bpr.value = server_bpr;
       last_server_bpr = server_bpr;
+    }
+    if (micPaused) {
+      singer_client.x_send_metadata("muted", 1);
     }
     singer_client.x_send_metadata("user_summary", 1);
     if (in_spectator_mode) {

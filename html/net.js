@@ -201,7 +201,12 @@ export class ServerConnection extends ServerConnectionBase {
                 0, /*littleEndian=*/false);
         pos += 2;
 
-        metadata.user_summary.push([delay, name, mic_volume, userid, rms_volume]);
+        const muted =
+              new DataView(data.slice(pos, pos + 1)).getUint8(0);
+        pos += 1;
+
+        metadata.user_summary.push([
+          delay, name, mic_volume, userid, rms_volume, muted]);
       }
       data = data.slice(pos);
     }
