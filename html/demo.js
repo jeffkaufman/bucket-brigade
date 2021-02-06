@@ -492,12 +492,26 @@ window.roundsButtonsUpdate.addEventListener("click", () => {
     singer_client.x_send_metadata("bpm", window.bpm.value);
     singer_client.x_send_metadata("repeats", window.repeats.value);
     singer_client.x_send_metadata("bpr", window.bpr.value);
+    advancedSettingsUpdated();
   }
 });
 
 window.latencyCalibrationRetry.addEventListener("click", () => {
   do_latency_calibration();
 });
+
+function advancedSettingsUpdated() {
+  const metronomeIsOn = (window.bpm.value != 0);
+  const roundsAreOn = (window.bpr.value != 0 && window.repeats.value != 0);
+
+  window.advancedSettingsOn.style.display = metronomeIsOn ? "block" : "none";
+
+  window.roundsOn.style.display = roundsAreOn ? "inline-block" : "none";
+
+  window.metronomeValue.innerText = window.bpm.value;
+  window.repeatsValue.innerText = window.repeats.value;
+  window.bprValue.innerText = window.bpr.value;
+}
 
 let in_spectator_mode = false;
 let disable_leading = false;
@@ -1829,14 +1843,17 @@ async function start_singing() {
     if (server_bpm != null) {
       window.bpm.value = server_bpm;
       last_server_bpm = server_bpm;
+      advancedSettingsUpdated();
     }
     if (server_repeats != null) {
       window.repeats.value = server_repeats;
       last_server_repeats = server_repeats;
+      advancedSettingsUpdated();
     }
     if (server_bpr != null) {
       window.bpr.value = server_bpr;
       last_server_bpr = server_bpr;
+      advancedSettingsUpdated();
     }
     if (micPaused) {
       singer_client.x_send_metadata("muted", 1);

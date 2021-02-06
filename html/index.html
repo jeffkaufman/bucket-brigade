@@ -16,6 +16,16 @@
   margin: 1em;
   padding: 1em;
 }
+.note {
+  border: 1px dashed grey;
+  border-radius: 0.25em;
+  max-width: 45em;
+  margin: 1em;
+  padding: 1em;
+}
+#advancedSettingsOn, #metronomeOn, #roundsOn {
+  display: none;
+}
 #calibration, #mainInterface, #mainApp {
   display: none;
 }
@@ -1070,6 +1080,12 @@ value=100>
 
   <div class=warning id=timeoutImminent>
     Are you still here? If so, move the mouse or something.
+  </div>
+
+  <div class=note id=advancedSettingsOn>
+    The metronome is set to <span id=metronomeValue></span>.
+    <span id=roundsOn>Rounds are configured, with <span id=repeatsValue></span> repeats of <span id=bprValue></span> beats each.</span>
+    To disable, set to zero on the Advanced Settings tab.
   </div>
 
   <div>
