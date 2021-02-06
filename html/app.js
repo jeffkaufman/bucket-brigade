@@ -1,6 +1,6 @@
 import {check} from './lib.js';
 
-import {ServerConnection, FakeServerConnection} from './net.js';
+import {ServerConnection} from './net.js';
 import {AudioChunk, CompressedAudioChunk, AudioChunkBase, PlaceholderChunk, concat_chunks, ClockInterval, ClientClockReference, ServerClockReference} from './audiochunk.js';
 
 // Work around some issues related to caching and error reporting
