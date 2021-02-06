@@ -102,7 +102,6 @@ class State():
 
         self.leader = None
 
-        self.metronome_on = False
         self.backing_track: Any = np.zeros(0)
         self.backing_track_index = 0
 
@@ -305,14 +304,11 @@ state = State()
 
 events: Dict[str, str] = {}
 
-METRONOME = "metronome -- set BPM under Advanced Settings"
-
 tracks = []
 def populate_tracks() -> None:
     for track in sorted(os.listdir(util.AUDIO_DIR)):
         if track != "README":
             tracks.append(track)
-    tracks.append(METRONOME)
 
 populate_tracks()
 
@@ -461,10 +457,7 @@ def wrap_assign(queue, start, vals) -> None:
         queue[0:second_section_size] = vals[first_section_size:]
 
 def run_backing_track() -> None:
-    if state.requested_track == METRONOME:
-        state.metronome_on = True
-        backfill_metronome()
-    elif state.requested_track in tracks:
+    if state.requested_track in tracks:
         with wave.open(os.path.join(util.AUDIO_DIR, state.requested_track)) as inf:
             if inf.getnchannels() != 1:
                 raise Exception(
@@ -718,7 +711,7 @@ def fix_volume(data, backing_data, n_people, user_backing_volume=1.0):
         data *= ((1 + N_PHANTOM_PEOPLE) / (n_people + N_PHANTOM_PEOPLE)) ** 0.5
     data += (
         backing_data *
-        (state.backing_volume * (1 if state.metronome_on else 0.2)) *
+        (state.backing_volume * (1 if state.bpm > 0 else 0.2)) *
         user_backing_volume
     )
     data *= state.global_volume
@@ -828,10 +821,9 @@ def handle_special(query_params, server_clock, user=None, client_read_clock=None
             state.song_start_clock = server_clock
         state.song_end_clock = 0
 
-        state.metronome_on = False
-        if state.bpm and state.bpr and state.repeats:
-            state.requested_track = METRONOME
-        if state.requested_track:
+        if state.bpm > 0:
+            backfill_metronome()
+        elif state.requested_track:
             run_backing_track()
             # These must be separate from song_start/end_clock, because they
             #   are used for video sync and must be EXACTLY at the moment the
@@ -843,7 +835,6 @@ def handle_special(query_params, server_clock, user=None, client_read_clock=None
     if query_params.get("mark_stop_singing", None):
         # stop the backing track from playing, if it's still going
         state.backing_track_index = len(state.backing_track)
-        state.metronome_on = False
 
         if user is not None:
             if user.userid == state.leader:
@@ -993,7 +984,7 @@ def handle_post(in_json, in_data) -> Tuple[Any, str]:
             state.leader = None
 
     if clear_samples > 0:
-        if state.metronome_on:
+        if state.bpm > 0:
             write_metronome(clear_index, clear_samples)
         else:
             wrap_assign(
