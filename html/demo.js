@@ -668,6 +668,7 @@ function set_controls() {
 
   setVisibleIn(window.mainApp, allStatesExcept([APP_RUNNING]));
   setVisibleIn(window.topbar, allStatesExcept([APP_RUNNING]));
+  setVisibleIn(window.tabbarLogo, [APP_RUNNING]);
 
   setVisibleIn(window.inputSelector,
                allStatesExcept(ACTIVE_STATES.concat(

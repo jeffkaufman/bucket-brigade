@@ -342,7 +342,15 @@ body {
   align-items: baseline;
 }
 
-#tabbar > * {
+#tabbarLogo {
+  margin: 0.25em;
+  position: relative;
+  top: 6px;
+  display: none;
+  margin-top: -5px;
+}
+
+#tabbar > span {
   padding: 0.5em;
   padding-bottom: 0.35em;
   background-color: var(--theme-dark);
@@ -564,6 +572,7 @@ h1 {
 
 <div id=tabrow>
 <div id=tabbar>
+  <img id=tabbarLogo src="https://www.jefftk.com/bucket-brigade-logo.png" width=32 height=32>
   <span class=activeTab id=mainViewTab>Home</span>
   <span id=advancedSettingsTab>Advanced</span>
   <span id=recordingsTab>Recordings</span>
