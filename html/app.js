@@ -957,8 +957,11 @@ export class SingerClient extends EventTarget {
       }
       this.cur_clock_cbs = [];
       return;
-    } else if (msg.type == "audio_lag" || msg.type === "underflow") {
+    } else if (msg.type == "audio_lag") {
       this.dispatchEvent(new Event("audioLag"));
+      return;
+    } else if (msg.type == "underflow") {
+      this.dispatchEvent(new Event("underflow"));
       return;
     } else if (msg.type != "samples_out") {
       this.close();

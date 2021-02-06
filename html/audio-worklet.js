@@ -261,7 +261,7 @@ class ClockedRingBuffer {
       }
     }
     if (underflowed) {
-      // XXX this.port.postMessage({type: "underflow"});
+      this.port.postMessage({type: "underflow"});
     }
     if (errors.length > 0) {
       var err_uniq = Array.from(new Set(errors));

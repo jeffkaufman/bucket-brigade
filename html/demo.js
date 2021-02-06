@@ -1667,7 +1667,11 @@ async function start_singing() {
         enterLagmute();
       }
     }
-  })
+  });
+
+  singer_client.addEventListener("underflow", () => {
+    updateHealthLog(/*isUnderflow=*/true);
+  });
 
   singer_client.addEventListener("connectivityChange", () => {
     if (singer_client.hasConnectivity) {
@@ -1729,6 +1733,8 @@ async function start_singing() {
 
     let startSingingCountdown = null;
     let stopSingingCountdown = null;
+
+    updateHealthLog(/*isUnderflow=*/false);
 
     if (user_summary.length) {
       in_song = song_start_clock && song_start_clock <= client_read_clock &&
@@ -1967,6 +1973,46 @@ function do_latency_calibration() {
       switch_app_state(APP_CALIBRATING_LATENCY_CONTINUE);
     }
   }, 20*1000);
+}
+
+const healthHistory = [];
+const HEALTH_HISTORY_LENGTHS = [
+  2,
+  4,
+  8,
+  16,
+  32,
+  64,
+];
+HEALTH_HISTORY_LENGTHS.forEach((len) => {
+  const buf = [];
+  for (let i = 0; i < len; i++) {
+    buf.push(0);
+  }
+  healthHistory.push(buf);
+});
+
+const HEALTH_COLORS = [
+  "rgb(128, 0, 0)",     // bad now
+  "rgb(128, 64, 0)",    // bad within 2s
+  "rgb(128, 85, 0)",    // bad within 4s
+  "rgb(128, 106, 0)",   // bad within 8s
+  "rgb(128, 128, 0)",   // bad within 16s
+  "rgb(106, 128, 0)",   // bad within 32s
+  "rgb(85, 128, 0)",    // bad within 64s
+  "rgb(42, 128, 0)",    // full healthy
+];
+
+function updateHealthLog(isUnderflow) {
+  let health = -1;
+  for (let i = 0 ; i < healthHistory.length; i++) {
+    healthHistory[i].shift();
+    healthHistory[i].push(isUnderflow ? 1 : 0);
+
+    const isHealthy = (healthHistory[i].reduce((a, b) => a + b, 0) == 0);
+    const healthElement = document.getElementById("health" + (i+1));
+    healthElement.classList.toggle("healthy", isHealthy);
+  }
 }
 
 async function start(spectatorMode=false) {

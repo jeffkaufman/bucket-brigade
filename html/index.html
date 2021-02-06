@@ -499,6 +499,22 @@ h1 {
 #reserveEncodedPassword {
   font-style: italic;
 }
+#healthOuter {
+  height: 1.3em;
+  position: relative;
+  top: 0.3em;
+}
+#healthOuter > * {
+  width: 1em;
+  margin-right: 1px;
+  height: 100%;
+  display: inline-block;
+  border: 1px solid #aaa;
+}
+.healthy {
+  background-color: #0a0;
+}
+
 </style>
 <link rel="stylesheet" href="local-style.css"></link>
 
@@ -1172,6 +1188,10 @@ value=100>
   <div>
     <input id=changeName></input>
     <button id=changeNameButton>Update</button>
+  </div>
+
+  <div id=healthOuter>
+    <div id=health0 class=healthy></div><div id=health1></div><div id=health2></div><div id=health3></div><div id=health4></div><div id=health5></div><div id=health6></div>
   </div>
 
   <!-- DELAY_INTERVAL * LAYERING_DEPTH -->
