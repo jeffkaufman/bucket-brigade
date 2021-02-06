@@ -7,6 +7,7 @@ import numpy as np  # type:ignore
 import opuslib  # type:ignore
 import time
 import struct
+import traceback
 
 try:
     import uwsgi
