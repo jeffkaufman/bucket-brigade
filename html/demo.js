@@ -666,7 +666,8 @@ function set_controls() {
 
   window.middle.style.overflowY = app_state == APP_RUNNING ? "hidden" : "scroll";
 
-  setVisibleIn(window.mainApp, allStatesExcept([APP_RUNNING]))
+  setVisibleIn(window.mainApp, allStatesExcept([APP_RUNNING]));
+  setVisibleIn(window.topbar, allStatesExcept([APP_RUNNING]));
 
   setVisibleIn(window.inputSelector,
                allStatesExcept(ACTIVE_STATES.concat(
@@ -2129,13 +2130,6 @@ window.chosenCamera.addEventListener("click", () => {
 
 window.noCamera.addEventListener("click", () => {
   selected_camera(false);
-});
-
-let headerCollapsed = false;
-window.headerExpandCollapse.addEventListener("click", () => {
-  headerCollapsed = !headerCollapsed;
-  window.topbar.style.display = headerCollapsed ? "none" : "block";
-  window.headerExpandCollapse.innerHTML = headerCollapsed ? "&darr;" : "&uarr;";
 });
 
 window.changeNameButton.addEventListener("click", () => {
