@@ -555,8 +555,6 @@ h1 {
     <h1 id=instanceName>Bucket Brigade</h1>
     </div>
 
-    <a target="_blank" href="recordings/">Recent Recordings</a>
-
     <a target="_blank" href="https://github.com/gwillen/solstice-audio-test">Source Code</a>
 
     <a target="_blank" href="https://github.com/gwillen/solstice-audio-test/issues/new">Report a problem</a>
@@ -572,6 +570,7 @@ h1 {
 <div id=tabbar>
   <span class=activeTab id=mainViewTab>Home</span>
   <span id=advancedSettingsTab>Advanced</span>
+  <span id=recordingsTab>Recordings</span>
   <span id=debugTab>Debug</span>
   <span id=booktimeTab>Reserve</span>
   <span id=aboutTab>About</span>
@@ -726,6 +725,10 @@ Let your guests know in advance they'll need:
 
 <iframe id=calendar src="https://calendar.google.com/calendar/u/0/embed?src=gsc268k1lu78lbvfbhphdr0cs4@group.calendar.google.com"></iframe>
 </div>
+</div>
+
+<div id=recordings class=middlePane>
+<div id=recordingsGoHere></div>
 </div>
 
 <div id=about class=middlePane>
@@ -1241,6 +1244,7 @@ value=100>
     "Debug": window.debugInfo,
     "Reserve": window.booktime,
     "About": window.about,
+    "Recordings": window.recordings,
     "AdvancedSettings": window.advancedSettings,
     "UnsupportedBrowser": window.noAudioWorklet,
     "UnsupportedDevice": window.isMobile,
@@ -1252,6 +1256,7 @@ value=100>
     "Reserve": window.booktimeTab,
     "About": window.aboutTab,
     "AdvancedSettings": window.advancedSettingsTab,
+    "Recordings": window.recordingsTab,
   };
 
   for (const [paneName, paneTab] of Object.entries(tabs)) {
@@ -1267,6 +1272,14 @@ value=100>
       });
   }
 
+  async function updateRecordings() {
+    window.recordingsGoHere.innerHTML = "";
+    const response = await fetch("recordings/");
+    const html = await response.text();
+    window.recordingsGoHere.innerHTML =
+       html.replace(/href='/g, "target=_blank href='recordings/");
+  }
+
   function showPane(paneName) {
     for (const [otherPaneName, otherPaneDiv] of Object.entries(middlePanes)) {
       otherPaneDiv.style.display = "none";
@@ -1279,6 +1292,10 @@ value=100>
       tabs[paneName].classList.add("activeTab");
     }
     window.location.hash = (paneName === "Main" ? "" : paneName);
+
+    if (paneName == "Recordings") {
+      updateRecordings();
+    }
   }
 
   if (window.location.hash && !showingWarningPane) {

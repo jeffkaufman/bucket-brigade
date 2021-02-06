@@ -1166,7 +1166,7 @@ function update_active_users(
   }
 
   // Don't update the mixing console and we are not looking at that screen.
-  if (window.debugSettings.style.display == "none") {
+  if (window.advancedSettings.style.display == "none") {
     return;
   }
   if (mic_volume_inputs.length == 0) {

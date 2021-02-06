@@ -271,9 +271,6 @@ class Recorder:
             def w(s):
                 outf.write(s)
                 outf.write("\n")
-            w("<html>")
-            w("<title>Recordings</title>")
-            w("<h1>Recordings</h1>")
             w("All times (and dates!) are in UTC.")
             w("<ul>")
             for fname in reversed(sorted(os.listdir(RECORDINGS_DIR))):
@@ -286,7 +283,6 @@ class Recorder:
             w("</ul>")
             w("Because these files are large we only keep the most recent %s" %
               RECORDING_N_TO_KEEP)
-            w("</html>")
 
     def cleanup_(self):
         recordings = os.listdir(RECORDINGS_DIR)
