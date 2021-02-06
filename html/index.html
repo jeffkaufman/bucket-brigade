@@ -1277,7 +1277,7 @@ value=100>
   }
 
   async function updateRecordings() {
-    window.recordingsGoHere.innerHTML = "";
+    window.recordingsGoHere.innerHTML = "loading...";
     const response = await fetch("recordings/");
     const html = await response.text();
     window.recordingsGoHere.innerHTML =
