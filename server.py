@@ -990,6 +990,7 @@ def handle_post(in_json, in_data) -> Tuple[Any, str]:
         if state.backing_track_index == len(state.backing_track):
             # the song has ended, mark it so
             state.song_end_clock = clear_index
+            state.leader = None
 
     if clear_samples > 0:
         if state.metronome_on:
