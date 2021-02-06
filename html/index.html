@@ -184,8 +184,20 @@ input.edited {
   background-color: yellow;
 }
 #backingVolumeSlider {
-  width: 30em;
+  width: 15em;
 }
+#changeName {
+  width: 6em;
+}
+@media only screen and (min-width: 1400px) {
+  #backingVolumeSlider {
+    width: 30em;
+  }
+  #changeName {
+    width: 12em;
+  }
+}
+
 #remainderWindow {
   flex-grow: 1;
   display: flex;
@@ -509,7 +521,6 @@ h1 {
 .healthy {
   background-color: #0a0;
 }
-
 </style>
 <link rel="stylesheet" href="local-style.css"></link>
 
@@ -560,9 +571,8 @@ h1 {
 <div id=tabrow>
 <div id=tabbar>
   <span class=activeTab id=mainViewTab>Home</span>
-  <span id=debugInfoTab>Debug Info</span>
-  <span id=debugSettingsTab>Debug Settings</span>
-  <span id=advancedSettingsTab>Advanced Settings</span>
+  <span id=advancedSettingsTab>Advanced</span>
+  <span id=debugTab>Debug</span>
   <span id=booktimeTab>Reserve</span>
   <span id=aboutTab>About</span>
 </div>
@@ -583,10 +593,16 @@ Beats Per Repeat (for rounds): <input type=text id=bpr></input>
 <p>
 <button id=roundsButtonsUpdate>update</button>
 </div>
+
+<h3>Mixing Console</h3>
+
+ <div id=mixingConsole>
+ <button id=sortConsole>Sort</button>
+ </div>
+
 </div>
 
-
-<div id=debugSettings class=middlePane>
+<div id=debugInfo class=middlePane>
 <div>
 
   <h3>Settings that only affect you</h3>
@@ -634,9 +650,43 @@ Beats Per Repeat (for rounds): <input type=text id=bpr></input>
     Backing Track Volume Control (0-2):
     <input type=text id=backingVolumeControl>
     <p>
-    <div id=mixingConsole>
-    <button id=sortConsole>Sort</button>
-    </div>
+
+  <h3>Debug Info</h3>
+  Sample rate:
+  <input type=text id=sampleRate value="(not available yet)" disabled>
+<br>
+  Input / output peak absolute amplitude:
+  <input type=text id=peakIn value="(not available yet)" disabled>
+  <input type=text id=peakOut value="(not available yet)" disabled>
+<br>
+  Input gain (scalar):
+  <input type=text id=inputGain value="(not available yet)" disabled>
+<br>
+  This client total time consumed (s):
+  <input type=text id=clientTotalTime value="(not available yet)" disabled>
+<br>
+  This client read slippage (s):
+  <input type=text id=clientReadSlippage value="(not available yet)" disabled>
+<br>
+  Total time to next client [more than 3 is bad] (s):
+  <input type=text id=clientTimeToNextClient value="(not available yet)" disabled>
+<br>
+  Batch size (ms):
+  <input type=text id=msBatchSize value="(not available yet)" disabled>
+<br>
+  Client Latency (ms):
+  <input type=text id=msClientLatency value="(not available yet)" disabled>
+<br>
+  Web Audio Jank (initial) (ms):
+  <input type=text id=msWebAudioJank value="(not available yet)" disabled>
+<br>
+  "True" (de-janked) Latency (ms):
+  <input type=text id=msTrueLatency value="(not available yet)" disabled>
+<br>
+  Web Audio Jank (current) (ms):
+  <input type=text id=msWebAudioJankCurrent value="(not available yet)" disabled>
+
+
 </div>
 </div>
 
@@ -824,46 +874,6 @@ should.
     <button id=dismissIsMobile>dismiss</button>
   </div>
 </div>
-
-<div id=debugInfo class=middlePane>
-<div>
-  Sample rate:
-  <input type=text id=sampleRate value="(not available yet)" disabled>
-<br>
-  Input / output peak absolute amplitude:
-  <input type=text id=peakIn value="(not available yet)" disabled>
-  <input type=text id=peakOut value="(not available yet)" disabled>
-<br>
-  Input gain (scalar):
-  <input type=text id=inputGain value="(not available yet)" disabled>
-<br>
-  This client total time consumed (s):
-  <input type=text id=clientTotalTime value="(not available yet)" disabled>
-<br>
-  This client read slippage (s):
-  <input type=text id=clientReadSlippage value="(not available yet)" disabled>
-<br>
-  Total time to next client [more than 3 is bad] (s):
-  <input type=text id=clientTimeToNextClient value="(not available yet)" disabled>
-<br>
-  Batch size (ms):
-  <input type=text id=msBatchSize value="(not available yet)" disabled>
-<br>
-  Client Latency (ms):
-  <input type=text id=msClientLatency value="(not available yet)" disabled>
-<br>
-  Web Audio Jank (initial) (ms):
-  <input type=text id=msWebAudioJank value="(not available yet)" disabled>
-<br>
-  "True" (de-janked) Latency (ms):
-  <input type=text id=msTrueLatency value="(not available yet)" disabled>
-<br>
-  Web Audio Jank (current) (ms):
-  <input type=text id=msWebAudioJankCurrent value="(not available yet)" disabled>
-</div>
-</div>
-
-
 <div id=middle class=middlePane>
 
 <div id="roomfull">
@@ -1185,9 +1195,11 @@ value=100>
     <button id=changeNameButton>Update</button>
   </div>
 
-  <div id=healthOuter>
+  <div>
     Internet:
+    <div id=healthOuter>
     <div id=health1></div><div id=health2></div><div id=health3></div><div id=health4></div><div id=health5></div><div id=health6></div>
+    </div>
   </div>
 
   <!-- DELAY_INTERVAL * LAYERING_DEPTH -->
@@ -1226,8 +1238,7 @@ value=100>
 
   const middlePanes = {
     "Main": window.middle,
-    "DebugSettings": window.debugSettings,
-    "DebugInfo": window.debugInfo,
+    "Debug": window.debugInfo,
     "Reserve": window.booktime,
     "About": window.about,
     "AdvancedSettings": window.advancedSettings,
@@ -1237,8 +1248,7 @@ value=100>
 
   const tabs = {
     "Main": window.mainViewTab,
-    "DebugSettings": window.debugSettingsTab,
-    "DebugInfo": window.debugInfoTab,
+    "Debug": window.debugTab,
     "Reserve": window.booktimeTab,
     "About": window.aboutTab,
     "AdvancedSettings": window.advancedSettingsTab,
