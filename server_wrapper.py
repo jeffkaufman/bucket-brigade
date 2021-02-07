@@ -88,12 +88,12 @@ def unpack_multi(data) -> List[Any]:
 def calculate_volume(in_data):
     return np.sqrt(np.mean(in_data**2))
 
-def handle_post_special(query_string, print_status=True):
-    data, x_audio_metadata = handle_json_post(np.zeros(0), query_string, {}, print_status)
+def handle_post_special(query_string):
+    data, x_audio_metadata = handle_json_post(np.zeros(0), query_string, {})
     return data.tobytes(), x_audio_metadata
 
 def handle_post(userid, n_samples, in_data_raw,
-                query_string, print_status=True, client_address=None) -> Tuple[Any, str]:
+                query_string, client_address=None) -> Tuple[Any, str]:
     if not userid.isdigit():
         raise ValueError("UserID must be numeric; got: %r"%userid)
     try:
@@ -141,7 +141,7 @@ def handle_post(userid, n_samples, in_data_raw,
     query_string += '&rms_volume=%s'%rms_volume
 
     data, x_audio_metadata = handle_json_post(
-        in_data, query_string, json_kvs, print_status,
+        in_data, query_string, json_kvs,
         client_address=client_address)
 
     # Divide data into user_summary and raw audio data
@@ -169,11 +169,9 @@ def handle_post(userid, n_samples, in_data_raw,
 
     return data.tobytes(), x_audio_metadata
 
-def handle_json_post(in_data, query_string, json_kvs, print_status,
-                     client_address=None):
+def handle_json_post(in_data, query_string, json_kvs, client_address=None):
     json_kvs.update({
         "query_string": query_string,
-        "print_status": print_status,
         "client_address": client_address,
     })
     out_json_raw, out_data = backend.handle_post(json.dumps(json_kvs), in_data)

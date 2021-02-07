@@ -35,15 +35,13 @@ def fake_outer_request():
     PACKET_SAMPLES,
     data,
     [],
-    query_string(),
-    print_status=False)
+    query_string())
 
 def fake_inner_request():
   server.handle_post(
     data,
     [],
-    query_string(),
-    print_status=False)
+    query_string())
 
 def stress():
   for i in range(3):

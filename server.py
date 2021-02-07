@@ -108,8 +108,6 @@ class State():
 
         self.max_position = DELAY_INTERVAL*LAYERING_DEPTH
 
-        self.last_status_ts = 0.0
-
         self.disable_auto_gain = False
         self.disable_song_video = False
 
@@ -1214,30 +1212,10 @@ def handle_post(in_json, in_data) -> Tuple[Any, str]:
     x_audio_metadata.update(user.to_send)
     user.mark_sent()
 
-    if in_json.get("print_status", False):
-        maybe_print_status()
-
     bin_summary = binary_user_summary(user_summary(requested_user_summary))
     if len(bin_summary) > 0:
         data = np.append(bin_summary, data.view(dtype=np.uint8))
     return data, json.dumps(x_audio_metadata)
-
-def maybe_print_status() -> None:
-    now = time.time()
-    if now - state.last_status_ts < STATUS_PRINT_INTERVAL_S:
-        return
-
-    print("-"*70)
-
-    for delay, name, mic_volume, userid, \
-         rms_volume, muted in user_summary(requested_user_summary=True):
-        print ("%s %s vol=%.2f rms=%.5f" % (
-            str(delay).rjust(3),
-            name.rjust(30),
-            mic_volume,
-            rms_volume))
-
-    state.last_status_ts = now
 
 if __name__ == "__main__":
     print("Run server_wrapper.py or shm.py instead")
