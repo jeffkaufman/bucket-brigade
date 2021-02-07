@@ -998,27 +998,22 @@ window.backingTrack.addEventListener("change", (e) => {
 const consoleChannels = new Map();
 window.consoleChannels = consoleChannels;
 
-let monitoredUserId = null;
-
+let nMonitoredUsers = 0;
+let iterationsWithNoMonitoredUsers = 0;
 function mixerMonitorButtonClick(userid) {
   if (singer_client) {
-    if (monitoredUserId) {
-      consoleChannels.get(monitoredUserId).children[5].classList.remove('activeButton');
-    }
-    if (monitoredUserId === userid) {
-      singer_client.x_send_metadata("monitoredUserId", "end");
-      monitoredUserId = null;
-      if (micPaused) {
-        toggle_mic();
-      }
-    }
-    else {
-      singer_client.x_send_metadata("monitoredUserId", userid);
-      monitoredUserId = userid;
-      consoleChannels.get(userid).children[5].classList.add('activeButton');
-      if (!micPaused) {
-        toggle_mic();
-      }
+    const monitorButton = consoleChannels.get(userid).children[5];
+    monitorButton.classList.add('edited');
+
+    if (monitorButton.classList.contains('activeButton')) {
+      singer_client.x_send_metadata("unmonitor", userid);
+      nMonitoredUsers--;
+    } else {
+      window.hearMonitor.checked = true;
+      window.hearMonitorDiv.style.display = "block";
+      singer_client.x_send_metadata("monitor", userid);
+      nMonitoredUsers++;
+      iterationsWithNoMonitoredUsers = 0;
     }
   }
 }
@@ -1109,6 +1104,7 @@ function update_active_users(
     const userid = user_summary[i][3];
     const rms_volume = user_summary[i][4];
     const muted = user_summary[i][5];
+    const is_monitored = user_summary[i][6];
 
     let est_bucket = estimateBucket(offset_s);
     if (!showBuckets) {
@@ -1122,7 +1118,7 @@ function update_active_users(
       }
     }
 
-    mic_volume_inputs.push([name, userid, mic_volume, rms_volume, offset_s]);
+    mic_volume_inputs.push([name, userid, mic_volume, rms_volume, offset_s, is_monitored]);
     userids.add(userid);
 
     // Don't update user buckets when we are not looking at that screen.
@@ -1233,6 +1229,7 @@ function update_active_users(
     }
   }
 
+  nMonitoredUsers = 0;
   for (var i = 0; i < mic_volume_inputs.length; i++) {
 
     const name = mic_volume_inputs[i][0];
@@ -1240,6 +1237,7 @@ function update_active_users(
     const vol = mic_volume_inputs[i][2];
     const rms_volume = mic_volume_inputs[i][3];
     const offset_s = mic_volume_inputs[i][4];
+    const is_monitored = mic_volume_inputs[i][5];
 
     const channel = consoleChannels.get(userid);
     const post_volume = vol < 0.0000001?
@@ -1267,12 +1265,30 @@ function update_active_users(
     else {
       channelVolumeInput.value = vol;
     }
-
-
+    const monitorButton = channel.children[5];
+    monitorButton.classList.remove("edited");
+    monitorButton.classList.toggle("activeButton", is_monitored);
+    if (is_monitored) {
+      nMonitoredUsers++;
+    }
+  }
+  if (nMonitoredUsers > 0) {
+    iterationsWithNoMonitoredUsers = 0;
+  } else {
+    iterationsWithNoMonitoredUsers++;
+  }
+  const definitelyNotMonitoring = iterationsWithNoMonitoredUsers > 3;
+  window.hearMonitorDiv.style.display = definitelyNotMonitoring ? "none" : "block";
+  if (definitelyNotMonitoring) {
+    window.hearMonitor.checked = false;
   }
 }
 
-
+window.hearMonitor.addEventListener("change", () => {
+  if (window.hearMonitor.checked) {
+    singer_client.x_send_metadata("begin_monitor", 1);
+  }
+});
 
 async function stop() {
   if (app_state != APP_RUNNING &&
@@ -1877,6 +1893,9 @@ async function start_singing() {
     singer_client.x_send_metadata("user_summary", 1);
     if (in_spectator_mode) {
       singer_client.x_send_metadata("spectator", 1);
+    }
+    if (window.hearMonitor.checked) {
+      singer_client.x_send_metadata("hear_monitor", 1);
     }
 
     if (delay_seconds) {

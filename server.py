@@ -33,8 +33,8 @@ logging.basicConfig(filename='server.log',level=logging.DEBUG)
 #  4   mic_volume: float32,
 #  4   rms_volume: float32
 #  2   delay: uint16
-#  1   muted: boolean
-BINARY_USER_CONFIG_FORMAT = struct.Struct(">Q32sffH?")
+#  1   muted: uint8
+BINARY_USER_CONFIG_FORMAT = struct.Struct(">Q32sffHB")
 
 FRAME_SIZE = 128
 
@@ -578,20 +578,32 @@ def clean_users(server_clock) -> None:
     if not active_users() and not state.server_controlled:
         state.reset()
 
-def setup_monitoring(monitoring_userid, monitored_userid) -> None:
-    for user in users.values():
-        user.is_monitoring = False
-        user.is_monitored = False
+def samples_to_position(samples):
+    return round(samples / SAMPLE_RATE)
 
-    # We turn off monitoring by asking to monitor an invalid user ID.
-    if monitored_userid not in users:
+def jump_user_after(user, position):
+    target = position + DELAY_INTERVAL
+    if target == samples_to_position(user.delay_samples):
         return
+    user.send("delay_seconds", target)
 
-    users[monitoring_userid].is_monitoring = True
-    users[monitored_userid].is_monitored = True
+def max_monitor_position():
+    max_delay_samples = 0
+    for user in active_users():
+        if user.is_monitored and user.delay_samples > max_delay_samples:
+            max_delay_samples = user.delay_samples
+    return samples_to_position(max_delay_samples)
 
-    users[monitoring_userid].send("delay_seconds", round(
-        users[monitored_userid].delay_samples / SAMPLE_RATE) + DELAY_INTERVAL)
+def jump_to_latest_monitored_user(user):
+    max_pos = max_monitor_position()
+    current_pos = samples_to_position(user.delay_samples)
+    if max_pos > 0:
+        jump_user_after(user, max_pos)
+
+def jump_monitors_to_latest_monitored_user():
+    for user in active_users():
+        if user.is_monitoring:
+            jump_to_latest_monitored_user(user)
 
 def active_users():
     server_clock = calculate_server_clock()
@@ -611,7 +623,8 @@ def user_summary(requested_user_summary) -> List[Any]:
             user.mic_volume,
             user.userid,
             user.rms_volume,
-            user.muted))
+            user.muted,
+            user.is_monitored))
     summary.sort()
     return summary
 
@@ -630,12 +643,19 @@ def binary_user_summary(summary):
     compact by only sending names if they have changed.
     """
     binary_summaries = [struct.pack(">H", len(summary))]
-    for delay, name, mic_volume, userid, rms_volume, muted in summary:
+    for delay, name, mic_volume, userid, rms_volume, muted, is_monitored in summary:
         # delay is encoded as a uint16
         if delay < 0:
             delay = 0
         elif delay > 0xffff:
             delay = 0xffff
+
+        bits = 0
+        if muted:
+            bits += 0b00000001
+        if is_monitored:
+            bits += 0b00000010
+
         binary_summaries.append(
             BINARY_USER_CONFIG_FORMAT.pack(
                 int(userid),
@@ -643,7 +663,7 @@ def binary_user_summary(summary):
                 mic_volume,
                 rms_volume,
                 delay,
-                muted))
+                bits))
     resp = np.frombuffer(b"".join(binary_summaries), dtype=np.uint8)
 
     if len(resp) != summary_length(len(summary)):
@@ -683,7 +703,9 @@ def update_audio(pos, n_samples, in_data, is_monitored):
     wrap_assign(audio_queue, pos, new_audio)
 
     if is_monitored:
-        wrap_assign(monitor_queue, pos, in_data)
+        wrap_assign(monitor_queue,
+                    pos,
+                    wrap_get(monitor_queue, pos, n_samples) + in_data)
 
     old_n_people = wrap_get(n_people_queue, pos, n_samples)
     new_n_people = old_n_people + np.ones(n_samples, np.int16)
@@ -1097,9 +1119,23 @@ def handle_post(in_json, in_data) -> Tuple[Any, str]:
     # Handle all operations that do not require a userid
     handle_special(query_params, server_clock, user, client_read_clock)
 
+    user.is_monitoring = query_params.get("hear_monitor", False)
     monitor_userid = query_params.get("monitor", None)
-    if monitor_userid:
-        setup_monitoring(userid, monitor_userid)
+    changedMonitoring = False
+    if monitor_userid and monitor_userid in users:
+        users[monitor_userid].is_monitored = True
+        changedMonitoring = True
+        user.is_monitoring = True
+
+    unmonitor_userid = query_params.get("unmonitor", None)
+    if unmonitor_userid and unmonitor_userid in users:
+        users[unmonitor_userid].is_monitored = False
+        changedMonitoring = True
+
+    if changedMonitoring:
+        jump_monitors_to_latest_monitored_user()
+    if query_params.get("begin_monitor", False):
+        jump_to_latest_monitored_user(user)
 
     ### XXX: Debugging note: We used to do clearing of the buffer here, but now
     ###      we do it above, closer to the top of the function.

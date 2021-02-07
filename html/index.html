@@ -177,6 +177,9 @@
 .activeButton {
   background-color: red;
 }
+button.edited {
+  background-color: yellow;
+}
 input.editing {
   background-color: wheat;
 }
@@ -531,6 +534,9 @@ h1 {
 .healthy {
   background-color: #0a0;
 }
+#hearMonitorDiv {
+  display: none;
+}
 </style>
 <link rel="stylesheet" href="local-style.css"></link>
 
@@ -602,6 +608,9 @@ Beats Per Repeat (for rounds): <input type=text id=bpr></input>
 <h3>Mixing Console</h3>
 
  <div id=mixingConsole>
+ <div id=hearMonitorDiv>
+   Hear Monitor Mix: <input type="checkbox" id="hearMonitor">
+ </div>
  <button id=sortConsole>Sort</button>
  </div>
 

@@ -201,12 +201,14 @@ export class ServerConnection extends ServerConnectionBase {
                 0, /*littleEndian=*/false);
         pos += 2;
 
-        const muted =
+        const bits =
               new DataView(data.slice(pos, pos + 1)).getUint8(0);
+        const muted = bits & 0b00000001;
+        const is_monitored = bits & 0b00000010;
         pos += 1;
 
         metadata.user_summary.push([
-          delay, name, mic_volume, userid, rms_volume, muted]);
+          delay, name, mic_volume, userid, rms_volume, muted, is_monitored]);
       }
       data = data.slice(pos);
     }
@@ -321,7 +323,6 @@ export async function samples_to_server(
       backingVolume: 'backing_volume',
       micVolumes: 'mic_volume',
       backingTrack: 'track',
-      monitoredUserId: 'monitor',
       loopback_mode: 'loopback',
     }
 
