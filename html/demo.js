@@ -1118,7 +1118,7 @@ function update_active_users(
     if (userid == myUserid) {
       for (var j = 0 ; j < N_BUCKETS; j++) {
         window.buckets.children[j].children[0].children[1].disabled =
-          est_bucket === j;
+          (j == 0 && !backingTrackOn && !imLeading) || est_bucket === j;
       }
     }
 
@@ -1638,6 +1638,7 @@ function connect_twilio() {
   });
 }
 
+let backingTrackOn = false;
 async function start_singing() {
   var final_url = server_api_path();
 
@@ -1712,6 +1713,13 @@ async function start_singing() {
     }
     if (metadata["backingVolume"] != null) {
       window.backingVolumeControl.value = metadata["backingVolume"];
+    }
+    if (metadata["backing_track_type"] != null) {
+      const backingTrackType = metadata["backing_track_type"];
+      backingTrackOn = !!backingTrackType;
+      window.backingSliderDiv.style.display =
+        backingTrackOn ? "block" : "none";
+      window.backingTrackTypeName.innerText = backingTrackType;
     }
 
     first_bucket_s = metadata["first_bucket"] || first_bucket_s;

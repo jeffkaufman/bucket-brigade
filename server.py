@@ -104,6 +104,7 @@ class State():
 
         self.backing_track: Any = np.zeros(0)
         self.backing_track_index = 0
+        self.backing_track_type = ""
 
         self.max_position = DELAY_INTERVAL*LAYERING_DEPTH
 
@@ -469,6 +470,7 @@ def run_backing_track() -> None:
                 inf.readframes(-1), np.int16).astype(np.float32) / (2**15)
             state.backing_track *= 0.8 # turn it down a bit
             state.backing_track_index = 0
+            state.backing_track_type = "Backing Track"
 
     # Backing track is used only once.
     state.requested_track = None
@@ -766,6 +768,11 @@ def handle_json_post(in_json_raw, in_data):
         "x-audio-metadata": x_audio_metadata,
     }), out_data
 
+def end_song():
+    state.leader = None
+    state.backing_track_type = ""
+    sendall("backing_track_type", state.backing_track_type)
+
 # Handle special operations that do not require a user (although they may
 #   optionally support one), but can be done server-to-server as well.
 def handle_special(query_params, server_clock, user=None, client_read_clock=None):
@@ -817,8 +824,10 @@ def handle_special(query_params, server_clock, user=None, client_read_clock=None
             state.song_start_clock = server_clock
         state.song_end_clock = 0
 
+        state.backing_track_type = ""
         if state.bpm > 0:
             backfill_metronome()
+            state.backing_track_type = "Metronome"
         elif state.requested_track:
             run_backing_track()
             # These must be separate from song_start/end_clock, because they
@@ -826,7 +835,7 @@ def handle_special(query_params, server_clock, user=None, client_read_clock=None
             #   backing track starts/ends, not merely close.
             #insert_event("backingTrackStart", server_clock)
             #insert_event("backingTrackEnd", server_clock + len(state.backing_track))
-
+        sendall("backing_track_type", state.backing_track_type)
 
     if query_params.get("mark_stop_singing", None):
         # stop the backing track from playing, if it's still going
@@ -842,8 +851,7 @@ def handle_special(query_params, server_clock, user=None, client_read_clock=None
         else:
             state.song_end_clock = server_clock
 
-        state.leader = None
-
+        end_song()
 
     if query_params.get("clear_events", None):
         events.clear()
@@ -977,7 +985,7 @@ def handle_post(in_json, in_data) -> Tuple[Any, str]:
         if state.backing_track_index == len(state.backing_track):
             # the song has ended, mark it so
             state.song_end_clock = clear_index
-            state.leader = None
+            end_song()
 
     if clear_samples > 0:
         if state.bpm > 0:

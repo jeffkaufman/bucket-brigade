@@ -197,7 +197,9 @@ input.edited {
     width: 12em;
   }
 }
-
+#backingSliderDiv {
+  display: none;
+}
 #remainderWindow {
   flex-grow: 1;
   display: flex;
@@ -1192,8 +1194,8 @@ value=100>
     <div id=spectatorMode>As a spectator, your singing is not included</div>
   </div>
 
-  <div>
-  <label for=backingVolumeSlider>Backing Volume:</label>
+  <div id=backingSliderDiv>
+  <label for=backingVolumeSlider><span id=backingTrackTypeName></span> Volume:</label>
   <input type="range" min="0" max="160" value="100" id="backingVolumeSlider">
   </div>
 
