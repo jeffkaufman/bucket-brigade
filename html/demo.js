@@ -2004,6 +2004,9 @@ function do_latency_calibration() {
   }, 20*1000);
 }
 
+// XXX this is way too complicated for the algorithm I ended up
+// implementing.  Instead we should just track how long ago the most
+// recent underflow was.
 const healthHistory = [];
 const HEALTH_HISTORY_LENGTHS = [
   2,
