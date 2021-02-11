@@ -666,6 +666,9 @@ function set_controls() {
 
   window.middle.style.overflowY = app_state == APP_RUNNING ? "hidden" : "scroll";
 
+  setVisibleIn(window.advancedSettingsTab, [APP_RUNNING], 'inline-block');
+  setVisibleIn(window.debugTab, [APP_RUNNING], 'inline-block');
+  
   setVisibleIn(window.mainApp, allStatesExcept([APP_RUNNING]));
   setVisibleIn(window.topbar, allStatesExcept([APP_RUNNING]));
   setVisibleIn(window.tabbarLogo, [APP_RUNNING]);

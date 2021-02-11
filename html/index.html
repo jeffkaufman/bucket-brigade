@@ -368,6 +368,10 @@ body {
   background-color: var(--theme-light);
 }
 
+#advancedSettingsTab, #debugTab {
+  display: none;
+}
+
 #controlbar {
   display: flex;
   background-color: var(--theme-medium);
@@ -582,12 +586,12 @@ h1 {
 <div id=tabbar>
   <img id=tabbarLogo src="https://www.jefftk.com/bucket-brigade-logo.png" width=32 height=32>
   <span class=activeTab id=mainViewTab>Home</span>
-  <span id=advancedSettingsTab>Advanced</span>
-  <span id=recordingsTab>Recordings</span>
-  <span id=debugTab>Debug</span>
-  <span id=booktimeTab>Reserve</span>
   <span id=helpTab>Help</span>
   <span id=aboutTab>About</span>
+  <span id=booktimeTab>Reserve</span>
+  <span id=recordingsTab>Recordings</span>
+  <span id=advancedSettingsTab>Advanced</span>
+  <span id=debugTab>Debug</span>
 </div>
 
 </div>
@@ -1273,7 +1277,7 @@ value=100>
     "About": window.about,
     "Help": window.help,
     "Recordings": window.recordings,
-    "AdvancedSettings": window.advancedSettings,
+    "Advanced": window.advancedSettings,
     "UnsupportedBrowser": window.noAudioWorklet,
     "UnsupportedDevice": window.isMobile,
   };
@@ -1284,7 +1288,7 @@ value=100>
     "Reserve": window.booktimeTab,
     "About": window.aboutTab,
     "Help": window.helpTab,
-    "AdvancedSettings": window.advancedSettingsTab,
+    "Advanced": window.advancedSettingsTab,
     "Recordings": window.recordingsTab,
   };
 
@@ -1329,8 +1333,10 @@ value=100>
 
   if (window.location.hash && !showingWarningPane) {
     const paneName = window.location.hash.substring(1);
-    if (paneName in tabs) {
+    if (paneName in tabs && paneName != "Debug" && paneName != "Advanced") {
       showPane(paneName);
+    } else {
+      window.location.hash = "";
     }
   }
 </script>
