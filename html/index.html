@@ -507,45 +507,52 @@ h1 {
 #buckets.fullscreen .participant > video, #buckets.fullscreen .participant > img {
   width: 100%;
 }
-#buckets.fullscreen .participant {
-  width: 100%;
-  background-color: black;
-}
-
 #buckets.fullscreen .bucket {
-  width: 16.666666vw;
+  width: 100vw;
   height: 100vh;
   background-color: black;
 }
-/* none of this is actualy hooked up, since today there are alwas six */
-#buckets.fullscreen .bucket:first-of-type:nth-last-of-type(1) {
+#buckets.fullscreen .participant {
+  width: 160px;
+  background-color: black;
+}
+#buckets.fullscreen .participant:only-child {
   width: 100vw;
   height: 100vh;
 }
-#buckets.fullscreen .bucket:first-of-type:nth-last-of-type(2),
-#buckets.fullscreen .bucket:first-of-type:nth-last-of-type(2) ~ .bucket {
+#buckets.fullscreen .participant:first-child:nth-last-child(2),
+#buckets.fullscreen .participant:first-child:nth-last-child(2) ~ .participant {
   width: 50vw;
   height: 100vh;
 }
-#buckets.fullscreen .bucket:first-of-type:nth-last-of-type(3),
-#buckets.fullscreen .bucket:first-of-type:nth-last-of-type(3) ~ .bucket {
+#buckets.fullscreen .participant:first-child:nth-last-child(3),
+#buckets.fullscreen .participant:first-child:nth-last-child(3) ~ .participant {
   width: 33.33333vw;
   height: 100vh;
 }
-#buckets.fullscreen .bucket:first-of-type:nth-last-of-type(4),
-#buckets.fullscreen .bucket:first-of-type:nth-last-of-type(4) ~ .bucket {
+#buckets.fullscreen .participant:first-child:nth-last-child(4),
+#buckets.fullscreen .participant:first-child:nth-last-child(4) ~ .participant {
   width: 50vw;
   height: 50vh;
 }
-#buckets.fullscreen .bucket:first-of-type:nth-last-of-type(5),
-#buckets.fullscreen .bucket:first-of-type:nth-last-of-type(5) ~ .bucket {
+#buckets.fullscreen .participant:first-child:nth-last-child(5),
+#buckets.fullscreen .participant:first-child:nth-last-child(5) ~ .participant,
+#buckets.fullscreen .participant:first-child:nth-last-child(6),
+#buckets.fullscreen .participant:first-child:nth-last-child(6) ~ .participant {
   width: 33.333333vw;
   height: 50vh;
 }
-#buckets.fullscreen .bucket:first-of-type:nth-last-of-type(6),
-#buckets.fullscreen .bucket:first-of-type:nth-last-of-type(6) ~ .bucket {
-  width: 33.333333vw;
+#buckets.fullscreen .participant:first-child:nth-last-child(7),
+#buckets.fullscreen .participant:first-child:nth-last-child(7) ~ .participant,
+#buckets.fullscreen .participant:first-child:nth-last-child(8),
+#buckets.fullscreen .participant:first-child:nth-last-child(8) ~ .participant {
+  width: 25vw;
   height: 50vh;
+}
+#buckets.fullscreen .participant:first-child:nth-last-child(9),
+#buckets.fullscreen .participant:first-child:nth-last-child(9) ~ .participant {
+  width: 33.33333vw;
+  height: 33.33333vh;
 }
 
 #buckets.fullscreen #leavePresentationMode {
@@ -553,6 +560,7 @@ h1 {
   position: fixed;
   right: 0.5em;
   bottom: 0.5em;
+  z-index: 1;
 }
 
 #needName, #wrongPassword {

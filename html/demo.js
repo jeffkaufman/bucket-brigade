@@ -1125,6 +1125,9 @@ function update_active_users(
     const is_monitored = user_summary[i][6];
 
     let est_bucket = estimateBucket(offset_s);
+    if (window.presentationMode.checked) {
+      est_bucket = 0;
+    }
     if (!showBuckets) {
       est_bucket = -1;
     }
@@ -1178,6 +1181,15 @@ function update_active_users(
     for (const userid in participantDivs) {
       participantDivs[userid].style.display =
         userids.has(userid) ? "inline-block" : "none";
+      if (!userids.has(userid) && user_bucket_index[userid] != -1) {
+        if (user_bucket_index[userid] != null) {
+          bucket_divs[user_bucket_index[userid]].removeChild(
+            participantDivs[userid]);
+        }
+        window.unbucketedUsers.appendChild(
+          participantDivs[userid]);
+        user_bucket_index[userid] = -1;
+      }
     }
   }
 
@@ -1432,6 +1444,7 @@ let twilio_tracks = null;
 let camera_devices = null;
 let chosen_camera_index = 0;
 
+let mockVideos = false;
 function ensureParticipantDiv(userid) {
   let div = participantDivs[userid];
   if (!div) {
@@ -1443,11 +1456,11 @@ function ensureParticipantDiv(userid) {
     info.classList.add("participantInfo");
     div.appendChild(info);
 
-    /*
-    const mockVideo =  document.createElement("img");
-    mockVideo.src = "https://www.jefftk.com/bucket-brigade-logo.png";
-    div.appendChild(mockVideo);
-    */
+    if (mockVideos) {
+      const mockVideo =  document.createElement("img");
+      mockVideo.src = "https://www.jefftk.com/bucket-brigade-logo.png";
+      div.appendChild(mockVideo);
+    }
   }
 }
 

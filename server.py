@@ -38,7 +38,7 @@ BINARY_USER_CONFIG_FORMAT = struct.Struct(">Q32sffHB")
 
 FRAME_SIZE = 128
 
-N_IMAGINARY_USERS = 3  # for debugging user summary + mixing console performance
+N_IMAGINARY_USERS = 0  # for debugging user summary + mixing console performance
 
 SUPPORT_SERVER_CONTROL = False
 
