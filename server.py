@@ -517,6 +517,8 @@ def assign_delays(userid_lead) -> None:
         initial_position + (x+2)*DELAY_INTERVAL
         for x in range(n_follow_buckets)]
     state.max_position = follow_positions[-1]
+    if n_follow_buckets < max_follow_buckets:
+        state.max_position += DELAY_INTERVAL
 
     # Spectators all go in the last bucket.
     for spectator in spectators:
