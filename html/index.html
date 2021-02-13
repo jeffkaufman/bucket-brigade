@@ -216,6 +216,17 @@ input.edited {
   flex-wrap: wrap;
   margin: 0.5em;
 }
+#buckets.fullscreen {
+  position: fixed;
+  margin: 0;
+  top: 0;
+  left: 0;
+  background-color: black;
+  width: 100vw;
+  height: 100vw;
+  padding: 0;
+}
+
 #unbucketedUsers {
   flex-grow: 1;
   text-align: center;
@@ -232,6 +243,9 @@ input.edited {
 .bucket > * {
   margin : 0.5em;
 }
+#buckets.fullscreen .bucket > * {
+  margin : 0;
+}
 .bucketTitle {
   width: 100%;
   border-radius: 0.25em 0.25em 0 0;
@@ -240,6 +254,23 @@ input.edited {
   display: flex;
   flex-direction: row;
   justify-content: space-between;
+}
+#buckets.fullscreen .bucket {
+  margin: 0;
+  border: none;
+  border-radius: 0;
+  flex-grow: unset;
+  width: unset;
+}
+#buckets.fullscreen .bucketTitle {
+  display: none;
+}
+#buckets.fullscreen .participantInfo {
+  display: none;
+}
+#buckets.fullscreen .participant {
+  border-radius: 0;
+  border: none;
 }
 .bucketTitle > button {
   margin: 0.25em;
@@ -464,11 +495,64 @@ h1 {
 .muted {
   border: 1px solid #d00;
 }
+#leavePresentationMode {
+  display: none;
+}
 .participantInfo {
   margin: 0.25em;
 }
-.participant > video {
+.participant > video, .participant > img {
   width: 160px;
+}
+#buckets.fullscreen .participant > video, #buckets.fullscreen .participant > img {
+  width: 100%;
+}
+#buckets.fullscreen .participant {
+  width: 100%;
+  background-color: black;
+}
+
+#buckets.fullscreen .bucket {
+  width: 16.666666vw;
+  height: 100vh;
+  background-color: black;
+}
+/* none of this is actualy hooked up, since today there are alwas six */
+#buckets.fullscreen .bucket:first-of-type:nth-last-of-type(1) {
+  width: 100vw;
+  height: 100vh;
+}
+#buckets.fullscreen .bucket:first-of-type:nth-last-of-type(2),
+#buckets.fullscreen .bucket:first-of-type:nth-last-of-type(2) ~ .bucket {
+  width: 50vw;
+  height: 100vh;
+}
+#buckets.fullscreen .bucket:first-of-type:nth-last-of-type(3),
+#buckets.fullscreen .bucket:first-of-type:nth-last-of-type(3) ~ .bucket {
+  width: 33.33333vw;
+  height: 100vh;
+}
+#buckets.fullscreen .bucket:first-of-type:nth-last-of-type(4),
+#buckets.fullscreen .bucket:first-of-type:nth-last-of-type(4) ~ .bucket {
+  width: 50vw;
+  height: 50vh;
+}
+#buckets.fullscreen .bucket:first-of-type:nth-last-of-type(5),
+#buckets.fullscreen .bucket:first-of-type:nth-last-of-type(5) ~ .bucket {
+  width: 33.333333vw;
+  height: 50vh;
+}
+#buckets.fullscreen .bucket:first-of-type:nth-last-of-type(6),
+#buckets.fullscreen .bucket:first-of-type:nth-last-of-type(6) ~ .bucket {
+  width: 33.333333vw;
+  height: 50vh;
+}
+
+#buckets.fullscreen #leavePresentationMode {
+  display: block;
+  position: fixed;
+  right: 0.5em;
+  bottom: 0.5em;
 }
 
 #needName, #wrongPassword {
@@ -645,6 +729,11 @@ Beats Per Repeat (for rounds): <input type=text id=bpr></input>
       <option value=main>In main app thread</option>
       <option value=server>Server-side</option>
     </select>
+  <p>
+    Presentation mode:
+    <input type="checkbox" id="presentationMode">
+
+
   <h3>Settings that affect everyone</h3>
   <i>Leave these alone unless you know what you're doing</i>
 
@@ -1186,9 +1275,10 @@ value=100>
   </div>
 </div>
 
+<div id=buckets>
+  <button id=leavePresentationMode>x</button>
+</div>
 
-
-<div id=buckets></div>
 <div id=unbucketedUsers></div>
 
 </div> <!-- remainderWindow -->

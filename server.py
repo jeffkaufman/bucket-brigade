@@ -38,7 +38,7 @@ BINARY_USER_CONFIG_FORMAT = struct.Struct(">Q32sffHB")
 
 FRAME_SIZE = 128
 
-N_IMAGINARY_USERS = 0  # for debugging user summary + mixing console performance
+N_IMAGINARY_USERS = 3  # for debugging user summary + mixing console performance
 
 SUPPORT_SERVER_CONTROL = False
 
@@ -538,15 +538,18 @@ def update_users(userid, username, server_clock, client_read_clock) -> None:
             server_clock,
             SAMPLE_RATE * 7)
         imaginary_users.append(imaginary_user)
+        #imaginary_user.delay_samples = (
+        #    SAMPLE_RATE *
+        #    DELAY_INTERVAL *
+        #    random.randint(1,LAYERING_DEPTH))
+        imaginary_user.delay_samples = (
+            SAMPLE_RATE *
+            DELAY_INTERVAL * (len(imaginary_users) + 1))
         users[imaginary_user.userid] = imaginary_user
 
     for user in imaginary_users:
         user.last_heard_server_clock = server_clock
         user.rms_volume = random.random() / 10
-        user.delay_samples = (
-            SAMPLE_RATE *
-            DELAY_INTERVAL *
-            random.randint(1,LAYERING_DEPTH))
 
     # Delete expired users BEFORE adding us to the list, so that our session
     #   will correctly reset if we are the next customer after we've been gone

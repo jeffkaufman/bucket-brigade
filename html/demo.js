@@ -81,7 +81,7 @@ function prettyTime(ms) {
 
 function joinBucket(i) {
   return () => {
-    window.buckets.children[i].children[0].children[1].disabled = true;
+    window.buckets.children[i+1].children[0].children[1].disabled = true;
     audioOffset.value = first_bucket_s + DELAY_INTERVAL * i;
     audio_offset_change();
   }
@@ -581,6 +581,7 @@ function persist_checkbox(checkboxId) {
 persist("userName");
 persist_checkbox("disableTutorial");
 persist_checkbox("disableLatencyMeasurement");
+persist_checkbox("presentationMode");
 // Don't persist "disable auto gain" because it's an experimental feature
 
 // Persisting select boxes is harder, so we do it manually for inSelect.
@@ -668,7 +669,7 @@ function set_controls() {
 
   setVisibleIn(window.advancedSettingsTab, [APP_RUNNING], 'inline-block');
   setVisibleIn(window.debugTab, [APP_RUNNING], 'inline-block');
-  
+
   setVisibleIn(window.mainApp, allStatesExcept([APP_RUNNING]));
   setVisibleIn(window.topbar, allStatesExcept([APP_RUNNING]));
   setVisibleIn(window.tabbarLogo, [APP_RUNNING]);
@@ -720,7 +721,20 @@ function set_controls() {
   window.backingTrackUploader.style.display = "none";
   window.backingTrackUploadOk.style.display = "none";
   window.backingTrackUploadError.style.display = "none";
+
+  window.buckets.classList.toggle(
+    "fullscreen", window.presentationMode.checked);
 }
+
+window.presentationMode.addEventListener("change", () => {
+  window.buckets.classList.toggle(
+    "fullscreen", window.presentationMode.checked);
+});
+
+window.leavePresentationMode.addEventListener("click", () => {
+  window.presentationMode.checked = false;
+  window.buckets.classList.remove("fullscreen");
+});
 
 function in_select_change() {
   window.localStorage.setItem("inSelect", inSelect.value);
@@ -896,6 +910,7 @@ async function enable_video() {
   myVideoDiv = localVideoTrack.attach();
   myVideoDiv.style.transform = 'scale(-1, 1)';
   ensureParticipantDiv(myUserid);
+  removeMockVideo(participantDivs[myUserid]);
   participantDivs[myUserid].appendChild(myVideoDiv);
 }
 
@@ -1116,7 +1131,7 @@ function update_active_users(
 
     if (userid == myUserid) {
       for (var j = 0 ; j < N_BUCKETS; j++) {
-        window.buckets.children[j].children[0].children[1].disabled =
+        window.buckets.children[j+1].children[0].children[1].disabled =
           (j == 0 && !backingTrackOn && !imLeading) || est_bucket === j;
       }
     }
@@ -1427,8 +1442,22 @@ function ensureParticipantDiv(userid) {
     const info = document.createElement("div");
     info.classList.add("participantInfo");
     div.appendChild(info);
+
+    /*
+    const mockVideo =  document.createElement("img");
+    mockVideo.src = "https://www.jefftk.com/bucket-brigade-logo.png";
+    div.appendChild(mockVideo);
+    */
   }
 }
+
+function removeMockVideo(participantDiv) {
+  const imgs = participantDiv.getElementsByTagName("img");
+  for (let i = 0 ; i < imgs.length; i++) {
+    participantDiv.removeChild(imgs[i]);
+  }
+}
+
 
 async function connect_camera() {
   switch_app_state(APP_CHOOSE_CAMERA);
@@ -1509,6 +1538,7 @@ async function selected_camera(useCamera) {
     localStorage.setItem("camera_device_id",
                          camera_devices[chosen_camera_index].deviceId);
     ensureParticipantDiv(myUserid);
+    removeMockVideo(participantDivs[myUserid]);
     participantDivs[myUserid].appendChild(myVideoDiv);
     user_bucket_index[myUserid] = 0;
     bucket_divs[0].appendChild(participantDivs[myUserid]);
@@ -1621,6 +1651,7 @@ function connect_twilio() {
       }
 
       ensureParticipantDiv(participant.identity);
+      removeMockVideo(participantDivs[myUserid]);
 
       participant.tracks.forEach(
         addPublicationOrTrack(participant.identity));
@@ -1854,7 +1885,8 @@ async function start_singing() {
       }
 
       const showBuckets = hasLeader || song_active();
-      window.buckets.style.display = showBuckets ? "flex" : "none";
+      window.buckets.style.display = showBuckets ? (
+        window.presentationMode.checked ? "block" : "flex") : "none";
       window.unbucketedUsers.style.display = showBuckets ? "none" : "block";
 
       if (!showBuckets) {
