@@ -168,6 +168,18 @@ You can change the colors as you like, by creating
 If there are other changes you would like to make, PRs to make the
 styling easier to override are welcome.
 
+### Nginx Config
+
+We mark absolutely everything as uncachable, because at least for now
+that's easier than managing it and the savings from proper caching are
+tiny.
+
+In /etc/nginx/sites-available/default add:
+
+```
+add_header Cache-Control no-cache;
+```
+
 ### Uploader Configuration
 
 To support people uploading backing tracks, in `/etc/systemd/system/`
