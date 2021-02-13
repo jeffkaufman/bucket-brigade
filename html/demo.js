@@ -1690,7 +1690,9 @@ function connect_twilio() {
     }
 
     room.on('dominantSpeakerChanged', participant => {
-      highlightParticipantDiv(participant.identity);
+      if (participant) {
+        highlightParticipantDiv(participant.identity);
+      }
     });
 
     room.on('participantConnected', addParticipant);
