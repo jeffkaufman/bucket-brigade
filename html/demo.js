@@ -859,6 +859,23 @@ function mic_on_for_music() {
   }
 }
 
+let pushToTalkEngaged = false;
+window.addEventListener("keydown", (e) => {
+  if (e.key === " " && e.path && e.path[0] == document.body &&
+      micState == "onForMusic") {
+    pushToTalkEngaged = true;
+    mic_on();
+  }
+});
+window.addEventListener("keyup", (e) => {
+  if (e.key === " " && pushToTalkEngaged) {
+    pushToTalkEngaged = false;
+    if (micState == "on") {
+      mic_on_for_music();
+    }
+  }
+});
+
 function upateMutes() {
   updateButtonMutes();
   updateTwilioMute();
