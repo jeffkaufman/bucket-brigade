@@ -126,6 +126,12 @@
   align-items: center;
 }
 
+.buttonGroup {
+  border: 1px solid #aaa;
+  padding: 0.2em;
+  border-radius: 0.25em;
+}
+
 #crash {
   display: none;
   position: absolute;
@@ -1302,8 +1308,14 @@ value=100>
 </div>
 
 <div id=controlbar>
+  <div class=buttonGroup>
+  mic:
+    <button disabled id=micOffButton>off</button>
+    <button disabled id=micOnForMusicButton>on for music</button>
+    <button disabled id=micOnButton>on</button>
+  </div>
+
   <div>
-    <button disabled id=micToggleButton>mute mic</button>
     <button disabled id=speakerToggleButton>mute speaker</button>
     <button disabled id=videoToggleButton>...</button>
     <div id=spectatorMode>As a spectator, your singing is not included</div>

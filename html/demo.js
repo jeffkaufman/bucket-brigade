@@ -680,7 +680,6 @@ function set_controls() {
   setEnabledIn(window.chatPost, allStatesExcept([APP_RESTARTING]));
   setEnabledIn(audioOffset, allStatesExcept([APP_RESTARTING]));
 
-  setEnabledIn(window.micToggleButton, [APP_RUNNING, APP_RESTARTING]);
   setEnabledIn(window.speakerToggleButton, [APP_RUNNING, APP_RESTARTING]);
   setEnabledIn(window.videoToggleButton, [APP_RUNNING, APP_RESTARTING]);
 
@@ -724,6 +723,8 @@ function set_controls() {
 
   window.buckets.classList.toggle(
     "fullscreen", window.presentationMode.checked);
+
+  updateButtonMutes();
 }
 
 window.presentationMode.addEventListener("change", () => {
@@ -826,39 +827,62 @@ function dismissLagmute() {
   in_lagmute_mode = false;
   window.lagmute.style.display = "none";
   disable_leading = false;
-  singer_client.micMuted = micPaused;
+  singer_client.micMuted = micState == "off";
 }
 
 function enterLagmute() {
   in_lagmute_mode = true;
   window.lagmute.style.display = "block";
   disable_leading = true;
-  singer_client.micMuted = micPaused;
+  singer_client.micMuted = micState == "off";
 }
 
 window.unlagmute.addEventListener("click", dismissLagmute);
 
-var micPaused = false;
-function toggle_mic() {
+var micState = "on";
+function mic_on() {
   if (singer_client) {
-    micPaused = !micPaused;
-    window.micToggleButton.innerText = micPaused ? "unmute mic" : "mute mic";
-    updateTwilioMute();
-    updateBucketBrigadeMute();
+    micState = "on";
+    upateMutes();
   }
+}
+function mic_off() {
+  if (singer_client) {
+    micState = "off";
+    upateMutes();
+  }
+}
+function mic_on_for_music() {
+  if (singer_client) {
+    micState = "onForMusic";
+    upateMutes();
+  }
+}
+
+function upateMutes() {
+  updateButtonMutes();
+  updateTwilioMute();
+  updateBucketBrigadeMute();
+}
+
+function updateButtonMutes() {
+  const running = app_state == APP_RUNNING;
+  micOnButton.disabled = !running || micState == "on";
+  micOnForMusicButton.disabled = !running || micState == "onForMusic";
+  micOffButton.disabled = !running || micState == "off";
 }
 
 function updateBucketBrigadeMute() {
   if (!in_spectator_mode && !in_lagmute_mode) {
-    disable_leading = micPaused;
-    singer_client.micMuted = micPaused;
+    disable_leading = micState == "off";
+    singer_client.micMuted = micState == "off";
   }
 }
 
 function updateTwilioMute() {
   if (twilio_room) {
     twilio_room.localParticipant.audioTracks.forEach(publication => {
-      if (micPaused || song_active()) {
+      if (micState != "on" || song_active()) {
         publication.track.disable();
       } else {
         publication.track.enable();
@@ -1329,10 +1353,6 @@ async function stop() {
   }
   switch_app_state(APP_STOPPING);
 
-  if (micPaused) {
-    toggle_mic();
-  }
-
   if (speakerPaused) {
     toggle_speaker();
   }
@@ -1388,7 +1408,9 @@ function disable_song_video_change() {
 }
 
 startButton.addEventListener("click", start_stop);
-window.micToggleButton.addEventListener("click", toggle_mic);
+window.micOnButton.addEventListener("click", mic_on);
+window.micOnForMusicButton.addEventListener("click", mic_on_for_music);
+window.micOffButton.addEventListener("click", mic_off);
 window.speakerToggleButton.addEventListener("click", toggle_speaker);
 window.videoToggleButton.addEventListener("click", toggle_video);
 clickVolumeSlider.addEventListener("change", click_volume_change);
@@ -1712,7 +1734,7 @@ async function start_singing() {
     apiUrl: final_url,
     secretId: myUserid, // XXX
     speakerMuted: speakerPaused,
-    micMuted: micPaused,
+    micMuted: micState == "off",
     offset: parseInt(audioOffset.value),
     username: window.userName.value,
   });
@@ -1731,7 +1753,7 @@ async function start_singing() {
         DELAY_INTERVAL - 0.1) {
       // We have fallen too far behind, we have various options here but we're just going to mute
       //   ourselves for the moment.
-      if (!micPaused && !in_spectator_mode) {
+      if (micState != "off" && !in_spectator_mode) {
         enterLagmute();
       }
     }
@@ -1937,11 +1959,12 @@ async function start_singing() {
       last_server_bpr = server_bpr;
       advancedSettingsUpdated();
     }
-    if (micPaused) {
+    if (micState == "off" || (micState == "onForMusic" && !song_active())) {
       singer_client.x_send_metadata("muted", 1);
     }
     singer_client.x_send_metadata("user_summary", 1);
-    if (in_spectator_mode || window.presentationMode.checked) {
+    if (in_spectator_mode || window.presentationMode.checked ||
+        micState == "off") {
       singer_client.x_send_metadata("spectator", 1);
     }
     if (window.hearMonitor.checked) {
