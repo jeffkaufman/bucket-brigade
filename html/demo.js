@@ -1941,7 +1941,7 @@ async function start_singing() {
       singer_client.x_send_metadata("muted", 1);
     }
     singer_client.x_send_metadata("user_summary", 1);
-    if (in_spectator_mode) {
+    if (in_spectator_mode || window.presentationMode.checked) {
       singer_client.x_send_metadata("spectator", 1);
     }
     if (window.hearMonitor.checked) {
