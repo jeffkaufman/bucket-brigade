@@ -14,10 +14,6 @@ import {
   ServerClockReference
 } from './audiochunk.js';
 
-// Work around some issues related to caching and error reporting
-//   by forcing this to load up top, before we try to 'addModule' it.
-import './audio-worklet.js';
-
 // We fall back exponentially until we find a good size, but we need a
 // place to start that should be reasonably fair.
 const INITIAL_MS_PER_BATCH = 600; // XXX 180;  // XXX: probably make sure this is a multiple of our opus frame size (60ms), but it should in theory work without

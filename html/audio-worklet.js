@@ -1,12 +1,3 @@
-// This trick allows us to load this file as a regular module, which in turn
-//   allows us to flush it from the cache when needed, as a workaround for
-//   https://bugs.chromium.org/p/chromium/issues/detail?id=880784 .
-if (typeof AudioWorkletProcessor === "undefined") {
-  console.info("Audio worklet module preloading");
-  // If we are loaded as a regular module, skip the entire rest of the file
-  //   (which will not be valid outside the audio worklet context).
-} else {
-
 // This gates all the logs that put references to REALLY HUGE objects into the console
 //   very frequently. When this is on, having the console open eventually causes the
 //   browser to lag severely and dev tools to lag/hang/crash. Don't use this unless
@@ -925,5 +916,3 @@ class Player extends AudioWorkletProcessor {
 }
 
 registerProcessor('player', Player);
-
-}
