@@ -481,7 +481,6 @@ h1 {
 
 #spectatorMode {
   display: none;
-  padding: 0.5em;
 }
 #noCameraFound {
   display: none;
@@ -651,6 +650,9 @@ h1 {
   display: none;
   border: 1px solid #aaa;
   border-top: none;
+}
+#changeNameButton, #timeTravelInfo {
+  float: right;
 }
 </style>
 <link rel="stylesheet" href="local-style.css"></link>
@@ -1332,10 +1334,12 @@ value=100>
 <div id=controlbar>
   <div class=buttonGroup>
   mic:
+    <div>
     <button disabled id=micOffButton>off</button>
     <button disabled id=micOnForMusicButton title="Muted in video call, unmuted during songs.
 Holding spacebar will unmute until released.">on for songs</button>
     <button disabled id=micOnButton>on</button>
+    </div>
   </div>
 
   <div>
@@ -1350,19 +1354,22 @@ Holding spacebar will unmute until released.">on for songs</button>
   </div>
 
   <div>
-    <input id=changeName></input>
+    <input id=changeName></input><br>
     <button id=changeNameButton>Update</button>
   </div>
 
   <div>
     Internet:
+    <div>
     <span id=healthOuter>
     <div id=health1></div><div id=health2></div><div id=health3></div><div id=health4></div><div id=health5></div><div id=health6></div>
     </span>
+    </div>
   </div>
 
   <!-- DELAY_INTERVAL * LAYERING_DEPTH -->
-  <div>Time Travel: <input type=text id=audioOffset value="18">s</div>
+  <div>Time Travel:
+    <div id=timeTravelInfo><input type=text id=audioOffset value="18">s</div></div>
 </div>
 
 </div>
