@@ -996,11 +996,20 @@ should.
 
 <div id=noAudioWorklet  class=middlePane>
   <div>
-  It looks like you're not using Chrome or Firefox.  Unfortunately,
-  this doesn't yet work in other browsers because they don't have AudioWorklet.
 
   <p>
+  It looks like you're not using Chrome or Firefox.  Unfortunately,
+  this doesn't yet work in other browsers because they don't have AudioWorklet.
+  </p>
 
+  <div id=macOsSafariOfferTP>
+  If you're on macOS and using Safari is important to you, you can
+  download <a
+  href="https://developer.apple.com/safari/download/">Safari
+  Technology Preview</a>, which does include AudioWorklet.
+  </div>
+
+  <p>
   While we don't recommend trying to continue anyway, because it will
   probably fail silently and just be frustrating for you, if you want
   you can continue:
@@ -1012,9 +1021,11 @@ should.
 <div id=isMobile class=middlePane>
   <div>
 
+  <p>
   It looks like you are on a mobile browser. This is not recommended:
   we haven't found any mobile devices that are able to keep up with
   the strain of encoding and decoding audio in JavaScript.
+  </p>
 
   <p>
 
@@ -1400,7 +1411,11 @@ Holding spacebar will unmute until released.">on for songs</button>
     } else {
       showingWarningPane = false;
     }
+  } else {
+    window.macOsSafariOfferTP.style.display =
+      navigator.userAgent.includes("Mac OS X") ? "block" : "none";
   }
+
 
   const middlePanes = {
     "Main": window.middle,
