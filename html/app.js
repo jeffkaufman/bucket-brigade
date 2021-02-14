@@ -1,7 +1,18 @@
 import {check} from './lib.js';
 
 import {ServerConnection} from './net.js';
-import {AudioChunk, CompressedAudioChunk, AudioChunkBase, PlaceholderChunk, concat_chunks, ClockInterval, ClientClockReference, ServerClockReference} from './audiochunk.js';
+import {
+  AudioChunk,
+  CompressedAudioChunk,
+  AudioChunkBase,
+  thaw_audio_chunk_base,
+  PlaceholderChunk,
+  thaw_placeholder_chunk,
+  concat_chunks,
+  ClockInterval,
+  ClientClockReference,
+  ServerClockReference
+} from './audiochunk.js';
 
 // Work around some issues related to caching and error reporting
 //   by forcing this to load up top, before we try to 'addModule' it.
@@ -1531,23 +1542,11 @@ function concat_typed_arrays(arrays, _constructor) {
   return result;
 }
 
-/*
-function rebless(o) {
-  if (o.type !== undefined) {
-    Object.setPrototypeOf(o, eval(o.type).prototype);
-  }
-  if (o.rebless) {
-    o.rebless();
-  }
-  return o;
-}
-*/
-
 function thaw(o) {
   if (o.type == "PlaceholderChunk") {
-    o = PlaceholderChunk.thaw(o);
+    o = thaw_placeholder_chunk(o);
   } else if (o.type == "AudioChunk" || o.type == "CompressedAudioChunk") {
-    o = AudioChunkBase.thaw(o);
+    o = thaw_audio_chunk_base(o);
   }
   return o;
 }

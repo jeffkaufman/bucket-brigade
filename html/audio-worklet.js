@@ -54,13 +54,12 @@ class ClockReference {
     equals(other) {
         return this.side == other.side && this.sample_rate == other.sample_rate;
     }
+}
 
-    static thaw(o) {
-        var rv = new ClockReference({
-                sample_rate: o.sample_rate
-            });
-        return rv;
-    }
+function thaw_clock_reference(o) {
+  return new ClockReference({
+    sample_rate: o.sample_rate
+  });
 }
 
 class ClockInterval {
@@ -86,20 +85,18 @@ class ClockInterval {
     get start() {
         return this.end - this.length;
     }
-
-    static thaw(o) {
-        if (o === undefined) {
-            return o;
-        }
-        var rv = new ClockInterval({
-            reference: ClockReference.thaw(o.reference),
-            end: o.end,
-            length: o.length
-        });
-        return rv;
-    }
 }
 
+function thaw_clock_interval(o) {
+  if (o === undefined) {
+    return o;
+  }
+  return new ClockInterval({
+    reference: thaw_clock_reference(o.reference),
+    end: o.end,
+    length: o.length
+  });
+}
 class AudioChunk {
       constructor({ data, interval }) {
         check(data !== undefined && interval !== undefined, "Must provide data and interval as named arguments");
@@ -124,14 +121,12 @@ class AudioChunk {
     get length_seconds() { return this.interval.length_seconds; }
     get reference() { return this.interval.reference; }
     get sample_rate() { return this.interval.sample_rate; }
-
-    static thaw(o) {
-        var rv = new AudioChunk({
-            data: o.data,
-            interval: ClockInterval.thaw(o.interval),
-        });
-        return rv;
-    }
+}
+function thaw_audio_chunk(o) {
+  return new AudioChunk({
+    data: o.data,
+    interval: thaw_clock_interval(o.interval),
+  });
 }
 
 class PlaceholderChunk {
@@ -161,24 +156,17 @@ class PlaceholderChunk {
     get end() { return this.interval.end; }
     get length_seconds() { return this.interval.length_seconds; }
     get sample_rate() { return this.reference.sample_rate; }
+}
 
-    static thaw(o) {
-        var rv = new PlaceholderChunk({
-            reference: ClockReference.thaw(o.reference),
-            length: o.length,
-            interval: ClockInterval.thaw(o.interval),
-        });
-        return rv;
-    }
+function thaw_placeholder_chunk(o) {
+  return new PlaceholderChunk({
+    reference: thaw_clock_reference(o.reference),
+    length: o.length,
+    interval: thaw_clock_interval(o.interval),
+  });
 }
 
 // XXX end copy-pasted imports
-
-function thaw(o) {
-  // This is the only type of object we will ever be sent.
-  return AudioChunk.thaw(o);
-}
-
 const FRAME_SIZE = 128;  // by Web Audio API spec
 
 class ClockedRingBuffer {
@@ -678,7 +666,7 @@ class Player extends AudioWorkletProcessor {
       return;
     }
 
-    var chunk = thaw(msg.chunk);
+    var chunk = thaw_audio_chunk(msg.chunk);
     this.play_buffer.write_chunk(chunk);
     // console.debug("VERYSPAM", "new play buffer:", this.play_buffer);
   }

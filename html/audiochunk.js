@@ -16,22 +16,19 @@ export class ClockReference {
     equals(other) {
         return this.side == other.side && this.sample_rate == other.sample_rate;
     }
-
-    static thaw(o) {
-        var rv;
-        if (o.type == "ServerClockReference") {
-            rv = new ServerClockReference({
-                sample_rate: o.sample_rate
-            });
-        } else {
-            rv = new ClientClockReference({
-                sample_rate: o.sample_rate
-            });
-        }
-        return rv;
-    }
 }
-
+function thaw_clock_reference(o) {
+  if (o.type == "ServerClockReference") {
+    return new ServerClockReference({
+      sample_rate: o.sample_rate
+    });
+  } else {
+    return new ClientClockReference({
+      sample_rate: o.sample_rate
+    });
+  }
+}
+  
 export class ServerClockReference extends ClockReference {
     get side() { return CLOCK_SERVER; }
 }
@@ -63,18 +60,16 @@ export class ClockInterval {
     get start() {
         return this.end - this.length;
     }
-
-    static thaw(o) {
-        if (o === undefined) {
-            return o;
-        }
-        var rv = new ClockInterval({
-            reference: ClockReference.thaw(o.reference),
-            end: o.end,
-            length: o.length
-        });
-        return rv;
-    }
+}
+function thaw_clock_interval(o) {
+  if (o === undefined) {
+    return o;
+  }
+  return new ClockInterval({
+    reference: thaw_clock_reference(o.reference),
+    end: o.end,
+    length: o.length
+  });
 }
 
 export class AudioChunkBase {
@@ -99,23 +94,22 @@ export class AudioChunkBase {
     get length_seconds() { return this.interval.length_seconds; }
     get reference() { return this.interval.reference; }
     get sample_rate() { return this.interval.sample_rate; }
-
-    static thaw(o) {
-        var rv;
-        if (o.type == "AudioChunk") {
-            rv = new AudioChunk({
-                data: o.data,
-                interval: ClockInterval.thaw(o.interval),
-            });
-        } else {
-            rv = new CompressedAudioChunk({
-                data: o.data,
-                interval: ClockInterval.thaw(o.interval),
-            });
-        }
-        return rv;
-    }
 }
+
+export function thaw_audio_chunk_base(o) {
+  if (o.type == "AudioChunk") {
+    return new AudioChunk({
+      data: o.data,
+      interval: thaw_clock_interval(o.interval),
+    });
+  } else {
+    return new CompressedAudioChunk({
+      data: o.data,
+      interval: thaw_clock_interval(o.interval),
+    });
+  }
+}
+
 
 // This would more correctly be named UncompressedAudioChunk, but the shorter name is nicer.
 export class AudioChunk extends AudioChunkBase {
@@ -164,15 +158,14 @@ export class PlaceholderChunk {
     get end() { return this.interval.end; }
     get length_seconds() { return this.interval.length_seconds; }
     get sample_rate() { return this.reference.sample_rate; }
+}
 
-    static thaw(o) {
-        var rv = new PlaceholderChunk({
-            reference: ClockReference.thaw(o.reference),
-            length: o.length,
-            interval: ClockInterval.thaw(o.interval),
-        });
-        return rv;
-    }
+export function thaw_placeholder_chunk(o) {
+  return new PlaceholderChunk({
+    reference: thaw_clock_reference(o.reference),
+    length: o.length,
+    interval: thaw_clock_interval(o.interval),
+  });
 }
 
 function concat_typed_arrays(arrays, _constructor) {
