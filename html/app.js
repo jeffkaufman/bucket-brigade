@@ -50,10 +50,12 @@ export class MicEnumerator {
 
   async wait_for_mic_permissions() {
     // First, check if we already have permission, without needing to do anything.
-    var perm_status = await navigator.permissions.query({name: "microphone"}).catch(() => ({}));
-    if (perm_status.state == "granted" || perm_status.state == "denied") {
-      // Denied means we will fail, but also there's nothing more we can do about it.
-      return;
+    if (navigator.permissions) {
+      var perm_status = await navigator.permissions.query({name: "microphone"}).catch(() => ({}));
+      if (perm_status.state == "granted" || perm_status.state == "denied") {
+        // Denied means we will fail, but also there's nothing more we can do about it.
+        return;
+      }
     }
     // This can't fail, but eat errors just to be sure, because we don't care.
     return this.force_permission_prompt().catch(() => {});
