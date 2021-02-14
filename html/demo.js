@@ -119,6 +119,9 @@ function updateCurrentUsers() {
       }
 
       updateCurrentUsersText(x_audio_metadata.n_connected_users);
+      if (x_audio_metadata.n_connected_users > 5 && micState == "on") {
+        micState = "onForMusic";
+      }
 
       if (x_audio_metadata.instance_name) {
         window.instanceName.innerText = x_audio_metadata.instance_name;
@@ -1577,6 +1580,17 @@ async function update_preview_camera() {
   }
 }
 
+function showMuteNotification() {
+  window.muteNotification.style.display = "block";
+  window.setTimeout(() => {
+    window.muteNotification.style.display = "none";
+  }, 30*1000);
+}
+
+window.hideMuteNotification.addEventListener("click", () => {
+  window.muteNotification.style.display = "none";
+});
+
 let video_forced_off = false;
 async function selected_camera(useCamera) {
   // We don't want them clicking any buttons while we wait for Twilio to start.
@@ -1609,6 +1623,9 @@ async function selected_camera(useCamera) {
   }
 
   switch_app_state(APP_RUNNING);
+  if (micState == "onForMusic") {
+    showMuteNotification();
+  }
   start_singing();
 }
 

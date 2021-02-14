@@ -639,6 +639,19 @@ h1 {
 #hearMonitorDiv {
   display: none;
 }
+#muteNotification {
+  position: fixed;
+  background: white;
+  padding: 0.5em;
+  border-radius: 0 0 0.25em 0.25em;
+  top: 0;
+  max-width: 55em;
+  left: 50%;
+  transform: translateX(-50%);
+  display: none;
+  border: 1px solid #aaa;
+  border-top: none;
+}
 </style>
 <link rel="stylesheet" href="local-style.css"></link>
 
@@ -693,6 +706,13 @@ h1 {
 </div>
 
 </div>
+
+<div id=muteNotification>
+
+There are enough people that your mic is muted for conversation.  You
+can unmute by changing "mic" to "on" in the lower left, or by holding
+the spacebar while you talk.  <button
+id=hideMuteNotification>dismiss</button> </div>
 
 <div id=advancedSettings class=middlePane>
 <div>
