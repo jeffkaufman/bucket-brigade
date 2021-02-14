@@ -612,26 +612,6 @@ async function enumerate_inputs() {
     }
     inSelect.appendChild(el);
   });
-
-  var el = document.createElement("option");
-  el.text = "---";
-  el.disabled = true;
-  inSelect.appendChild(el);
-
-  el = document.createElement("option");
-  el.value = "SILENCE";
-  el.text = "SILENCE";
-  inSelect.appendChild(el);
-
-  el = document.createElement("option");
-  el.value = "CLICKS";
-  el.text = "CLICKS";
-  inSelect.appendChild(el);
-
-  el = document.createElement("option");
-  el.value = "ECHO";
-  el.text = "ECHO";
-  inSelect.appendChild(el);
 }
 
 function allStatesExcept(states) {
