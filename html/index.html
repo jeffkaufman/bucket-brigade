@@ -29,6 +29,9 @@
 #calibration, #mainInterface, #mainApp {
   display: none;
 }
+#noInputsAvailable {
+  display: none;
+}
 #estQuality {
   border: 1px solid #aaa;
   border-radius: 1em;
@@ -1126,6 +1129,12 @@ Last step!  We just need to sort out cameras.
 </div>
 
 <div id=mainApp>
+
+<div id=noInputsAvailable class=warning>
+No microphones found.  Possibly you do have a microphone, but the
+browser is not allowing access for privacy reasons?
+</div>
+
 
 <div id=inputSelector>
 Input device:

@@ -590,6 +590,7 @@ persist_checkbox("presentationMode");
 // Persisting select boxes is harder, so we do it manually for inSelect.
 inSelect.addEventListener("change", in_select_change);
 
+let inputs_enumerated = false;
 async function enumerate_inputs() {
   var mic_enumerator = new bb.MicEnumerator();
   var mics = await mic_enumerator.mics();
@@ -612,6 +613,12 @@ async function enumerate_inputs() {
     }
     inSelect.appendChild(el);
   });
+
+  if (inSelect.options.length) {
+    inputs_enumerated = true;
+  } else {
+    window.noInputsAvailable.style.display = "block";
+  }
 }
 
 function allStatesExcept(states) {
@@ -732,6 +739,7 @@ const visitedRecently = (
 var app_state = APP_TUTORIAL;
 if (window.disableTutorial.checked || visitedRecently) {
   app_state = APP_CHOOSE_CAMERA;
+  enumerate_inputs();
 }
 
 var app_initialized = false;
@@ -2030,8 +2038,6 @@ for (var i = 0; i < coll.length; i++) {
 }
 
 async function initialize() {
-  enumerate_inputs();
-
   if (document.location.hostname == "localhost") {
     // Better defaults for debugging.
     window.apiPath.value = "http://localhost:8081/"
@@ -2174,6 +2180,8 @@ function hide_buttons_and_append_answer(element, answer) {
 };
 
 async function tutorial_answer(button) {
+  enumerate_inputs();
+
   const answer = button.innerText;
   const question = button.parentElement.id;
 
