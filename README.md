@@ -1,4 +1,4 @@
-# solstice-audio-test
+# Bucket Brigade
 
 Bucket-brigade singing implementation
 
@@ -10,8 +10,8 @@ dependencies in your global Python environment. This is probably
 fine.)
 
 ```
-git clone https://github.com/gwillen/solstice-audio-test.git
-cd solstice-audio-test
+git clone https://github.com/jeffkaufman/bucket-brigade.git
+cd bucket-brigade
 virtualenv venv # optional
 . venv/bin/activate # optional
 pip install -r requirements.txt
@@ -109,13 +109,13 @@ sudo apt install python3-distutils uuid-dev libcap-dev libpcre3-dev \
                  python3-certbot-nginx sox libsox-fmt-mp3
 sudo python3 -mpip install uwsgi
 mkdir ~/src
-cd ~/src && git clone https://github.com/gwillen/solstice-audio-test.git
+cd ~/src && git clone https://github.com/jeffkaufman/bucket-brigade.git
 sudo usermod -a -G www-data ubuntu
-sudo chgrp www-data /home/ubuntu/src/solstice-audio-test
-chmod g+rwxs /home/ubuntu/src/solstice-audio-test
-cd ~/src/solstice-audio-test && sudo python3 -mpip install -r requirements.txt
-mkdir ~/src/solstice-audio-test/recordings
-# also populate ~/src/solstice-audio-test/secrets.json
+sudo chgrp www-data /home/ubuntu/src/bucket-brigade
+chmod g+rwxs /home/ubuntu/src/bucket-brigade
+cd ~/src/bucket-brigade && sudo python3 -mpip install -r requirements.txt
+mkdir ~/src/bucket-brigade/recordings
+# also populate ~/src/bucket-brigade/secrets.json
 ```
 
 If you get:
@@ -139,7 +139,7 @@ sudo python3 -mpip install -r requirements.txt
 While the singing component does not require any external integration,
 the video call component to support the default interface
 does. You will need to sign up for a Twilio account, and then fill out
-`~/src/solstice-audio-test/secrets.json` as:
+`~/src/bucket-brigade/secrets.json` as:
 
 ```
 {
@@ -155,7 +155,7 @@ does. You will need to sign up for a Twilio account, and then fill out
 ### Theming
 
 You can change the colors as you like, by creating
-`~/src/solstice-audio-test/local-style.css` with something like:
+`~/src/bucket-brigade/local-style.css` with something like:
 
 ```
 :root {
@@ -190,8 +190,8 @@ create `echo-uploader.service` as:
 Description=uWSGI echo uploader
 
 [Service]
-WorkingDirectory=/home/ubuntu/src/solstice-audio-test
-ExecStart=/usr/local/bin/uwsgi --socket :7201 --wsgi-file /home/ubuntu/src/solstice-audio-test/upload.py --logto /var/log/echo-uploader.log
+WorkingDirectory=/home/ubuntu/src/bucket-brigade
+ExecStart=/usr/local/bin/uwsgi --socket :7201 --wsgi-file /home/ubuntu/src/bucket-brigade/upload.py --logto /var/log/echo-uploader.log
 Restart=always
 KillSignal=SIGQUIT
 Type=notify
@@ -224,8 +224,8 @@ In `/etc/systemd/system/` create `uwsgi-echo-01.service` as:
 Description=uWSGI echo
 
 [Service]
-WorkingDirectory=/home/ubuntu/src/solstice-audio-test
-ExecStart=/usr/local/bin/uwsgi --socket :7101 --wsgi-file /home/ubuntu/src/solstice-audio-test/server_wrapper.py --logto /var/log/uwsgi-echo-01.log
+WorkingDirectory=/home/ubuntu/src/bucket-brigade
+ExecStart=/usr/local/bin/uwsgi --socket :7101 --wsgi-file /home/ubuntu/src/bucket-brigade/server_wrapper.py --logto /var/log/uwsgi-echo-01.log
 Restart=always
 KillSignal=SIGQUIT
 Type=notify
@@ -260,8 +260,8 @@ through `uwsgi-echo-10.service`:
 Description=uWSGI echo
 
 [Service]
-WorkingDirectory=/home/ubuntu/src/solstice-audio-test
-ExecStart=/usr/local/bin/uwsgi --socket :7101 --wsgi-file /home/ubuntu/src/solstice-audio-test/server_wrapper.py --logto /var/log/uwsgi-echo-01.log --declare-option 'segment=$1' --segment=echo01
+WorkingDirectory=/home/ubuntu/src/bucket-brigade
+ExecStart=/usr/local/bin/uwsgi --socket :7101 --wsgi-file /home/ubuntu/src/bucket-brigade/server_wrapper.py --logto /var/log/uwsgi-echo-01.log --declare-option 'segment=$1' --segment=echo01
 Restart=always
 KillSignal=SIGQUIT
 Type=notify
@@ -280,8 +280,8 @@ Description=Echo Shared Memory Server
 
 [Service]
 Type=simple
-WorkingDirectory=/home/ubuntu/src/solstice-audio-test
-ExecStart=/usr/bin/python3 /home/ubuntu/src/solstice-audio-test/shm.py echo01 echo02 echo03 echo04 echo05 echo06 echo07 echo08 echo09 echo10
+WorkingDirectory=/home/ubuntu/src/bucket-brigade
+ExecStart=/usr/bin/python3 /home/ubuntu/src/bucket-brigade/shm.py echo01 echo02 echo03 echo04 echo05 echo06 echo07 echo08 echo09 echo10
 Restart=always
 KillSignal=SIGQUIT
 NotifyAccess=all
@@ -348,10 +348,10 @@ Anytime you have a new code to run on the server, run either:
 
 ```
 # Simple
-cd ~/src/solstice-audio-test && git pull && sudo systemctl restart uwsgi-echo-01
+cd ~/src/bucket-brigade && git pull && sudo systemctl restart uwsgi-echo-01
 
 # Sharded
-cd ~/src/solstice-audio-test && git pull && sudo systemctl restart uwsgi-echo-01 uwsgi-echo-02 uwsgi-echo-03 uwsgi-echo-04 uwsgi-echo-05 uwsgi-echo-06 uwsgi-echo-07 uwsgi-echo-08 uwsgi-echo-09 uwsgi-echo-10 echo-shm
+cd ~/src/bucket-brigade && git pull && sudo systemctl restart uwsgi-echo-01 uwsgi-echo-02 uwsgi-echo-03 uwsgi-echo-04 uwsgi-echo-05 uwsgi-echo-06 uwsgi-echo-07 uwsgi-echo-08 uwsgi-echo-09 uwsgi-echo-10 echo-shm
 ```
 
 ### Logs
