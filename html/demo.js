@@ -1543,7 +1543,15 @@ async function update_preview_camera() {
   twilio_tracks = await Twilio.Video.createLocalTracks({
     audio: {deviceId: { exact: inSelect.value }},
     video: video_options
-  });
+  }).catch((e) => {});
+
+  if (!twilio_tracks) {
+    // Probably they don't have a camera.  Try again without video.
+    twilio_tracks = await Twilio.Video.createLocalTracks({
+      audio: {deviceId: { exact: inSelect.value }}
+    });
+    window.cameraPreview.style.display = "none";
+  }
 
   // If we enabled this earlier, it would be possible for fast
   // clicking users to continue before we have had a chance to remove
