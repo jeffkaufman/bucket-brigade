@@ -1495,6 +1495,9 @@ function ensureParticipantDiv(userid) {
 }
 
 function removeMockVideo(participantDiv) {
+  if (!participantDiv) {
+    return;
+  }
   const imgs = participantDiv.getElementsByTagName("img");
   for (let i = 0 ; i < imgs.length; i++) {
     participantDiv.removeChild(imgs[i]);
