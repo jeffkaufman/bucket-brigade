@@ -1277,7 +1277,7 @@ function update_active_users(
       });
 
       const monitorButton = document.createElement("button");
-      monitorButton.appendChild(document.createTextNode("mon"));
+      monitorButton.appendChild(document.createTextNode("solo"));
       monitorButton.addEventListener("click", ()=>{mixerMonitorButtonClick(newUserId)});
 
       consoleChannel.appendChild(channelName);
