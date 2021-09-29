@@ -869,7 +869,7 @@ Let your guests know in advance they'll need:
 
 <ul>
 <li>A computer (not a phone or tablet)
-<li>Chrome or Firefox
+<li>Up-to-date Chrome, Firefox, Edge, or Safari
 <li>Ideally, wired headphones.  For multiple people, headphone splitters are ~$5 and work well (<a target=_blank href="https://smile.amazon.com/Belkin-Speaker-and-Headphone-Splitter/dp/B00009WQSR/">2-way</a>, <a target=_blank href="https://smile.amazon.com/AmazonBasics-5-Way-Headphone-Splitter-5-Pack/dp/B0719LFLKG/">5-way</a>).
 </ul>
 
@@ -1001,16 +1001,9 @@ should.
   <div>
 
   <p>
-  It looks like you're not using Chrome or Firefox.  Unfortunately,
-  this doesn't yet work in other browsers because they don't have AudioWorklet.
+  It looks like your browser is too old.  Try using the most
+  recent version of Chrome, Firefox, Edge, or Safari.
   </p>
-
-  <div id=macOsSafariOfferTP>
-  If you're on macOS and using Safari is important to you, you can
-  download <a
-  href="https://developer.apple.com/safari/download/">Safari
-  Technology Preview</a>, which does include AudioWorklet.
-  </div>
 
   <p>
   While we don't recommend trying to continue anyway, because it will
@@ -1189,7 +1182,7 @@ visit, press "recalibrate".  Otherwise press "start" to begin.
     <ul>
       <li>Restarting your browser.
       <li>Restarting your computer.
-      <li>Switching from Chrome to Firefox or vice-versa.
+      <li>Switching to another browser (Chrome, Firefox, Edge, or Safari)
       <li>Refreshing the page and choosing "Only Listening" to skip calibration.
     </ul>
   </ul>
@@ -1420,9 +1413,6 @@ Holding spacebar will unmute until released.">on for songs</button>
     } else {
       showingWarningPane = false;
     }
-  } else {
-    window.macOsSafariOfferTP.style.display =
-      navigator.userAgent.includes("Mac OS X") ? "block" : "none";
   }
 
 
@@ -1498,5 +1488,14 @@ Holding spacebar will unmute until released.">on for songs</button>
 </script>
 
 <script type="module" src="./demo.js"></script>
+
+<script>
+window.setTimeout(function() {
+  if (window.singer_client === undefined) {
+    showPane("UnsupportedBrowser");
+  }
+}, 2000);
+window.singer_client
+</script>
 
 </html>
