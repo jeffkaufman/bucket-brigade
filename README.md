@@ -354,6 +354,17 @@ cd ~/src/bucket-brigade && git pull && sudo systemctl restart uwsgi-echo-01
 cd ~/src/bucket-brigade && git pull && sudo systemctl restart uwsgi-echo-01 uwsgi-echo-02 uwsgi-echo-03 uwsgi-echo-04 uwsgi-echo-05 uwsgi-echo-06 uwsgi-echo-07 uwsgi-echo-08 uwsgi-echo-09 uwsgi-echo-10 echo-shm
 ```
 
+## Auto Restart
+
+There is somewhat strange behavior when this has been running for a long time.
+I'm currently too lazy to debug this, so I've programmed it to automatically
+restart every day at 7AM GMT (2AM or 3AM Eastern):
+
+```
+$ sudo crontab -e
+0 7 * * * /bin/systemctl restart uwsgi-echo-01
+```
+
 ### Logs
 
 #### Simple
@@ -384,3 +395,11 @@ prefetching or something. Be ye warned.
 
 Be careful if using this in production; the profiler has significant
 overhead. Don't leave it running.
+
+## Demetronome
+
+The metronome is recorded, but maybe you don't want that.  The demetronome.py
+script removes metronome beats.  If you have an example file where it's not
+working file a bug and share the file: it could be a lot more sophisticated but
+I don't want to get into that until I have an example of a case where it's
+needed.
